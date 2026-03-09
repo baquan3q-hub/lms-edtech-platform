@@ -1,0 +1,57 @@
+{
+  "users": [
+    {
+      "id": "8dd1fdc0-21bb-4cd5-a69d-a7fb75eeb75d",
+      "email": "teacher@demo.com",
+      "role": "teacher"
+    },
+    {
+      "id": "b25677eb-146c-4a4a-a153-44a7bc58a624",
+      "email": "student@demo.com",
+      "role": "student"
+    },
+    {
+      "id": "cc254cb6-2c75-4e19-8c7d-dd0f55bc5e73",
+      "email": "parent@demo.com",
+      "role": "parent"
+    },
+    {
+      "id": "6f17d1ad-f3ea-4494-8908-30d0ae7be743",
+      "email": "Chiton123@gmail.com",
+      "role": "student"
+    },
+    {
+      "id": "55f1012a-375d-467f-b13d-5de7ca725a46",
+      "email": "boiquan401@gmail.com",
+      "role": "admin"
+    },
+    {
+      "id": "121e26b9-dc00-4ea3-b3d2-b343de7ce028",
+      "email": "america123@gamil.com",
+      "role": "student"
+    }
+  ],
+  "enrollments": [
+    {
+      "id": "0a73973b-4391-4cf7-9cee-910d3de6619b",
+      "student_id": "121e26b9-dc00-4ea3-b3d2-b343de7ce028",
+      "class_id": "e9b99f10-8ae4-401d-b01c-12a2e6686b52",
+      "enrolled_at": "2026-03-07T13:51:36.947541+00:00",
+      "status": "active"
+    },
+    {
+      "id": "a8196e31-dce7-4eda-a11b-57bdcad7686b",
+      "student_id": "b25677eb-146c-4a4a-a153-44a7bc58a624",
+      "class_id": "e9b99f10-8ae4-401d-b01c-12a2e6686b52",
+      "enrolled_at": "2026-03-07T13:51:39.958057+00:00",
+      "status": "active"
+    },
+    {
+      "id": "d8ac7533-791d-4a3c-bef4-1b7336676b5b",
+      "student_id": "6f17d1ad-f3ea-4494-8908-30d0ae7be743",
+      "class_id": "e9b99f10-8ae4-401d-b01c-12a2e6686b52",
+      "enrolled_at": "2026-03-07T13:51:42.779756+00:00",
+      "status": "active"
+    }
+  ]
+}

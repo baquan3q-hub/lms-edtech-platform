@@ -1,0 +1,55 @@
+[
+  {
+    "id": "121e26b9-dc00-4ea3-b3d2-b343de7ce028",
+    "email": "america123@gamil.com",
+    "user_metadata": {
+      "email_verified": true,
+      "full_name": "Đô Năm Chăm",
+      "role": "student"
+    }
+  },
+  {
+    "id": "6f17d1ad-f3ea-4494-8908-30d0ae7be743",
+    "email": "chiton123@gmail.com",
+    "user_metadata": {
+      "email_verified": true,
+      "full_name": "Nguyễn Chí Tôn",
+      "role": "student"
+    }
+  },
+  {
+    "id": "cc254cb6-2c75-4e19-8c7d-dd0f55bc5e73",
+    "email": "parent@demo.com",
+    "user_metadata": {
+      "email_verified": true
+    }
+  },
+  {
+    "id": "b25677eb-146c-4a4a-a153-44a7bc58a624",
+    "email": "student@demo.com",
+    "user_metadata": {
+      "email_verified": true
+    }
+  },
+  {
+    "id": "8dd1fdc0-21bb-4cd5-a69d-a7fb75eeb75d",
+    "email": "teacher@demo.com",
+    "user_metadata": {
+      "email_verified": true
+    }
+  },
+  {
+    "id": "55f1012a-375d-467f-b13d-5de7ca725a46",
+    "email": "boiquan401@gmail.com",
+    "user_metadata": {
+      "email_verified": true
+    }
+  },
+  {
+    "id": "44590bc4-017e-4156-87cb-3bfe5b5a9f22",
+    "email": "baquan3q@gmail.com",
+    "user_metadata": {
+      "email_verified": true
+    }
+  }
+]

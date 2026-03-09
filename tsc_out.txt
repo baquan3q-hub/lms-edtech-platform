@@ -1,0 +1,7 @@
+﻿next.config.ts(31,4): error TS2345: Argument of type 'import("C:/Users/84923/OneDrive/M\u00E1y t\u00EDnh/lms-edtech-platform/node_modules/next/dist/server/config-shared").NextConfig' is not assignable to parameter of type 'import("C:/Users/84923/OneDrive/M\u00E1y t\u00EDnh/lms-edtech-platform/node_modules/@types/next-pwa/node_modules/next/dist/server/config-shared").NextConfig'.
+  Types of property 'i18n' are incompatible.
+    Type 'import("C:/Users/84923/OneDrive/M\u00E1y t\u00EDnh/lms-edtech-platform/node_modules/next/dist/server/config-shared").I18NConfig | null | undefined' is not assignable to type 'import("C:/Users/84923/OneDrive/M\u00E1y t\u00EDnh/lms-edtech-platform/node_modules/@types/next-pwa/node_modules/next/dist/server/config-shared").I18NConfig | null | undefined'.
+      Type 'import("C:/Users/84923/OneDrive/M\u00E1y t\u00EDnh/lms-edtech-platform/node_modules/next/dist/server/config-shared").I18NConfig' is not assignable to type 'import("C:/Users/84923/OneDrive/M\u00E1y t\u00EDnh/lms-edtech-platform/node_modules/@types/next-pwa/node_modules/next/dist/server/config-shared").I18NConfig'.
+        Types of property 'domains' are incompatible.
+          Type 'I18NDomains | undefined' is not assignable to type 'DomainLocale[] | undefined'.
+            The type 'I18NDomains' is 'readonly' and cannot be assigned to the mutable type 'DomainLocale[]'.

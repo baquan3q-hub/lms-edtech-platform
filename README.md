@@ -71,11 +71,11 @@ Edge Functions: Supabase Edge Functions (Deno) — gửi email, webhook
 
 ### AI Features
 ```
-AI Provider:   OpenAI API (GPT-4o)
-Chấm điểm:    OpenAI API — tự động chấm trắc nghiệm
-Phân tích:     OpenAI API — phân tích học sinh qua bài test
-Dự báo churn:  OpenAI API + Supabase pgvector
-Tạo đề thi:    OpenAI API — sinh câu hỏi từ nội dung bài giảng
+AI Provider:   Google Gemini API (gemini-2.5-flash / gemini-2.5-pro)
+Chấm điểm:    Gemini API — tự động chấm trắc nghiệm
+Phân tích:     Gemini API — phân tích học sinh qua bài test
+Dự báo churn:  Gemini API + Supabase pgvector
+Tạo đề thi:    Gemini API — sinh câu hỏi từ nội dung bài giảng
 ```
 
 ### Payments
@@ -131,7 +131,7 @@ Monitoring:    Vercel Analytics + Sentry
 │   │   ├── client.ts             # Browser client
 │   │   ├── server.ts             # Server client (RSC)
 │   │   └── middleware.ts         # Auth middleware
-│   ├── openai.ts                 # OpenAI client config
+│   ├── gemini.ts                 # Google Gemini client config
 │   ├── stripe.ts                 # Stripe client config
 │   ├── validations/              # Zod schemas
 │   └── utils.ts
@@ -251,8 +251,8 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 
-# OpenAI
-OPENAI_API_KEY=
+# Google Gemini
+GEMINI_API_KEY=
 
 # Stripe
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=
@@ -291,7 +291,7 @@ npm install react-hook-form zod @hookform/resolvers
 npm install zustand @tanstack/react-query
 
 # AI
-npm install openai
+npm install @google/generative-ai
 
 # Payment
 npm install stripe @stripe/stripe-js
