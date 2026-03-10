@@ -32,7 +32,7 @@ export default function ExamTakingClient({
     useEffect(() => {
         if (showResult) return;
         if (timeLeft <= 0) {
-            handleSubmit();
+            handleSubmit(undefined, true);
             return;
         }
         const interval = setInterval(() => {
@@ -51,8 +51,13 @@ export default function ExamTakingClient({
         setAnswers(updated);
     };
 
-    const handleSubmit = useCallback(async () => {
+    const handleSubmit = useCallback(async (e?: any, autoSubmit: boolean = false) => {
         if (isSubmitting) return;
+
+        if (!autoSubmit && !window.confirm("Bạn có chắc chắn muốn nộp bài chưa?")) {
+            return;
+        }
+
         setIsSubmitting(true);
         try {
             const elapsed = exam.duration_minutes * 60 - timeLeft;
@@ -152,8 +157,8 @@ export default function ExamTakingClient({
                                             key={opt.id}
                                             onClick={() => selectOption(qIdx, opt.id)}
                                             className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${isSelected
-                                                    ? 'border-indigo-400 bg-indigo-50 shadow-sm ring-2 ring-indigo-200'
-                                                    : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/30'
+                                                ? 'border-indigo-400 bg-indigo-50 shadow-sm ring-2 ring-indigo-200'
+                                                : 'border-slate-200 bg-white hover:border-indigo-200 hover:bg-indigo-50/30'
                                                 }`}
                                         >
                                             <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-sm font-bold transition-colors ${isSelected ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-500'

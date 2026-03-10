@@ -11,6 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AttendanceClient from "./AttendanceClient";
 import ScheduleManagerClient from "./ScheduleManagerClient";
 import { getRooms, getClassSchedules } from "@/lib/actions/schedule";
+import DeleteExamButton from "@/components/teacher/DeleteExamButton";
 
 export default async function ClassDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const resolvedParams = await params;
@@ -651,6 +652,7 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                                                     <Pencil className="w-4 h-4" />
                                                 </Button>
                                             </Link>
+                                            <DeleteExamButton examId={exam.id} classId={id} />
                                         </div>
                                     </div>
                                 ))}

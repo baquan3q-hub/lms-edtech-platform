@@ -38,8 +38,8 @@ export default async function StudentAssignmentsPage() {
                             categorizedAssignments.todo.map((item: any) => (
                                 <div key={item.id} className="relative group bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all">
                                     <div className="flex gap-4 items-start">
-                                        <div className={`p-3 rounded-xl shrink-0 ${item.type === 'quiz' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                                            {item.type === 'quiz' ? <ClipboardList className="w-6 h-6" /> : <PenTool className="w-6 h-6" />}
+                                        <div className={`p-3 rounded-xl shrink-0 ${item.type === 'exam' ? 'bg-rose-100 text-rose-600' : item.type === 'quiz' ? 'bg-indigo-100 text-indigo-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                            {item.type === 'exam' ? <FileText className="w-6 h-6" /> : item.type === 'quiz' ? <ClipboardList className="w-6 h-6" /> : <PenTool className="w-6 h-6" />}
                                         </div>
                                         <div className="flex-1">
                                             <div className="flex justify-between items-start gap-4">
@@ -49,8 +49,8 @@ export default async function StudentAssignmentsPage() {
                                                     </h3>
                                                     <p className="text-sm text-slate-500 mt-1">{item.className} • {item.courseName}</p>
                                                 </div>
-                                                <Badge variant="outline" className={`${item.type === 'quiz' ? 'text-indigo-600 border-indigo-200 bg-indigo-50' : 'text-emerald-600 border-emerald-200 bg-emerald-50'} whitespace-nowrap`}>
-                                                    {item.type === 'quiz' ? 'Trắc nghiệm' : 'Bài tập'}
+                                                <Badge variant="outline" className={`${item.type === 'exam' ? 'text-rose-600 border-rose-200 bg-rose-50' : item.type === 'quiz' ? 'text-indigo-600 border-indigo-200 bg-indigo-50' : 'text-emerald-600 border-emerald-200 bg-emerald-50'} whitespace-nowrap`}>
+                                                    {item.type === 'exam' ? 'Bài thi độc lập' : item.type === 'quiz' ? 'Trắc nghiệm' : 'Bài tập'}
                                                 </Badge>
                                             </div>
 
@@ -75,7 +75,7 @@ export default async function StudentAssignmentsPage() {
                                             </div>
 
                                             <div className="mt-6 pt-4 border-t border-slate-100">
-                                                <Link href={`/student/classes/${item.class_id}/learn/${item.id}`}>
+                                                <Link href={item.type === 'exam' ? `/student/classes/${item.class_id}/exams/${item.id}` : `/student/classes/${item.class_id}/learn/${item.id}`}>
                                                     <Button className="w-full bg-slate-900 hover:bg-indigo-600 text-white transition-colors">
                                                         Làm bài ngay
                                                     </Button>
@@ -109,8 +109,8 @@ export default async function StudentAssignmentsPage() {
                                 {categorizedAssignments.done.map((item: any) => (
                                     <div key={item.id} className="p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
                                         <div className="flex items-start gap-4">
-                                            <div className={`p-2.5 rounded-lg shrink-0 ${item.type === 'quiz' ? 'bg-indigo-50 text-indigo-500' : 'bg-emerald-50 text-emerald-500'}`}>
-                                                {item.type === 'quiz' ? <ClipboardList className="w-5 h-5" /> : <PenTool className="w-5 h-5" />}
+                                            <div className={`p-2.5 rounded-lg shrink-0 ${item.type === 'exam' ? 'bg-rose-50 text-rose-500' : item.type === 'quiz' ? 'bg-indigo-50 text-indigo-500' : 'bg-emerald-50 text-emerald-500'}`}>
+                                                {item.type === 'exam' ? <FileText className="w-5 h-5" /> : item.type === 'quiz' ? <ClipboardList className="w-5 h-5" /> : <PenTool className="w-5 h-5" />}
                                             </div>
                                             <div>
                                                 <h3 className="font-bold text-slate-800">{item.title}</h3>
@@ -134,7 +134,7 @@ export default async function StudentAssignmentsPage() {
                                                     <span className="text-xl font-black text-slate-900">{item.progress.score}</span>
                                                 </div>
                                             )}
-                                            <Link href={`/student/classes/${item.class_id}/learn/${item.id}`}>
+                                            <Link href={item.type === 'exam' ? `/student/classes/${item.class_id}/exams/${item.id}` : `/student/classes/${item.class_id}/learn/${item.id}`}>
                                                 <Button variant="outline" size="sm" className="hidden sm:flex">Ghi nhận</Button>
                                             </Link>
                                         </div>
