@@ -33,9 +33,10 @@ interface ClassSession {
 
 interface StudentScheduleClientProps {
     sessions: ClassSession[];
+    initialSchedules?: any[];
 }
 
-export default function StudentScheduleClient({ sessions }: StudentScheduleClientProps) {
+export default function StudentScheduleClient({ sessions, initialSchedules }: StudentScheduleClientProps) {
     const [viewMode, setViewMode] = useState<"calendar" | "list">("list");
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
     const [studentId, setStudentId] = useState<string>("");

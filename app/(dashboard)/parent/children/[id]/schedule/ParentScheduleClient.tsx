@@ -35,9 +35,10 @@ interface ParentScheduleClientProps {
     studentId: string;
     studentName: string;
     sessions: ClassSession[];
+    weeklySchedules: any[];
 }
 
-export default function ParentScheduleClient({ studentId, studentName, sessions }: ParentScheduleClientProps) {
+export default function ParentScheduleClient({ studentId, studentName, sessions, weeklySchedules }: ParentScheduleClientProps) {
     const [viewMode, setViewMode] = useState<"calendar" | "list">("list");
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
 

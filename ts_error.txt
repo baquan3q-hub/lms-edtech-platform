@@ -1,0 +1,2 @@
+﻿app/(dashboard)/student/schedule/page.tsx(34,17): error TS2322: Type '{ initialSchedules: any[]; sessions: any[] | never[]; }' is not assignable to type 'IntrinsicAttributes & StudentScheduleClientProps'.
+  Property 'initialSchedules' does not exist on type 'IntrinsicAttributes & StudentScheduleClientProps'.
