@@ -115,6 +115,15 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                         <EyeOff className="w-3 h-3 mr-0.5" /> Ẩn
                     </Badge>
                 )}
+
+                {node.type === 'discussion' && (
+                    <Link href={`/teacher/classes/${classId}/discussions/${node.id}`}>
+                        <Button variant="outline" size="sm" className="h-7 text-xs border-indigo-200 text-indigo-600 hover:bg-indigo-50 px-2 ml-2">
+                            <MessageSquare className="w-3 h-3 mr-1" /> Tham gia
+                        </Button>
+                    </Link>
+                )}
+
                 <Link href={`/teacher/classes/${classId}/content/${node.id}/edit`}>
                     <Button variant="ghost" size="sm" className="h-7 text-xs text-indigo-600 hover:bg-indigo-50 px-2">
                         <ExternalLink className="w-3 h-3 mr-1" /> Sửa
@@ -194,20 +203,14 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                     <TabsTrigger value="lessons" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
                         <FileText className="w-4 h-4 mr-2" /> Quản lý bài học
                     </TabsTrigger>
-                    <TabsTrigger value="exams" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
-                        <ClipboardList className="w-4 h-4 mr-2" /> Kiểm tra
-                    </TabsTrigger>
-                    <TabsTrigger value="homework" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
-                        <Home className="w-4 h-4 mr-2" /> Bài tập
-                    </TabsTrigger>
-                    <TabsTrigger value="announcements" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
-                        <Bell className="w-4 h-4 mr-2" /> Thông báo
+                    <TabsTrigger value="exams_homework" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
+                        <ClipboardList className="w-4 h-4 mr-2" /> Kiểm tra & Bài tập
                     </TabsTrigger>
                     <TabsTrigger value="progress" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
                         <BarChart3 className="w-4 h-4 mr-2" /> Tiến độ
                     </TabsTrigger>
-                    <TabsTrigger value="feedback" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
-                        <MessageSquare className="w-4 h-4 mr-2" /> Feedback
+                    <TabsTrigger value="announcements_feedback" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
+                        <Bell className="w-4 h-4 mr-2" /> Thông báo & Feedback
                     </TabsTrigger>
                 </TabsList>
 
@@ -389,8 +392,9 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                     </div>
                 </TabsContent>
 
-                {/* ===== TAB: THÔNG BÁO ===== */}
-                <TabsContent value="announcements" className="mt-6">
+                {/* ===== TAB: THÔNG BÁO & FEEDBACK ===== */}
+                <TabsContent value="announcements_feedback" className="mt-6 space-y-6">
+                    {/* KHU VỰC THÔNG BÁO */}
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-lg font-bold text-slate-900 flex items-center">
@@ -402,7 +406,6 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                         </div>
 
                         <div className="space-y-4">
-                            {/* Placeholder thông báo mẫu */}
                             <div className="border border-amber-100 bg-amber-50/50 rounded-xl p-4">
                                 <div className="flex items-start gap-3">
                                     <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
@@ -423,10 +426,8 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                             </div>
                         </div>
                     </div>
-                </TabsContent>
 
-                {/* ===== TAB: FEEDBACK ===== */}
-                <TabsContent value="feedback" className="mt-6">
+                    {/* KHU VỰC FEEDBACK */}
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                         <div className="flex items-center justify-between mb-6">
                             <h3 className="text-lg font-bold text-slate-900 flex items-center">
@@ -435,7 +436,6 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* Kết quả bài học */}
                             <div className="border border-slate-200 rounded-xl p-5">
                                 <h4 className="font-bold text-slate-800 mb-4 flex items-center text-sm">
                                     <FileText className="w-4 h-4 mr-2 text-indigo-500" /> Kết quả Bài tập gần đây
@@ -454,7 +454,6 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                                 </div>
                             </div>
 
-                            {/* Feedback sinh viên */}
                             <div className="border border-slate-200 rounded-xl p-5">
                                 <h4 className="font-bold text-slate-800 mb-4 flex items-center text-sm">
                                     <MessageSquare className="w-4 h-4 mr-2 text-violet-500" /> Phản hồi từ Học viên
@@ -601,8 +600,9 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                     </div>
                 </TabsContent>
 
-                {/* ===== TAB: KIỂM TRA ===== */}
-                <TabsContent value="exams" className="mt-6">
+                {/* ===== TAB: KIỂM TRA & BÀI TẬP ===== */}
+                <TabsContent value="exams_homework" className="mt-6 space-y-6">
+                    {/* KHU VỰC KIỂM TRA */}
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
                             <div>
@@ -670,10 +670,7 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                             </div>
                         )}
                     </div>
-                </TabsContent>
-
-                {/* ===== TAB: BÀI TẬP VỀ NHÀ ===== */}
-                <TabsContent value="homework" className="mt-6">
+                    {/* KHU VỰC BÀI TẬP VỀ NHÀ */}
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
                             <div>

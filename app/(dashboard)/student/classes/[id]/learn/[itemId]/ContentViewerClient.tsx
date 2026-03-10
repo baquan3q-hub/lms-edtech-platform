@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { FileText, Music, ClipboardList, MessageSquare, VideoIcon, Youtube, Download, CheckCircle, Clock, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import QuizViewerClient from "./QuizViewerClient";
+import RealtimeDiscussion from "@/components/shared/RealtimeDiscussion";
+import { createClient } from "@/lib/supabase/client";
 
 import { useRouter } from "next/navigation";
 import { markItemCompleted } from "../../actions";
@@ -260,10 +262,15 @@ export default function ContentViewerClient({
 
             case 'discussion':
                 return (
-                    <div className="mb-6 p-6 bg-white border border-slate-200 rounded-2xl shadow-sm text-center">
-                        <MessageSquare className="w-12 h-12 text-blue-300 mx-auto mb-3" />
-                        <h3 className="text-lg font-bold text-slate-700">Thảo Luận Lớp</h3>
-                        <p className="text-slate-500 text-sm">Chức năng bình luận và trao đổi trực tiếp giữa học viên và giáo viên đang được hoàn thiện.</p>
+                    <div className="mb-6">
+                        <div className="mb-6 p-6 bg-white border border-slate-200 rounded-2xl shadow-sm">
+                            <h3 className="text-lg font-bold text-slate-800 flex items-center mb-2">
+                                <MessageSquare className="w-5 h-5 mr-2 text-indigo-500" /> Thảo Luận Lớp
+                            </h3>
+                            <p className="text-slate-600 text-sm">Trao đổi và đặt câu hỏi trực tiếp với giáo viên và các bạn học trong lớp về chủ đề này.</p>
+                        </div>
+
+                        <DiscussionWrapper itemId={item.id} classId={classId} />
                     </div>
                 )
 
@@ -341,4 +348,41 @@ export default function ContentViewerClient({
             </div>
         </div>
     );
+}
+
+// Wrapper component to load current user details on client side
+function DiscussionWrapper({ itemId, classId }: { itemId: string; classId: string }) {
+    const [user, setUser] = useState<any>(null);
+    const supabase = createClient();
+
+    useEffect(() => {
+        async function fetchUser() {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session?.user) {
+                const { data: profile } = await supabase
+                    .from('users')
+                    .select('id, full_name, avatar_url, role')
+                    .eq('id', session.user.id)
+                    .single();
+
+                if (profile) {
+                    setUser(profile);
+                } else {
+                    // Fallback
+                    setUser({
+                        id: session.user.id,
+                        full_name: session.user.email?.split('@')[0] || "Học viên",
+                        role: 'student'
+                    });
+                }
+            }
+        }
+        fetchUser();
+    }, [supabase]);
+
+    if (!user) {
+        return <div className="p-10 text-center text-slate-500 bg-slate-50 rounded-2xl animate-pulse">Đang kết nối phòng thảo luận...</div>;
+    }
+
+    return <RealtimeDiscussion itemId={itemId} classId={classId} currentUser={user} />;
 }

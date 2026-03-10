@@ -12,13 +12,16 @@ import {
     Music,
     Zap,
     TrendingUp,
-    CalendarDays
+    CalendarDays,
+    MapPin
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { fetchStudentEnrolledClasses, fetchStudentDashboardStats, fetchSuggestedLessons } from "@/lib/actions/student";
-import { getStudentWeeklySchedule } from "@/lib/actions/schedule";
+import { getOwnStudentSchedule } from "@/lib/actions/schedule";
 import Link from "next/link";
-import WeeklyTimetable from "@/components/shared/WeeklyTimetable";
+import { format, parseISO } from "date-fns";
+import { vi } from "date-fns/locale";
+import UpcomingSessionsWidget from "@/components/shared/UpcomingSessionsWidget";
 
 // Color scheme cho các loại bài
 const typeMeta: Record<string, { icon: any; label: string; color: string; bg: string }> = {
@@ -29,17 +32,19 @@ const typeMeta: Record<string, { icon: any; label: string; color: string; bg: st
     assignment: { icon: FileText, label: "Bài tập", color: "text-orange-500", bg: "bg-orange-50" },
 };
 
+const dayNames = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
+
 export default async function StudentDashboardPage() {
     const [
         { data: myClasses },
         { data: statsData },
         { data: suggestions },
-        { data: weeklySchedules }
+        { data: upcomingSessions }
     ] = await Promise.all([
         fetchStudentEnrolledClasses(),
         fetchStudentDashboardStats(),
         fetchSuggestedLessons(),
-        getStudentWeeklySchedule()
+        getOwnStudentSchedule()
     ]);
 
     const dynamicStats = [
@@ -234,6 +239,30 @@ export default async function StudentDashboardPage() {
                                                         {progressPercent}%
                                                     </p>
                                                 </div>
+
+                                                {/* Hiển thị thời khóa biểu (Tương tự như trong lớp học) */}
+                                                {(cls.class_schedules && cls.class_schedules.length > 0) && (
+                                                    <div className="mt-4 pt-3 border-t border-slate-100 flex flex-wrap gap-2">
+                                                        {cls.class_schedules.sort((a: any, b: any) => a.day_of_week - b.day_of_week || a.start_time.localeCompare(b.start_time)).map((schedule: any) => (
+                                                            <div key={schedule.id} className="flex flex-col gap-1 p-2 bg-slate-50 border border-slate-100 rounded-lg text-xs hover:border-emerald-200 transition-colors">
+                                                                <div className="flex items-center gap-1.5 font-semibold text-emerald-700">
+                                                                    <CalendarDays className="w-3.5 h-3.5" />
+                                                                    {dayNames[schedule.day_of_week]}
+                                                                </div>
+                                                                <div className="text-slate-600 flex items-center gap-1.5">
+                                                                    <Clock className="w-3.5 h-3.5" />
+                                                                    {schedule.start_time?.slice(0, 5)} — {schedule.end_time?.slice(0, 5)}
+                                                                </div>
+                                                                {(schedule.room as any)?.name && (
+                                                                    <div className="text-slate-500 flex items-center gap-1.5">
+                                                                        <MapPin className="w-3.5 h-3.5" />
+                                                                        {(schedule.room as any).name}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </Link>
@@ -251,16 +280,20 @@ export default async function StudentDashboardPage() {
 
                 {/* Right Column: Quick Info */}
                 <div className="space-y-6">
-                    {/* Weekly Schedule Widget */}
+                    {/* Upcoming Sessions Widget */}
                     <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm overflow-hidden mb-6">
-                        <div className="flex items-center gap-2 border-b border-slate-100 pb-4 mb-4">
-                            <CalendarDays className="w-5 h-5 text-indigo-500" />
-                            <h3 className="font-bold text-slate-800">Lịch học hàng tuần</h3>
+                        <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
+                            <div className="flex items-center gap-2">
+                                <CalendarDays className="w-5 h-5 text-indigo-500" />
+                                <h3 className="font-bold text-slate-800">Lịch học sắp tới</h3>
+                            </div>
+                            <Link href="/student/schedule">
+                                <Button variant="link" className="text-indigo-600 font-semibold p-0 h-auto text-sm">
+                                    Xem tất cả
+                                </Button>
+                            </Link>
                         </div>
-                        <WeeklyTimetable
-                            schedules={weeklySchedules || []}
-                            emptyMessage="Bạn chưa có lịch học nào."
-                        />
+                        <UpcomingSessionsWidget sessions={upcomingSessions || []} limit={2} />
                     </div>
 
                     <h3 className="text-xl font-bold text-slate-900">Thông tin nhanh</h3>

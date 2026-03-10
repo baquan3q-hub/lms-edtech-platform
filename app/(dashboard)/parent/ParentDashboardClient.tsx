@@ -9,7 +9,7 @@ import {
     CheckCircle2, XCircle, Clock, UserPlus, Loader2, BookOpen
 } from "lucide-react";
 import { fetchParentDashboardData } from "@/lib/actions/parentStudent";
-import SessionAccordionList from "@/components/parent/SessionAccordionList";
+import UpcomingSessionsWidget from "@/components/shared/UpcomingSessionsWidget";
 
 type StudentInfo = {
     id: string;
@@ -115,20 +115,24 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                 </div>
             )}
 
-            {/* Lịch học các buổi thực tế (Session Accordion) — Hiển thị ngoài dashboard */}
+            {/* Lịch học sắp tới */}
             {!loading && dashboardData && dashboardData.upcomingSessions && (
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm mb-6">
-                    <div className="p-5 border-b border-slate-100 bg-blue-50/50 rounded-t-2xl">
-                        <h3 className="font-bold text-blue-800 flex items-center gap-2">
-                            <CalendarDays className="w-5 h-5" /> Lịch học của con
-                        </h3>
-                        <p className="text-sm text-slate-500 mt-1">Danh sách các buổi học và trạng thái điểm danh</p>
+                    <div className="p-5 border-b border-slate-100 rounded-t-2xl flex items-center justify-between">
+                        <div>
+                            <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                                <CalendarDays className="w-5 h-5 text-indigo-500" /> Lịch học sắp tới
+                            </h3>
+                            <p className="text-sm text-slate-500 mt-1">Lịch học và bài tập về nhà của con</p>
+                        </div>
+                        <Link href={`/parent/children/${selectedStudent?.id}/schedule`}>
+                            <Button variant="link" className="text-indigo-600 font-semibold p-0 h-auto text-sm">
+                                Xem tất cả
+                            </Button>
+                        </Link>
                     </div>
-                    <div className="p-4 sm:p-5 bg-slate-50/30">
-                        <SessionAccordionList
-                            sessions={dashboardData.upcomingSessions}
-                            emptyMessage="Học sinh chưa có buổi học nào được xếp."
-                        />
+                    <div className="p-4 sm:p-5">
+                        <UpcomingSessionsWidget sessions={dashboardData.upcomingSessions || []} limit={2} />
                     </div>
                 </div>
             )}
@@ -192,14 +196,18 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                                     {(dashboardData.classes || []).map((cls: any) => {
                                         const teacherObj = cls?.teacher;
                                         const teacherName = Array.isArray(teacherObj) ? teacherObj[0]?.full_name : teacherObj?.full_name;
+                                        const courseObj = cls?.course;
+                                        const courseName = Array.isArray(courseObj) ? courseObj[0]?.name : courseObj?.name;
+
                                         return (
                                             <div key={cls?.id} className="flex items-center gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-100 hover:border-indigo-200 transition-colors">
                                                 <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
                                                     <BookOpen className="w-5 h-5 text-indigo-600" />
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="font-semibold text-sm text-slate-800 truncate">{cls?.name || "—"}</p>
-                                                    <p className="text-xs text-slate-400">GV: {teacherName || "—"}</p>
+                                                    <p className="font-semibold text-sm text-slate-800 truncate">{courseName || "Khóa học"}</p>
+                                                    <p className="text-xs text-slate-500 font-medium">Lớp: {cls?.name || "—"}</p>
+                                                    <p className="text-[11px] text-slate-400 mt-0.5">GV: {teacherName || "Chưa xếp"}</p>
                                                 </div>
                                             </div>
                                         );

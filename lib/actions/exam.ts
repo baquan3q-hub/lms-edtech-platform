@@ -13,6 +13,7 @@ export async function createExam(classId: string, data: {
     description?: string;
     questions: any[];
     duration_minutes: number;
+    due_date?: string;
     total_points: number;
 }) {
     try {
@@ -29,6 +30,7 @@ export async function createExam(classId: string, data: {
                 description: data.description || "",
                 questions: data.questions,
                 duration_minutes: data.duration_minutes,
+                due_date: data.due_date || null,
                 total_points: data.total_points,
                 is_published: false,
                 created_by: user.id
@@ -51,6 +53,7 @@ export async function updateExam(examId: string, classId: string, data: {
     description?: string;
     questions: any[];
     duration_minutes: number;
+    due_date?: string;
     total_points: number;
     is_published?: boolean;
 }) {
@@ -63,6 +66,7 @@ export async function updateExam(examId: string, classId: string, data: {
                 description: data.description || "",
                 questions: data.questions,
                 duration_minutes: data.duration_minutes,
+                due_date: data.due_date || null,
                 total_points: data.total_points,
                 is_published: data.is_published ?? false
             })
@@ -226,7 +230,7 @@ export async function fetchStudentExams(classId: string) {
         // Lấy exams đã publish
         const { data: exams, error } = await adminSupabase
             .from("exams")
-            .select("id, title, description, duration_minutes, total_points, is_published, created_at")
+            .select("id, title, description, duration_minutes, due_date, total_points, is_published, created_at")
             .eq("class_id", classId)
             .eq("is_published", true)
             .order("created_at", { ascending: false });
@@ -262,7 +266,7 @@ export async function fetchExamQuestions(examId: string) {
         const adminSupabase = createAdminClient();
         const { data: exam, error } = await adminSupabase
             .from("exams")
-            .select("id, title, description, questions, duration_minutes, total_points")
+            .select("id, title, description, questions, duration_minutes, due_date, total_points")
             .eq("id", examId)
             .eq("is_published", true)
             .single();

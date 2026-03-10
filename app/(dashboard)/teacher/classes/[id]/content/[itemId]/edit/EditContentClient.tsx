@@ -10,10 +10,11 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import {
     Save, Link as LinkIcon, FileText, Video, Mic, Youtube,
-    Plus, Trash2, GripVertical, CheckCircle2, XCircle, Upload, Loader2
+    Plus, Trash2, GripVertical, CheckCircle2, XCircle, Upload, Loader2, Sparkles
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import AIGenerateModal from "@/components/teacher/AIGenerateModal";
 
 // =============================================
 // Quiz Question Type
@@ -46,6 +47,7 @@ function createEmptyQuestion(): QuizQuestion {
 export default function EditContentClient({ classId, item, initialContent }: { classId: string, item: any, initialContent: any }) {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
+    const [isAIModalOpen, setIsAIModalOpen] = useState(false);
 
     // Core item state
     const [title, setTitle] = useState(item.title || "");
@@ -306,6 +308,36 @@ export default function EditContentClient({ classId, item, initialContent }: { c
             }
             return { ...q, options: newOptions };
         }));
+    };
+
+    const handleAIGenerated = (generatedQuestions: any[]) => {
+        const N = generatedQuestions.length;
+        if (N === 0) return;
+
+        const basePoints = Math.floor((10 / N) * 100) / 100;
+        let remainder = 10 - (basePoints * N);
+
+        const formatted: QuizQuestion[] = generatedQuestions.map((gq, idx) => {
+            const pts = idx === 0 ? Number((basePoints + remainder).toFixed(2)) : basePoints;
+
+            return {
+                id: generateId(),
+                question: gq.question,
+                points: pts || 1,
+                options: (gq.options || []).map((optLabel: string, oIdx: number) => ({
+                    id: generateId(),
+                    text: optLabel,
+                    isCorrect: oIdx === gq.correctIndex
+                }))
+            };
+        });
+
+        // If the current list only has 1 empty question, replace it. Otherwise append.
+        if (questions.length === 1 && !questions[0].question.trim() && questions[0].options.every(o => !o.text.trim())) {
+            setQuestions(formatted);
+        } else {
+            setQuestions(prev => [...prev, ...formatted]);
+        }
     };
 
     // =============================================
@@ -694,13 +726,23 @@ export default function EditContentClient({ classId, item, initialContent }: { c
                                         {questions.length} câu hỏi · Tổng điểm: {totalPoints}
                                     </p>
                                 </div>
-                                <Button
-                                    onClick={addQuestion}
-                                    size="sm"
-                                    className="bg-violet-600 hover:bg-violet-700 text-white"
-                                >
-                                    <Plus className="w-4 h-4 mr-1" /> Thêm câu hỏi
-                                </Button>
+                                <div className="flex items-center gap-2">
+                                    <Button
+                                        onClick={() => setIsAIModalOpen(true)}
+                                        size="sm"
+                                        variant="secondary"
+                                        className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200"
+                                    >
+                                        <Sparkles className="w-4 h-4 mr-1" /> Sinh bằng AI
+                                    </Button>
+                                    <Button
+                                        onClick={addQuestion}
+                                        size="sm"
+                                        className="bg-violet-600 hover:bg-violet-700 text-white"
+                                    >
+                                        <Plus className="w-4 h-4 mr-1" /> Thêm câu hỏi
+                                    </Button>
+                                </div>
                             </div>
 
                             {questions.length === 0 && (

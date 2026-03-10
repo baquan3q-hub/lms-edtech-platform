@@ -18,9 +18,10 @@ export async function fetchStudentEnrolledClasses() {
             .select(`
                 id, class_id, status, enrolled_at,
                 class:classes (
-                    id, name, room, schedule,
+                    id, name,
                     course:courses (name, description),
-                    teacher:users!classes_teacher_id_fkey (full_name)
+                    teacher:users!classes_teacher_id_fkey (full_name),
+                    class_schedules (id, day_of_week, start_time, end_time, room:rooms(name))
                 )
             `)
             .eq("student_id", user.id)

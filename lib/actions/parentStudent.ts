@@ -434,10 +434,10 @@ export async function fetchParentDashboardData(studentId: string) {
             .eq("id", studentId)
             .single();
 
-        // 2. Lớp học enrolled (kèm tên GV)
+        // 2. Lớp học enrolled (kèm tên Course, tên GV)
         const { data: enrollments } = await supabase
             .from("enrollments")
-            .select("class_id, class:classes(id, name, teacher:users!teacher_id(full_name))")
+            .select("class_id, class:classes(id, name, course:courses(name), teacher:users!classes_teacher_id_fkey(full_name))")
             .eq("student_id", studentId)
             .eq("status", "active");
 
@@ -506,7 +506,7 @@ export async function fetchParentDashboardData(studentId: string) {
             // 1. Lấy các sessions đã được Admin tạo thực tế
             const { data: realSessions } = await supabase
                 .from("class_sessions")
-                .select("id, class_id, session_date, start_time, end_time, topic, status, class:classes!class_id(name, course:courses(name), teacher:users!classes_teacher_id_fkey(full_name))")
+                .select("id, class_id, session_number, session_date, start_time, end_time, topic, homework, status, class:classes!class_id(name, course:courses(name), teacher:users!classes_teacher_id_fkey(full_name))")
                 .in("class_id", classIds)
                 .gte("session_date", lastWeekStr)
                 .order("session_date", { ascending: true });
@@ -537,10 +537,12 @@ export async function fetchParentDashboardData(studentId: string) {
                         mergedSessions.push({
                             id: `virtual-${schedule.id}-${sessionDateStr}`,
                             class_id: schedule.class_id,
+                            session_number: 0,
                             session_date: sessionDateStr,
                             start_time: schedule.start_time,
                             end_time: schedule.end_time,
                             topic: "Theo lộ trình khóa học",
+                            homework: null,
                             status: sessionDateStr < todayStr ? "completed" : "scheduled",
                             class: schedule.class,
                             isVirtual: true
@@ -585,11 +587,17 @@ export async function fetchParentDashboardData(studentId: string) {
 
                     return {
                         ...s,
+                        class_name: s.class?.name,
+                        course_name: s.class?.course?.name,
                         attendance_status: attRecord ? attRecord.status : (isPast ? "unrecorded" : null)
                     };
                 });
             } else {
-                upcomingSessions = recentAndUpcoming;
+                upcomingSessions = recentAndUpcoming.map((s: any) => ({
+                    ...s,
+                    class_name: s.class?.name,
+                    course_name: s.class?.course?.name
+                }));
             }
         }
 

@@ -71,7 +71,7 @@ Edge Functions: Supabase Edge Functions (Deno) — gửi email, webhook
 
 ### AI Features
 ```
-AI Provider:   Google Gemini API (gemini-2.5-flash / gemini-2.5-pro)
+AI Provider:   Google Gemini API (gemini-1.5-flash)
 Chấm điểm:    Gemini API — tự động chấm trắc nghiệm
 Phân tích:     Gemini API — phân tích học sinh qua bài test
 Dự báo churn:  Gemini API + Supabase pgvector

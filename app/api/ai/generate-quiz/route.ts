@@ -21,7 +21,7 @@ export async function POST(req: Request) {
         }
 
         // 3. Khởi tạo Gemini Model
-        const model = getGeminiModel("gemini-1.5-flash");
+        const model = getGeminiModel("gemini-2.5-flash");
 
         // 4. Định nghĩa System Prompt ép kiểu Output JSON
         const systemPrompt = `

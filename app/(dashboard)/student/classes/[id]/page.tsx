@@ -101,7 +101,7 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
         video: "Video", document: "Tài liệu", quiz: "Trắc nghiệm",
         audio: "Audio", assignment: "Bài tập", discussion: "Thảo luận", zoom: "Zoom/Meet"
     };
-    const dayNames = ["", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"];
+    const dayNames = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
 
     // Render course tree node — enhanced nested display
     const renderNode = (node: any, level: number = 0) => {

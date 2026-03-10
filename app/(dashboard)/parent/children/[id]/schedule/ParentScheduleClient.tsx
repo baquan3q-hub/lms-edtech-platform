@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { vi } from "date-fns/locale";
-import { Calendar as CalendarIcon, List, Clock, BookOpen, AlertCircle, FileText, Send } from "lucide-react";
+import { Calendar as CalendarIcon, List, Clock, BookOpen, AlertCircle, FileText, Send, CalendarDays } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import Link from "next/link";
-import WeeklyTimetable, { ScheduleItem } from "@/components/shared/WeeklyTimetable";
+import AbsenceRequestModal from "@/components/shared/AbsenceRequestModal";
 
 interface ClassSession {
     id: string;
@@ -35,12 +35,15 @@ interface ParentScheduleClientProps {
     studentId: string;
     studentName: string;
     sessions: ClassSession[];
-    weeklySchedules: ScheduleItem[];
 }
 
-export default function ParentScheduleClient({ studentId, studentName, sessions, weeklySchedules }: ParentScheduleClientProps) {
-    const [viewMode, setViewMode] = useState<"weekly" | "calendar" | "list">("weekly");
+export default function ParentScheduleClient({ studentId, studentName, sessions }: ParentScheduleClientProps) {
+    const [viewMode, setViewMode] = useState<"calendar" | "list">("list");
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+
+    // Absence Request State
+    const [isAbsenceModalOpen, setIsAbsenceModalOpen] = useState(false);
+    const [selectedSessionForAbsence, setSelectedSessionForAbsence] = useState<{ class_id: string, class_name: string, session_date: string } | null>(null);
 
     const getAttendanceConfig = (status: string | null, sessionStatus: string) => {
         if (sessionStatus === 'cancelled') return { label: 'Lớp hủy', color: 'bg-red-100 text-red-700' };
@@ -54,6 +57,15 @@ export default function ParentScheduleClient({ studentId, studentName, sessions,
                 if (sessionStatus === 'completed') return { label: 'Chưa ĐD', color: 'bg-slate-100 text-slate-700' };
                 return { label: 'Sắp tới', color: 'bg-slate-100 text-slate-700' };
         }
+    };
+
+    const handleOpenAbsenceModal = (session: ClassSession) => {
+        setSelectedSessionForAbsence({
+            class_id: session.class_id,
+            class_name: session.class_name,
+            session_date: session.session_date
+        });
+        setIsAbsenceModalOpen(true);
     };
 
     const renderDayContent = (day: Date) => {
@@ -96,40 +108,19 @@ export default function ParentScheduleClient({ studentId, studentName, sessions,
                 </Link>
             </div>
 
-            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "weekly" | "calendar" | "list")}>
-                <div className="flex justify-between items-center mb-6">
-                    <TabsList className="bg-white border shadow-sm">
-                        <TabsTrigger value="weekly" className="data-[state=active]:bg-slate-100">
-                            <Clock className="w-4 h-4 mr-2" />
-                            Thời khóa biểu
-                        </TabsTrigger>
-                        <TabsTrigger value="calendar" className="data-[state=active]:bg-slate-100">
-                            <CalendarIcon className="w-4 h-4 mr-2" />
-                            Lịch (Tháng)
-                        </TabsTrigger>
-                        <TabsTrigger value="list" className="data-[state=active]:bg-slate-100">
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "calendar" | "list")}>
+                <div className="flex justify-between items-center mb-6 overflow-x-auto pb-2 -mx-4 px-4 md:mx-0 md:px-0">
+                    <TabsList className="bg-white border shadow-sm min-w-max">
+                        <TabsTrigger value="list" className="data-[state=active]:bg-slate-100 min-h-[44px]">
                             <List className="w-4 h-4 mr-2" />
                             Danh sách
                         </TabsTrigger>
+                        <TabsTrigger value="calendar" className="data-[state=active]:bg-slate-100 min-h-[44px]">
+                            <CalendarIcon className="w-4 h-4 mr-2" />
+                            Lịch (Tháng)
+                        </TabsTrigger>
                     </TabsList>
                 </div>
-
-                <TabsContent value="weekly" className="mt-0 outline-none">
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                        <div className="mb-6">
-                            <h2 className="text-lg font-bold text-slate-900 border-l-4 border-indigo-500 pl-3">
-                                Thời khóa biểu cố định
-                            </h2>
-                            <p className="text-sm text-slate-500 mt-1 pl-4">
-                                Lịch học hàng tuần do trung tâm sắp xếp cho con bạn.
-                            </p>
-                        </div>
-                        <WeeklyTimetable
-                            schedules={weeklySchedules || []}
-                            emptyMessage="Học sinh chưa có lịch học nào. Vui lòng liên hệ trung tâm để được xếp lớp."
-                        />
-                    </div>
-                </TabsContent>
 
                 <TabsContent value="calendar" className="mt-0 outline-none">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -174,6 +165,8 @@ export default function ParentScheduleClient({ studentId, studentName, sessions,
                                         <div className="space-y-4">
                                             {daySessions.map(session => {
                                                 const attConfig = getAttendanceConfig(session.attendance_status, session.status);
+                                                const isUpcoming = new Date(session.session_date) >= new Date(new Date().setHours(0, 0, 0, 0));
+
                                                 return (
                                                     <div key={session.id} className="bg-white border rounded-xl p-5 shadow-sm">
                                                         <div className="flex justify-between items-start mb-3">
@@ -189,16 +182,29 @@ export default function ParentScheduleClient({ studentId, studentName, sessions,
                                                                     {session.start_time.substring(0, 5)} - {session.end_time.substring(0, 5)}
                                                                 </p>
                                                             </div>
-                                                            <Badge className={`${attConfig.color} border-0`}>
-                                                                {attConfig.label}
-                                                            </Badge>
+                                                            <div className="flex flex-col gap-2 items-end">
+                                                                <Badge className={`${attConfig.color} border-0`}>
+                                                                    {attConfig.label}
+                                                                </Badge>
+                                                                {isUpcoming && session.attendance_status !== 'excused' && session.status !== 'cancelled' && (
+                                                                    <Button
+                                                                        variant="outline"
+                                                                        size="sm"
+                                                                        className="h-8 text-xs flex items-center gap-1.5 border-slate-200 hover:bg-slate-50"
+                                                                        onClick={() => handleOpenAbsenceModal(session)}
+                                                                    >
+                                                                        <FileText className="w-3 h-3" />
+                                                                        Xin nghỉ
+                                                                    </Button>
+                                                                )}
+                                                            </div>
                                                         </div>
-                                                        <div className="text-sm text-slate-600 mb-4">
+                                                        <div className="text-sm text-slate-600 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
                                                             {session.description || "Chưa có mô tả chi tiết cho buổi học này."}
                                                         </div>
 
                                                         {session.homework && (
-                                                            <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex gap-3 text-sm">
+                                                            <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex gap-3 text-sm mt-3">
                                                                 <BookOpen className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
                                                                 <div>
                                                                     <p className="font-semibold text-indigo-900 mb-1">Bài tập về nhà</p>
@@ -227,9 +233,11 @@ export default function ParentScheduleClient({ studentId, studentName, sessions,
                     ) : (
                         sessions.map(session => {
                             const attConfig = getAttendanceConfig(session.attendance_status, session.status);
+                            const isUpcoming = new Date(session.session_date) >= new Date(new Date().setHours(0, 0, 0, 0));
+
                             return (
                                 <Card key={session.id} className="shadow-sm overflow-hidden">
-                                    <div className={`h-1.5 w-full ${attConfig.color.split(' ')[0].replace('bg-', 'bg-')}`}></div>
+                                    <div className={`h-1.5 w-full ${attConfig.color.split(' ')[0].replace('text-', 'bg-')}`}></div>
                                     <CardContent className="p-5 flex flex-col md:flex-row justify-between gap-4">
                                         <div className="flex-1">
                                             <div className="flex items-center gap-3 mb-2">
@@ -246,24 +254,35 @@ export default function ParentScheduleClient({ studentId, studentName, sessions,
                                             <h3 className="font-bold text-lg text-slate-800 mb-1">
                                                 Buổi {session.session_number}: {session.topic || "Chưa có chủ đề"}
                                             </h3>
-                                            <p className="text-sm text-slate-600 mb-3 line-clamp-2">{session.description || "Chưa có mô tả."}</p>
+                                            <div className="text-sm text-slate-600 mb-3 line-clamp-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                                                {session.description || "Chưa có mô tả chi tiết."}
+                                            </div>
 
                                             {session.homework && (
-                                                <div className="flex items-start gap-2 mt-3 bg-slate-50 p-2 rounded text-sm text-slate-600">
-                                                    <BookOpen className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
-                                                    <span className="font-medium text-slate-700">BTVN:</span>
-                                                    <span className="truncate">{session.homework}</span>
+                                                <div className="flex items-start gap-2 mt-3 bg-indigo-50 p-3 rounded-lg border border-indigo-100 text-sm text-slate-600">
+                                                    <BookOpen className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+                                                    <div>
+                                                        <p className="font-semibold text-indigo-900 mb-1">Bài tập về nhà</p>
+                                                        <p className="text-indigo-800/80 whitespace-pre-wrap">{session.homework}</p>
+                                                    </div>
                                                 </div>
                                             )}
                                         </div>
-                                        <div className="flex flex-col items-end md:justify-center border-t md:border-l md:border-t-0 border-slate-100 pt-4 md:pt-0 md:pl-6 min-w-[140px]">
-                                            <Badge className={`${attConfig.color} border-0 mb-2 py-1 px-3 text-sm rounded-full`}>
+                                        <div className="flex flex-col items-end justify-between shrink-0 pl-0 md:pl-4">
+                                            <Badge className={`${attConfig.color} border-0 mb-4`}>
                                                 {attConfig.label}
                                             </Badge>
-                                            {session.attendance_notes && (
-                                                <p className="text-xs text-slate-500 italic max-w-[150px] text-right">
-                                                    "{session.attendance_notes}"
-                                                </p>
+
+                                            {isUpcoming && session.attendance_status !== 'excused' && session.status !== 'cancelled' && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    className="h-8 text-xs flex gap-1.5 items-center bg-white shadow-sm hover:bg-slate-50 mt-auto"
+                                                    onClick={() => handleOpenAbsenceModal(session)}
+                                                >
+                                                    <FileText className="w-3.5 h-3.5 text-slate-500" />
+                                                    Xin nghỉ học
+                                                </Button>
                                             )}
                                         </div>
                                     </CardContent>
@@ -273,6 +292,13 @@ export default function ParentScheduleClient({ studentId, studentName, sessions,
                     )}
                 </TabsContent>
             </Tabs>
+
+            <AbsenceRequestModal
+                isOpen={isAbsenceModalOpen}
+                onClose={() => setIsAbsenceModalOpen(false)}
+                session={selectedSessionForAbsence}
+                studentId={studentId}
+            />
         </div>
     );
 }

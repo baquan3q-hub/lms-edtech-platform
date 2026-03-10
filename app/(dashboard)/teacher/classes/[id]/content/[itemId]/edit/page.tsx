@@ -34,8 +34,10 @@ export default async function EditItemContentPage({
         );
     }
 
-    // Pass the singular content record directly
-    const itemContent = item.content && item.content.length > 0 ? item.content[0] : {};
+    // Pass the singular content record directly (handles both array and object formats)
+    const itemContent = Array.isArray(item.content)
+        ? (item.content[0] || {})
+        : (item.content || {});
 
     return (
         <div className="max-w-4xl mx-auto space-y-6 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-500">

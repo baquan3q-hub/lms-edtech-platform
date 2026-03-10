@@ -35,7 +35,10 @@ export default async function StudentContentViewerPage({
         );
     }
 
-    const itemContent = item.content && item.content.length > 0 ? item.content[0] : null;
+    // Handle cases where item.content might be an object (1-to-1) or array
+    const itemContent = Array.isArray(item.content)
+        ? (item.content[0] || null)
+        : (item.content || null);
 
     const { createClient } = await import("@/lib/supabase/server");
     const supabaseClient = await createClient();

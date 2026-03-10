@@ -16,10 +16,11 @@ import {
 import { toast } from "sonner";
 import {
     Plus, Trash2, Save, ArrowLeft, CheckCircle2, GripVertical,
-    FileText, Video, Paperclip, ListChecks, Calendar
+    FileText, Video, Paperclip, ListChecks, Calendar, Sparkles
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import AIGenerateModal from "@/components/teacher/AIGenerateModal";
 
 type QuestionType = "multiple_choice" | "essay" | "video" | "attachment";
 
@@ -89,6 +90,7 @@ export default function HomeworkEditorClient({
         existingHomework?.questions || [emptyQuestion()]
     );
     const [saving, setSaving] = useState(false);
+    const [isAIModalOpen, setIsAIModalOpen] = useState(false);
 
     const totalPoints = questions.reduce((s, q) => s + (q.points || 0), 0);
 
@@ -136,6 +138,40 @@ export default function HomeworkEditorClient({
         opts.splice(oIdx, 1);
         next[qIdx].options = opts;
         setQuestions(next);
+    };
+
+    const handleAIGenerated = (generatedQuestions: any[]) => {
+        const N = generatedQuestions.length;
+        if (N === 0) return;
+
+        // Distribute 10 points among the generated questions
+        const basePoints = Math.floor(10 / N);
+        let remainder = 10 % N;
+
+        const formatted: HomeworkQuestion[] = generatedQuestions.map((gq, idx) => {
+            const pts = basePoints + (remainder > 0 ? 1 : 0);
+            if (remainder > 0) remainder--;
+
+            return {
+                id: genId(),
+                type: "multiple_choice",
+                question: gq.question,
+                points: pts || 1,
+                options: (gq.options || []).map((optLabel: string, oIdx: number) => ({
+                    id: genId(),
+                    text: optLabel,
+                    isCorrect: oIdx === gq.correctIndex
+                }))
+            };
+        });
+
+        // If the current list only has 1 empty question, replace it. Otherwise append.
+        setQuestions(prev => {
+            if (prev.length === 1 && prev[0].type === "multiple_choice" && !prev[0].question.trim() && (prev[0].options || []).every(o => !o.text.trim())) {
+                return formatted;
+            }
+            return [...prev, ...formatted];
+        });
     };
 
     // Save
@@ -316,8 +352,8 @@ export default function HomeworkEditorClient({
                                                     type="button"
                                                     onClick={() => setCorrect(qIdx, oIdx)}
                                                     className={`w-7 h-7 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${opt.isCorrect
-                                                            ? "bg-emerald-500 border-emerald-500 text-white"
-                                                            : "border-slate-300 hover:border-emerald-400"
+                                                        ? "bg-emerald-500 border-emerald-500 text-white"
+                                                        : "border-slate-300 hover:border-emerald-400"
                                                         }`}
                                                 >
                                                     {opt.isCorrect && <CheckCircle2 className="w-4 h-4" />}
@@ -421,7 +457,12 @@ export default function HomeworkEditorClient({
 
             {/* Add question buttons */}
             <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-6">
-                <p className="text-sm font-bold text-slate-700 mb-3 text-center">Thêm câu hỏi mới</p>
+                <div className="flex items-center justify-between mb-4">
+                    <p className="text-sm font-bold text-slate-700">Thêm câu hỏi mới</p>
+                    <Button variant="secondary" size="sm" onClick={() => setIsAIModalOpen(true)} className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200">
+                        <Sparkles className="w-4 h-4 mr-2" /> Sinh trắc nghiệm bằng AI
+                    </Button>
+                </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {(Object.entries(typeConfig) as [QuestionType, typeof typeConfig[QuestionType]][]).map(([type, cfg]) => {
                         const Icon = cfg.icon;
@@ -438,6 +479,12 @@ export default function HomeworkEditorClient({
                     })}
                 </div>
             </div>
+
+            <AIGenerateModal
+                open={isAIModalOpen}
+                onOpenChange={setIsAIModalOpen}
+                onQuestionsGenerated={handleAIGenerated}
+            />
         </div>
     );
 }

@@ -263,7 +263,7 @@ export default function CourseBuilderClient({ classId, initialItems }: { classId
                                         <Plus className="w-4 h-4 mr-1" /> Thêm Bài
                                     </Button>
                                     {/* Simple Dropdown for Types */}
-                                    <div className="absolute right-0 top-full mt-1 hidden group-hover/add:block bg-white border border-slate-200 rounded-lg shadow-lg w-48 z-10 py-1">
+                                    <div className="absolute right-0 top-full mt-1 hidden group-hover/add:block bg-white border border-slate-200 rounded-lg shadow-lg w-48 z-50 py-1 max-h-64 overflow-y-auto">
                                         {Object.keys(typeLabels).filter(k => k !== 'folder').map(type => (
                                             <button
                                                 key={type}

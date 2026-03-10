@@ -9,10 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import {
-    Plus, Trash2, Save, ArrowLeft, CheckCircle2, XCircle, GripVertical, Clock
+    Plus, Trash2, Save, ArrowLeft, CheckCircle2, XCircle, GripVertical, Clock, Sparkles
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import AIGenerateModal from "@/components/teacher/AIGenerateModal";
 
 type QuizOption = { id: string; text: string; isCorrect: boolean };
 type QuizQuestion = { id: string; question: string; options: QuizOption[]; points: number };
@@ -41,10 +42,12 @@ export default function ExamEditorClient({
 }) {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
+    const [isAIModalOpen, setIsAIModalOpen] = useState(false);
 
     const [title, setTitle] = useState(existingExam?.title || "");
     const [description, setDescription] = useState(existingExam?.description || "");
     const [duration, setDuration] = useState(existingExam?.duration_minutes || 30);
+    const [dueDate, setDueDate] = useState(existingExam?.due_date?.slice(0, 16) || "");
     const [isPublished, setIsPublished] = useState(existingExam?.is_published || false);
     const [questions, setQuestions] = useState<QuizQuestion[]>(() => {
         if (existingExam?.questions && Array.isArray(existingExam.questions)) {
@@ -53,13 +56,58 @@ export default function ExamEditorClient({
         return [emptyQuestion()];
     });
 
-    const totalPoints = questions.reduce((sum, q) => sum + q.points, 0);
+    // Force total points to be exactly 10 and keep points synchronized with number of questions
+    const totalPoints = 10;
 
-    const addQuestion = () => setQuestions([...questions, emptyQuestion()]);
+    // Auto-distribute points whenever questions length changes (except when handled by handleAIGenerated initially)
+    const distributePoints = (qs: QuizQuestion[]) => {
+        const N = qs.length;
+        if (N === 0) return qs;
+        const basePoints = Math.floor((10 / N) * 100) / 100; // 2 decimal places
+        const remainder = 10 - (basePoints * N);
+        return qs.map((q, idx) => ({
+            ...q,
+            points: idx === 0 ? Number((basePoints + remainder).toFixed(2)) : basePoints
+        }));
+    };
+
+    const addQuestion = () => setQuestions(distributePoints([...questions, emptyQuestion()]));
 
     const removeQuestion = (idx: number) => {
         if (questions.length <= 1) { toast.error("Phải có ít nhất 1 câu hỏi."); return; }
-        setQuestions(questions.filter((_, i) => i !== idx));
+        setQuestions(distributePoints(questions.filter((_, i) => i !== idx)));
+    };
+
+    const handleAIGenerated = (generatedQuestions: any[]) => {
+        const N = generatedQuestions.length;
+        if (N === 0) return;
+
+        // Distribute 10 points among the generated questions
+        const basePoints = Math.floor(10 / N);
+        let remainder = 10 % N;
+
+        const formatted = generatedQuestions.map((gq, idx) => {
+            const pts = basePoints + (remainder > 0 ? 1 : 0);
+            if (remainder > 0) remainder--;
+
+            return {
+                id: genId(),
+                question: gq.question,
+                options: (gq.options || []).map((optLabel: string, oIdx: number) => ({
+                    id: genId(),
+                    text: optLabel,
+                    isCorrect: oIdx === gq.correctIndex
+                })),
+                points: pts || 1
+            };
+        });
+
+        // If the current list only has 1 empty question, replace it. Otherwise append.
+        if (questions.length === 1 && !questions[0].question.trim() && questions[0].options.every(o => !o.text.trim())) {
+            setQuestions(distributePoints(formatted));
+        } else {
+            setQuestions(distributePoints([...questions, ...formatted]));
+        }
     };
 
     const updateQuestion = (idx: number, field: string, value: any) => {
@@ -111,6 +159,7 @@ export default function ExamEditorClient({
                 description: description.trim(),
                 questions,
                 duration_minutes: duration,
+                due_date: dueDate || undefined,
                 total_points: totalPoints,
                 is_published: isPublished
             };
@@ -162,6 +211,12 @@ export default function ExamEditorClient({
                                 </Label>
                                 <Input type="number" min={1} max={180} value={duration} onChange={e => setDuration(parseInt(e.target.value) || 30)} />
                             </div>
+                            <div className="flex-1">
+                                <Label className="text-sm font-bold text-slate-700 mb-1.5 block">
+                                    Hạn chót (Deadline)
+                                </Label>
+                                <Input type="datetime-local" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                            </div>
                             <div className="flex items-end gap-2 pb-1">
                                 <Switch checked={isPublished} onCheckedChange={setIsPublished} />
                                 <Label className="text-sm text-slate-600 font-medium">{isPublished ? "Đã giao" : "Chưa giao"}</Label>
@@ -195,10 +250,11 @@ export default function ExamEditorClient({
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Input
-                                            type="number" min={1} max={10}
+                                            type="number" min={0.1} max={10} step="0.1"
                                             value={q.points}
-                                            onChange={e => updateQuestion(qIdx, "points", parseInt(e.target.value) || 1)}
-                                            className="w-16 h-8 text-xs text-center"
+                                            readOnly
+                                            className="w-16 h-8 text-xs text-center bg-slate-50 cursor-not-allowed text-slate-500 font-medium"
+                                            title="Điểm được chia đều tự động"
                                         />
                                         <span className="text-xs text-slate-400">điểm</span>
                                         <Button variant="ghost" size="sm" onClick={() => removeQuestion(qIdx)} className="text-red-400 hover:text-red-600 h-7 w-7 p-0">
@@ -251,15 +307,26 @@ export default function ExamEditorClient({
 
                     {/* Actions */}
                     <div className="flex items-center justify-between pt-4 border-t border-slate-200">
-                        <Button variant="outline" onClick={addQuestion} className="text-indigo-600 border-indigo-200">
-                            <Plus className="w-4 h-4 mr-2" /> Thêm câu hỏi
-                        </Button>
+                        <div className="flex items-center gap-3">
+                            <Button variant="outline" onClick={addQuestion} className="text-indigo-600 border-indigo-200">
+                                <Plus className="w-4 h-4 mr-2" /> Thêm câu hỏi
+                            </Button>
+                            <Button variant="secondary" onClick={() => setIsAIModalOpen(true)} className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200">
+                                <Sparkles className="w-4 h-4 mr-2" /> Sinh bằng AI
+                            </Button>
+                        </div>
                         <Button onClick={handleSave} disabled={isLoading} className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-6">
                             <Save className="w-4 h-4 mr-2" /> {isLoading ? "Đang lưu..." : "Lưu bài kiểm tra"}
                         </Button>
                     </div>
                 </div>
             </div>
+
+            <AIGenerateModal
+                open={isAIModalOpen}
+                onOpenChange={setIsAIModalOpen}
+                onQuestionsGenerated={handleAIGenerated}
+            />
         </div>
     );
 }
