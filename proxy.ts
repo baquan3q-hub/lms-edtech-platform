@@ -16,7 +16,7 @@ const PUBLIC_ROUTES = ["/login", "/forgot-password"];
 // Các route bắt đầu bằng prefix này sẽ bị bỏ qua (API, static files)
 const IGNORED_PREFIXES = ["/api", "/_next", "/favicon.ico"];
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
     // Bỏ qua các route không cần kiểm tra

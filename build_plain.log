@@ -1,0 +1,46 @@
+
+> lms-edtech-platform@0.1.0 build
+> next build
+
+⚠ Warning: Next.js inferred your workspace root, but it may not be correct.
+ We detected multiple lockfiles and selected the directory of C:\Users\84923\package-lock.json as the root directory.
+ To silence this warning, set `turbopack.root` in your Next.js config, or consider removing one of the lockfiles if it's not needed.
+   See https://nextjs.org/docs/app/api-reference/config/next-config-js/turbopack#root-directory for more information.
+ Detected additional lockfiles: 
+   * C:\Users\84923\OneDrive\Máy tính\lms-edtech-platform\package-lock.json
+
+▲ Next.js 16.1.6 (Turbopack)
+- Environments: .env.local
+
+  Creating an optimized production build ...
+
+thread 'tokio-runtime-worker' (9140) panicked at turbopack\crates\turbopack-core\src\ident.rs:352:34:
+byte index 11 is not a char boundary; it is inside 'á' (bytes 10..12) of `OneDrive_Máy tính_lms-edtech-platform_app_(dashboard)_admin_students_link-parent_c20f642d`
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+-----
+[1m[31mFATAL[39m[0m: An unexpected Turbopack error occurred. A panic log has been written to C:\Users\84923\AppData\Local\Temp\next-panic-bf5e7a5b7ff9b43216ee0212a92a977f.log.
+
+To help make Turbopack better, report this error by ]8;;https://github.com/vercel/next.js/discussions/new?category=turbopack-error-report&title=Turbopack%20Error%3A%20byte%20index%2011%20is%20not%20a%20char%20boundary%3B%20it%20is%20inside%20%27%C3%A1%27%20%28bytes%2010..12%29%20of%20%60OneDrive_M%C3%A1y%20t%C3%ADnh_lms-edtech-platform_app_%28dashboard%29_admin_students_link-parent_c20f642d%60&body=Turbopack%20version%3A%20%6023c46498%60%0ANext.js%20version%3A%20%600.0.0%60%0A%0AError%20message%3A%0A%60%60%60%0Abyte%20index%2011%20is%20not%20a%20char%20boundary%3B%20it%20is%20inside%20%27%C3%A1%27%20%28bytes%2010..12%29%20of%20%60OneDrive_M%C3%A1y%20t%C3%ADnh_lms-edtech-platform_app_%28dashboard%29_admin_students_link-parent_c20f642d%60%0A%0ADebug%20info%3A%0A-%20Execution%20of%20get_all_written_entrypoints_with_issues_operation%20failed%0A-%20Execution%20of%20EntrypointsOperation%3A%3Anew%20failed%0A-%20Execution%20of%20all_entrypoints_write_to_disk_operation%20failed%0A-%20Execution%20of%20Project%3A%3Aemit_all_output_assets%20failed%0A-%20Execution%20of%20%2Aemit_assets%20failed%0A-%20Execution%20of%20all_assets_from_entries%20failed%0A-%20Execution%20of%20%3CClientReferenceManifest%20as%20OutputAssetsReference%3E%3A%3Areferences%20failed%0A-%20Execution%20of%20build_manifest%20failed%0A-%20Execution%20of%20%3CNodeJsChunkingContext%20as%20ChunkingContext%3E%3A%3Achunk_path%20failed%0A-%20Execution%20of%20AssetIdent%3A%3Aoutput_name%20failed%0A-%20byte%20index%2011%20is%20not%20a%20char%20boundary%3B%20it%20is%20inside%20%27%C3%A1%27%20%28bytes%2010..12%29%20of%20%60OneDrive_M%C3%A1y%20t%C3%ADnh_lms-edtech-platform_app_%28dashboard%29_admin_students_link-parent_c20f642d%60%0A%60%60%60&labels=Turbopack,Turbopack%20Panic%20Backtrace\clicking here.]8;;\
+-----
+
+
+> Build error occurred
+Error [TurbopackInternalError]: byte index 11 is not a char boundary; it is inside 'á' (bytes 10..12) of `OneDrive_Máy tính_lms-edtech-platform_app_(dashboard)_admin_students_link-parent_c20f642d`
+
+Debug info:
+- Execution of get_all_written_entrypoints_with_issues_operation failed
+- Execution of EntrypointsOperation::new failed
+- Execution of all_entrypoints_write_to_disk_operation failed
+- Execution of Project::emit_all_output_assets failed
+- Execution of *emit_assets failed
+- Execution of all_assets_from_entries failed
+- Execution of <ClientReferenceManifest as OutputAssetsReference>::references failed
+- Execution of build_manifest failed
+- Execution of <NodeJsChunkingContext as ChunkingContext>::chunk_path failed
+- Execution of AssetIdent::output_name failed
+- byte index 11 is not a char boundary; it is inside 'á' (bytes 10..12) of `OneDrive_Máy tính_lms-edtech-platform_app_(dashboard)_admin_students_link-parent_c20f642d`
+    at <unknown> (TurbopackInternalError: byte index 11 is not a char boundary; it is inside 'á' (bytes 10..12) of `OneDrive_Máy tính_lms-edtech-platform_app_(dashboard)_admin_students_link-parent_c20f642d`) {
+  type: 'TurbopackInternalError',
+  location: 'turbopack\\crates\\turbopack-core\\src\\ident.rs:352:34'
+}
