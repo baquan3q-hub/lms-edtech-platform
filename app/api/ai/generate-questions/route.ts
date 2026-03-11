@@ -6,7 +6,7 @@ export const maxDuration = 60; // Allow more time for AI processing
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
-        const { prompt, numQuestions = 5, fileData, fileMimeType } = body;
+        const { prompt, difficulty = "Trung bình", numQuestions = 5, fileData, fileMimeType } = body;
 
         if (!prompt && !fileData) {
             return NextResponse.json(
@@ -20,6 +20,12 @@ export async function POST(req: NextRequest) {
         const systemPrompt = `
 You are an expert educational assistant specializing in creating multiple-choice questions.
 Your task is to generate EXACTLY ${numQuestions} multiple choice questions in Vietnamese based on the user's prompt and/or the provided document.
+The desired difficulty level for these questions is: "${difficulty}". 
+- If Dễ: Focus on remembering and basic facts.
+- If Trung bình: Focus on understanding and applying concepts.
+- If Khó: Focus on analyzing and evaluating information.
+- If Cực khó: Focus on creating, synthesizing, and highly complex scenarios.
+- If Từ dễ đến khó: Generate a mix, starting with easy questions and progressively increasing to hard ones.
 Output ONLY a valid JSON array of objects representing the questions. Do not include markdown blocks like \`\`\`json.
 Each object must have the following structure:
 {

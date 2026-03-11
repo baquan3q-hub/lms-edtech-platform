@@ -21,7 +21,7 @@ export default async function StudentExamPage({ params }: { params: Promise<{ id
         .single();
 
     // Lấy đề (đã strip đáp án đúng nếu chưa nộp)
-    const { data: exam, error } = await fetchExamQuestions(examId);
+    const { data: exam, error } = await fetchExamQuestions(examId, user.id);
 
     if (error || !exam) {
         return (

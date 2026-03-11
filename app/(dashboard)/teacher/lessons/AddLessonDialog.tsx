@@ -49,7 +49,7 @@ export default function AddLessonDialog({ classes, showAsButton = false }: { cla
         const content = formData.get("content") as string;
 
         if (!classId || !title) {
-            toast.error("Vui lòng điền đủ thông tin Lớp học và Tiêu đề bài giảng");
+            toast.error("Vui lòng điền đủ thông tin Lớp học và Tiêu đề tài liệu");
             setLoading(false);
             return;
         }
@@ -66,7 +66,7 @@ export default function AddLessonDialog({ classes, showAsButton = false }: { cla
         });
 
         if (result.success) {
-            toast.success("Tạo bài giảng mới thành công!");
+            toast.success("Thêm tài liệu mới thành công!");
             setOpen(false);
         } else {
             toast.error(result.error || "Có lỗi xảy ra");
@@ -80,20 +80,20 @@ export default function AddLessonDialog({ classes, showAsButton = false }: { cla
             <DialogTrigger asChild>
                 {showAsButton ? (
                     <Button className="mx-auto flex items-center bg-indigo-600 hover:bg-indigo-700 text-white">
-                        <PlusCircle className="w-4 h-4 mr-2" /> Tạo bài giảng đầu tiên
+                        <PlusCircle className="w-4 h-4 mr-2" /> Thêm tài liệu đầu tiên
                     </Button>
                 ) : (
                     <Button className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
-                        <PlusCircle className="w-4 h-4 mr-2" /> Tạo Bài giảng
+                        <PlusCircle className="w-4 h-4 mr-2" /> Thêm Tài liệu
                     </Button>
                 )}
             </DialogTrigger>
             <DialogContent className="sm:max-w-[550px]">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
-                        <DialogTitle className="text-xl">Mở Bài giảng mới</DialogTitle>
+                        <DialogTitle className="text-xl">Thêm Tài liệu mới</DialogTitle>
                         <DialogDescription>
-                            Tạo bài giảng và chọn lớp học sẽ được phân phối bài giảng này.
+                            Thêm tài liệu và chọn lớp học sẽ được phân phối tài liệu này.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-5 py-6">
@@ -114,7 +114,7 @@ export default function AddLessonDialog({ classes, showAsButton = false }: { cla
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="title" className="text-slate-700 font-semibold">Tiêu đề bài giảng *</Label>
+                            <Label htmlFor="title" className="text-slate-700 font-semibold">Tiêu đề tài liệu *</Label>
                             <Input
                                 id="title"
                                 name="title"
@@ -135,7 +135,7 @@ export default function AddLessonDialog({ classes, showAsButton = false }: { cla
                             <Textarea
                                 id="content"
                                 name="content"
-                                placeholder="Nhập một vài ghi chú ngắn cho bài giảng này..."
+                                placeholder="Nhập một vài ghi chú ngắn cho tài liệu này..."
                                 rows={3}
                             />
                         </div>
@@ -189,7 +189,7 @@ export default function AddLessonDialog({ classes, showAsButton = false }: { cla
                         </Button>
                         <Button type="submit" disabled={loading} className="bg-indigo-600 hover:bg-indigo-700 text-white">
                             {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                            Lưu bài giảng
+                            Lưu tài liệu
                         </Button>
                     </DialogFooter>
                 </form>

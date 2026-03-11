@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
+import { calcAttendanceRateFormatted, calcAttendanceRate } from "@/lib/utils/attendance-rate";
 
 // ==========================================
 // ATTENDANCE SESSIONS
@@ -188,9 +189,7 @@ export async function saveAttendanceRecords(
         const lateCount = records.filter(r => r.status === "late").length;
         const excusedCount = records.filter(r => r.status === "excused").length;
         const totalStudents = records.length;
-        const attendanceRate = totalStudents > 0
-            ? (presentCount / totalStudents * 100).toFixed(1)
-            : "0.0";
+        const attendanceRate = calcAttendanceRateFormatted(presentCount, lateCount, excusedCount, absentCount);
 
         // Lấy thông tin lớp và giáo viên
         const { data: classInfo } = await adminSupabase
@@ -703,7 +702,11 @@ export async function getAttendanceOverview(month: number, year: number, classId
 
         const classSummaries = Object.values(classMap).map((c: any) => ({
             ...c,
-            attendanceRate: c.totalRecords > 0 ? Math.round((c.totalPresent / c.totalRecords) * 100) : 0,
+            attendanceRate: (() => {
+                const lateCount = (allRecords as any[]).filter((r: any) => r.session_id && sessions.find((s: any) => s.id === r.session_id && s.class_id === c.classId) && r.status === 'late').length || 0;
+                const excusedCount = (allRecords as any[]).filter((r: any) => r.session_id && sessions.find((s: any) => s.id === r.session_id && s.class_id === c.classId) && r.status === 'excused').length || 0;
+                return calcAttendanceRate(c.totalPresent, lateCount, excusedCount, c.totalAbsent);
+            })(),
         }));
 
         // Học sinh vắng nhiều

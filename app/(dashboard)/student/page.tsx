@@ -13,15 +13,17 @@ import {
     Zap,
     TrendingUp,
     CalendarDays,
-    MapPin
+    MapPin,
+    Bell
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { fetchStudentEnrolledClasses, fetchStudentDashboardStats, fetchSuggestedLessons } from "@/lib/actions/student";
+import { fetchStudentEnrolledClasses, fetchStudentDashboardStats, fetchSuggestedLessons, fetchStudentAnnouncements } from "@/lib/actions/student";
 import { getOwnStudentSchedule } from "@/lib/actions/schedule";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import { vi } from "date-fns/locale";
 import UpcomingSessionsWidget from "@/components/shared/UpcomingSessionsWidget";
+import FeedbackSuggestionCard from "@/components/student/FeedbackSuggestionCard";
 
 // Color scheme cho các loại bài
 const typeMeta: Record<string, { icon: any; label: string; color: string; bg: string }> = {
@@ -39,12 +41,14 @@ export default async function StudentDashboardPage() {
         { data: myClasses },
         { data: statsData },
         { data: suggestions },
-        { data: upcomingSessions }
+        { data: upcomingSessions },
+        { data: announcements }
     ] = await Promise.all([
         fetchStudentEnrolledClasses(),
         fetchStudentDashboardStats(),
         fetchSuggestedLessons(),
-        getOwnStudentSchedule()
+        getOwnStudentSchedule(),
+        fetchStudentAnnouncements()
     ]);
 
     const dynamicStats = [
@@ -130,32 +134,50 @@ export default async function StudentDashboardPage() {
                         <h3 className="text-xl font-bold text-slate-900">Gợi ý Học tập</h3>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {suggestions.map((s: any) => {
-                            const meta = typeMeta[s.nextItem.type] || typeMeta.document;
+                        {suggestions.map((s: any, idx: number) => {
+                            const isHomework = s.type === "homework";
+                            const meta = isHomework ? typeMeta.assignment : (typeMeta[s.nextItem.type] || typeMeta.document);
                             const IconComp = meta.icon;
+                            const linkHref = isHomework
+                                ? `/student/classes/${s.classId}/homework/${s.nextItem.id}`
+                                : `/student/classes/${s.classId}/learn/${s.nextItem.id}`;
+                            const actionText = isHomework ? "Làm bài" : "Học";
+                            
                             return (
-                                <div key={s.classId} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow group">
+                                <div key={`${s.classId}-${s.nextItem.id}-${idx}`} className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow group">
                                     {/* Progress header */}
                                     <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
                                         <div>
                                             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">{s.courseName}</p>
                                             <p className="text-sm font-semibold text-slate-800">Lớp: {s.className}</p>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="text-2xl font-black text-indigo-600">{s.progressPercent}%</p>
-                                            <p className="text-[10px] text-slate-400 font-medium">{s.completedItems}/{s.totalItems} bài</p>
-                                        </div>
+                                        {!isHomework && (
+                                            <div className="text-right">
+                                                <p className="text-2xl font-black text-indigo-600">{s.progressPercent}%</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">{s.completedItems}/{s.totalItems} bài</p>
+                                            </div>
+                                        )}
+                                        {isHomework && (
+                                            <div className="text-right">
+                                                <p className="text-sm font-black text-orange-600">Bài tập mới</p>
+                                                {s.dueDate && (
+                                                    <p className="text-[10px] text-red-500 font-medium">Hạn: {new Date(s.dueDate).toLocaleDateString('vi-VN')}</p>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Progress bar */}
-                                    <div className="px-5 pt-3">
-                                        <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
-                                            <div
-                                                className="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full transition-all duration-500"
-                                                style={{ width: `${s.progressPercent}%` }}
-                                            />
+                                    {!isHomework && (
+                                        <div className="px-5 pt-3">
+                                            <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                                                <div
+                                                    className="bg-gradient-to-r from-indigo-500 to-purple-500 h-2 rounded-full transition-all duration-500"
+                                                    style={{ width: `${s.progressPercent}%` }}
+                                                />
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
 
                                     {/* Suggested item */}
                                     <div className="p-5 flex items-center gap-4">
@@ -164,14 +186,14 @@ export default async function StudentDashboardPage() {
                                         </div>
                                         <div className="flex-1 min-w-0">
                                             <p className="text-xs text-slate-400 font-medium flex items-center gap-1">
-                                                <Zap className="w-3 h-3" /> Bài tiếp theo
+                                                <Zap className="w-3 h-3" /> {isHomework ? "Cần hoàn thành" : "Bài tiếp theo"}
                                             </p>
                                             <p className="text-sm font-bold text-slate-800 truncate">{s.nextItem.title}</p>
                                             <span className={`text-[10px] font-semibold ${meta.color}`}>{meta.label}</span>
                                         </div>
-                                        <Link href={`/student/classes/${s.classId}/learn/${s.nextItem.id}`}>
+                                        <Link href={linkHref}>
                                             <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 h-9 rounded-xl shadow-sm group-hover:shadow-md transition-all">
-                                                <PlayCircle className="w-4 h-4 mr-1" /> Học
+                                                <PlayCircle className="w-4 h-4 mr-1" /> {actionText}
                                             </Button>
                                         </Link>
                                     </div>
@@ -181,6 +203,9 @@ export default async function StudentDashboardPage() {
                     </div>
                 </div>
             )}
+
+            {/* ===== BÀI TẬP CẢI THIỆN AI ===== */}
+            <FeedbackSuggestionCard />
 
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -287,16 +312,32 @@ export default async function StudentDashboardPage() {
                                 <CalendarDays className="w-5 h-5 text-indigo-500" />
                                 <h3 className="font-bold text-slate-800">Lịch học sắp tới</h3>
                             </div>
-                            <Link href="/student/schedule">
-                                <Button variant="link" className="text-indigo-600 font-semibold p-0 h-auto text-sm">
-                                    Xem tất cả
-                                </Button>
-                            </Link>
                         </div>
                         <UpcomingSessionsWidget sessions={upcomingSessions || []} limit={2} />
                     </div>
 
                     <h3 className="text-xl font-bold text-slate-900">Thông tin nhanh</h3>
+
+                    {/* Thông báo mới nhất */}
+                    {announcements && announcements.length > 0 && (
+                        <div className="rounded-2xl border border-amber-200 bg-white shadow-sm overflow-hidden">
+                            <div className="px-5 py-3 bg-amber-50 border-b border-amber-200 flex items-center gap-2">
+                                <Bell className="w-4 h-4 text-amber-600" />
+                                <h4 className="font-bold text-amber-800 text-sm">Thông báo mới</h4>
+                            </div>
+                            <div className="p-4 space-y-3">
+                                {announcements.slice(0, 3).map((ann: any) => (
+                                    <div key={ann.id} className="p-3 bg-amber-50/50 rounded-xl border border-amber-100">
+                                        <p className="font-semibold text-slate-800 text-sm line-clamp-1">{ann.title}</p>
+                                        <p className="text-xs text-slate-500 mt-1 line-clamp-2">{ann.content}</p>
+                                        <p className="text-[10px] text-slate-400 mt-1.5">
+                                            {new Date(ann.created_at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                                        </p>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
 
                     {/* Motivation Card */}
                     <div className="rounded-2xl bg-gradient-to-br from-indigo-600 to-purple-700 p-6 shadow-lg shadow-indigo-500/20 text-white relative overflow-hidden group hover:shadow-indigo-500/30 transition-shadow">

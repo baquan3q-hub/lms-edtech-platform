@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, startOfMonth, endOfMonth, addMonths, eachDayOfInterval, getDay } from "date-fns";
 import { vi } from "date-fns/locale";
 import { Calendar as CalendarIcon, List, Clock, BookOpen, AlertCircle, CalendarDays, FileText } from "lucide-react";
 
@@ -45,16 +45,106 @@ export default function StudentScheduleClient({ sessions, initialSchedules }: St
     const [isAbsenceModalOpen, setIsAbsenceModalOpen] = useState(false);
     const [selectedSessionForAbsence, setSelectedSessionForAbsence] = useState<{ class_id: string, class_name: string, session_date: string } | null>(null);
 
+    const [localSessions, setLocalSessions] = useState<ClassSession[]>(sessions);
+
     useEffect(() => {
-        const fetchUser = async () => {
+        const now = new Date();
+        const start = startOfMonth(now);
+        // generate for current and next month
+        const end = endOfMonth(addMonths(now, 1));
+        const days = eachDayOfInterval({ start, end });
+
+        const generatedSessions: ClassSession[] = [];
+        if (initialSchedules && initialSchedules.length > 0) {
+            days.forEach(day => {
+                const dayOfWeek = getDay(day); // 0 = Sunday, 1 = Monday
+                const schedulesForDay = initialSchedules.filter(s => s.day_of_week === dayOfWeek);
+                
+                schedulesForDay.forEach(s => {
+                    const dateStr = format(day, 'yyyy-MM-dd');
+                    // check if a real session already exists for this class and date
+                    const exists = sessions.some(realSession => 
+                        realSession.class_id === s.class_id && 
+                        realSession.session_date === dateStr
+                    );
+                    
+                    if (!exists) {
+                        generatedSessions.push({
+                            id: `fixed-${s.id || s.class_id}-${dateStr}`,
+                            class_id: s.class_id,
+                            class_name: s.class?.name || (Array.isArray(s.classes) ? s.classes[0]?.name : s.classes?.name) || 'Lớp học',
+                            course_name: s.class?.course?.name || '',
+                            session_number: 0,
+                            session_date: dateStr,
+                            start_time: s.start_time,
+                            end_time: s.end_time,
+                            topic: 'Lịch học dự kiến',
+                            description: 'Giáo viên chưa tạo nội dung chi tiết cho buổi học này. Đây là lịch học cố định hàng tuần.',
+                            materials_url: [],
+                            homework: null,
+                            status: 'scheduled',
+                            attendance_status: null,
+                            attendance_notes: null
+                        });
+                    }
+                });
+            });
+        }
+
+        const allSessions = [...sessions, ...generatedSessions];
+        allSessions.sort((a, b) => {
+            if (a.session_date !== b.session_date) return a.session_date.localeCompare(b.session_date);
+            return a.start_time.localeCompare(b.start_time);
+        });
+
+        setLocalSessions(allSessions);
+    }, [sessions, initialSchedules]);
+
+    useEffect(() => {
+        const fetchUserAndSubscribe = async () => {
             const supabase = createClient();
             const { data: { user } } = await supabase.auth.getUser();
-            if (user) setStudentId(user.id);
-        }
-        fetchUser();
+            if (user) {
+                setStudentId(user.id);
+                
+                // Realtime subscription for attendance
+                const subscription = supabase
+                    .channel('public:attendance')
+                    .on(
+                        'postgres_changes',
+                        { event: 'INSERT', schema: 'public', table: 'attendance', filter: `student_id=eq.${user.id}` },
+                        (payload) => {
+                            updateSessionAttendance(payload.new as any);
+                        }
+                    )
+                    .on(
+                        'postgres_changes',
+                        { event: 'UPDATE', schema: 'public', table: 'attendance', filter: `student_id=eq.${user.id}` },
+                        (payload) => {
+                            updateSessionAttendance(payload.new as any);
+                        }
+                    )
+                    .subscribe();
+
+                return () => {
+                    supabase.removeChannel(subscription);
+                };
+            }
+        };
+
+        fetchUserAndSubscribe();
     }, []);
 
-    const getAttendanceConfig = (status: string | null, sessionStatus: string) => {
+    const updateSessionAttendance = (newAttendance: any) => {
+        setLocalSessions(prev => prev.map(session => {
+            if (session.class_id === newAttendance.class_id && session.session_date === newAttendance.date) {
+                return { ...session, attendance_status: newAttendance.status, attendance_notes: newAttendance.note };
+            }
+            return session;
+        }));
+    };
+
+    const getAttendanceConfig = (status: string | null, sessionStatus: string, sessionNumber: number) => {
         if (sessionStatus === 'cancelled') return { label: 'Lớp hủy', color: 'bg-red-100 text-red-700' };
 
         switch (status) {
@@ -64,7 +154,8 @@ export default function StudentScheduleClient({ sessions, initialSchedules }: St
             case 'excused': return { label: 'Có phép', color: 'bg-blue-100 text-blue-700' };
             default:
                 if (sessionStatus === 'completed') return { label: 'Chưa ĐD', color: 'bg-slate-100 text-slate-700' };
-                return { label: 'Sắp tới', color: 'bg-slate-100 text-slate-700' };
+                if (sessionNumber === 0) return { label: 'Dự kiến', color: 'bg-slate-100 text-slate-500 border border-slate-200' };
+                return { label: 'Sắp tới', color: 'bg-indigo-50 text-indigo-700' };
         }
     };
 
@@ -79,7 +170,7 @@ export default function StudentScheduleClient({ sessions, initialSchedules }: St
 
     const renderDayContent = (day: Date) => {
         const dateStr = format(day, 'yyyy-MM-dd');
-        const daySessions = sessions.filter(s => s.session_date === dateStr);
+        const daySessions = localSessions.filter(s => s.session_date === dateStr);
 
         if (daySessions.length === 0) return null;
 
@@ -150,7 +241,7 @@ export default function StudentScheduleClient({ sessions, initialSchedules }: St
                             <CardContent>
                                 {selectedDate && (() => {
                                     const dateStr = format(selectedDate, 'yyyy-MM-dd');
-                                    const daySessions = sessions.filter(s => s.session_date === dateStr);
+                                    const daySessions = localSessions.filter(s => s.session_date === dateStr);
 
                                     if (daySessions.length === 0) {
                                         return <div className="text-center py-10 text-slate-500">Không có cấu hình lịch học nào (buổi học) trong ngày này.</div>;
@@ -159,7 +250,7 @@ export default function StudentScheduleClient({ sessions, initialSchedules }: St
                                     return (
                                         <div className="space-y-4">
                                             {daySessions.map(session => {
-                                                const attConfig = getAttendanceConfig(session.attendance_status, session.status);
+                                                const attConfig = getAttendanceConfig(session.attendance_status, session.status, session.session_number);
                                                 const isUpcoming = new Date(session.session_date) >= new Date(new Date().setHours(0, 0, 0, 0));
 
                                                 return (
@@ -169,8 +260,8 @@ export default function StudentScheduleClient({ sessions, initialSchedules }: St
                                                                 <span className="text-xs font-semibold text-indigo-600 mb-1 block uppercase tracking-wider">
                                                                     {session.class_name}
                                                                 </span>
-                                                                <h3 className="font-bold text-lg text-slate-800">
-                                                                    Buổi {session.session_number}: {session.topic || "Nội dung đang cập nhật"}
+                                                                <h3 className={`font-bold text-lg ${session.session_number === 0 ? 'text-slate-600' : 'text-slate-800'}`}>
+                                                                    {session.session_number === 0 ? session.topic : `Buổi ${session.session_number}: ${session.topic || "Nội dung đang cập nhật"}`}
                                                                 </h3>
                                                                 <p className="text-sm text-slate-500 flex items-center mt-1">
                                                                     <Clock className="w-4 h-4 mr-1.5" />
@@ -181,17 +272,6 @@ export default function StudentScheduleClient({ sessions, initialSchedules }: St
                                                                 <Badge className={`${attConfig.color} border-0`}>
                                                                     {attConfig.label}
                                                                 </Badge>
-                                                                {isUpcoming && session.attendance_status !== 'excused' && session.status !== 'cancelled' && (
-                                                                    <Button
-                                                                        variant="outline"
-                                                                        size="sm"
-                                                                        className="h-8 text-xs flex items-center gap-1.5 border-slate-200 hover:bg-slate-50"
-                                                                        onClick={() => handleOpenAbsenceModal(session)}
-                                                                    >
-                                                                        <FileText className="w-3 h-3" />
-                                                                        Xin nghỉ
-                                                                    </Button>
-                                                                )}
                                                             </div>
                                                         </div>
                                                         <div className="text-sm text-slate-600 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
@@ -219,71 +299,94 @@ export default function StudentScheduleClient({ sessions, initialSchedules }: St
                 </TabsContent>
 
                 <TabsContent value="list" className="mt-0 outline-none space-y-4">
-                    {sessions.length === 0 ? (
+                    {localSessions.length === 0 ? (
                         <div className="text-center py-12 bg-white rounded-xl border border-dashed border-slate-300">
                             <CalendarIcon className="w-12 h-12 text-slate-300 mx-auto mb-3" />
                             <h3 className="text-lg font-medium text-slate-700">Chưa có lịch học</h3>
                             <p className="text-slate-500">Bạn chưa được xếp lịch học chi tiết nào.</p>
                         </div>
                     ) : (
-                        sessions.map(session => {
-                            const attConfig = getAttendanceConfig(session.attendance_status, session.status);
-                            const isUpcoming = new Date(session.session_date) >= new Date(new Date().setHours(0, 0, 0, 0));
+                        (() => {
+                            const nowStr = format(new Date(), 'yyyy-MM-dd');
+                            const timeStr = format(new Date(), 'HH:mm');
+                            const sorted = [...localSessions].sort((a, b) => {
+                                if (a.session_date !== b.session_date) return a.session_date.localeCompare(b.session_date);
+                                return a.start_time.localeCompare(b.start_time);
+                            });
+                            const past = sorted.filter(s => s.session_date < nowStr || (s.session_date === nowStr && s.end_time < timeStr));
+                            const future = sorted.filter(s => s.session_date > nowStr || (s.session_date === nowStr && s.end_time >= timeStr));
+                            const mostRecentPast = past[past.length - 1];
+                            const nextTwoFuture = future.slice(0, 2);
+                            const nearest3 = [];
+                            if (mostRecentPast) nearest3.push(mostRecentPast);
+                            nearest3.push(...nextTwoFuture);
 
-                            return (
-                                <Card key={session.id} className="shadow-sm overflow-hidden">
-                                    <div className={`h-1.5 w-full ${attConfig.color.split(' ')[0].replace('text-', 'bg-')}`}></div>
-                                    <CardContent className="p-5 flex flex-col md:flex-row justify-between gap-4">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-3 mb-2">
-                                                <Badge className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200">
-                                                    {session.class_name}
-                                                </Badge>
-                                                <span className="text-sm text-slate-500 flex items-center font-medium">
-                                                    <CalendarIcon className="w-4 h-4 mr-1.5" />
-                                                    {format(parseISO(session.session_date), 'dd/MM/yyyy')}
-                                                    <span className="mx-2">•</span>
+                            return nearest3.map(session => {
+                                const attConfig = getAttendanceConfig(session.attendance_status, session.status, session.session_number);
+                                const isUpcoming = new Date(session.session_date) >= new Date(new Date().setHours(0, 0, 0, 0));
+
+                                return (
+                                    <Card key={session.id} className="shadow-sm overflow-hidden border-l-4 transition-all hover:shadow-md" style={{ borderLeftColor: attConfig.color.includes('emerald') ? '#10b981' : attConfig.color.includes('red') ? '#ef4444' : attConfig.color.includes('amber') ? '#f59e0b' : attConfig.color.includes('blue') ? '#3b82f6' : '#6366f1' }}>
+                                        <CardContent className="p-0 flex flex-col md:flex-row">
+                                            {/* Cột trái: Ngày tháng */}
+                                            <div className="bg-slate-50/80 md:w-56 p-6 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col justify-center items-center text-center shrink-0">
+                                                <div className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1.5">
+                                                    {format(parseISO(session.session_date), 'EEEE', { locale: vi })}
+                                                </div>
+                                                <div className="text-4xl font-black text-indigo-700 mb-1">
+                                                    {format(parseISO(session.session_date), 'dd')}
+                                                </div>
+                                                <div className="text-sm font-semibold text-slate-500 mb-4">
+                                                    Tháng {format(parseISO(session.session_date), 'MM, yyyy')}
+                                                </div>
+                                                <Badge variant="outline" className="bg-white px-3.5 py-1.5 text-slate-700 font-semibold border-slate-200 shadow-sm rounded-full">
+                                                    <Clock className="w-3.5 h-3.5 mr-2 text-indigo-500" />
                                                     {session.start_time.substring(0, 5)} - {session.end_time.substring(0, 5)}
-                                                </span>
-                                            </div>
-                                            <h3 className="font-bold text-lg text-slate-800 mb-1">
-                                                Buổi {session.session_number}: {session.topic || "Chưa có chủ đề"}
-                                            </h3>
-                                            <div className="text-sm text-slate-600 mb-3 line-clamp-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                                                {session.description || "Chưa có mô tả chi tiết."}
+                                                </Badge>
                                             </div>
 
-                                            {session.homework && (
-                                                <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex gap-3 text-sm mt-3">
-                                                    <BookOpen className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
-                                                    <div>
-                                                        <p className="font-semibold text-indigo-900 mb-1">Bài tập về nhà</p>
-                                                        <p className="text-indigo-800/80 whitespace-pre-wrap">{session.homework}</p>
+                                            {/* Cột phải: Nội dung bài học */}
+                                            <div className="flex-1 p-6 lg:p-8 flex flex-col relative justify-center">
+                                                <div className="absolute top-6 right-6 flex gap-2">
+                                                    <Badge className={`${attConfig.color} border-0 shadow-sm px-3 py-1 font-medium`}>
+                                                        {attConfig.label}
+                                                    </Badge>
+                                                </div>
+
+                                                <div className="mb-4 pr-24">
+                                                    <Badge className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200 mb-3 px-2.5 py-0.5">
+                                                        Lớp: {session.class_name}
+                                                    </Badge>
+                                                    <h3 className={`font-extrabold text-xl mb-1.5 leading-tight ${session.session_number === 0 ? 'text-slate-600' : 'text-slate-900'}`}>
+                                                        {session.session_number === 0 ? session.topic : `Buổi ${session.session_number}: ${session.topic || "Đang cập nhật chủ đề..."}`}
+                                                    </h3>
+                                                    {session.course_name && <p className="text-sm text-slate-500 font-medium">{session.course_name}</p>}
+                                                </div>
+
+                                                <div className="bg-slate-50/50 rounded-xl p-4 md:p-5 border border-slate-100 text-slate-700 text-sm leading-relaxed mb-2 transition-colors hover:bg-slate-50">
+                                                    <div className="font-bold text-slate-800 mb-2 flex items-center gap-2">
+                                                        <FileText className="w-4 h-4 text-indigo-500" /> Nội dung bài học (Admin giao):
+                                                    </div>
+                                                    <div className="text-slate-600">
+                                                        {session.description || <span className="italic text-slate-400">Chưa có mô tả chi tiết bài học. Nội dung sẽ được cập nhật sau.</span>}
                                                     </div>
                                                 </div>
-                                            )}
-                                        </div>
-                                        <div className="flex flex-col items-end justify-between shrink-0">
-                                            <Badge className={`${attConfig.color} border-0 mb-4`}>
-                                                {attConfig.label}
-                                            </Badge>
 
-                                            {isUpcoming && session.attendance_status !== 'excused' && session.status !== 'cancelled' && (
-                                                <Button
-                                                    variant="outline"
-                                                    size="sm"
-                                                    className="h-8 text-xs flex gap-1.5 items-center bg-white shadow-sm hover:bg-slate-50 mt-auto"
-                                                    onClick={() => handleOpenAbsenceModal(session)}
-                                                >
-                                                    <FileText className="w-3.5 h-3.5 text-slate-500" />
-                                                    Xin nghỉ học
-                                                </Button>
-                                            )}
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            );
-                        })
+                                                {session.homework && (
+                                                    <div className="bg-indigo-50/50 p-4 md:p-5 rounded-xl border border-indigo-100 flex gap-3.5 text-sm mt-3 transition-colors hover:bg-indigo-50">
+                                                        <BookOpen className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
+                                                        <div>
+                                                            <p className="font-bold text-indigo-900 mb-1.5">Bài tập về nhà:</p>
+                                                            <p className="text-indigo-800/80 whitespace-pre-wrap leading-relaxed">{session.homework}</p>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </CardContent>
+                                    </Card>
+                                );
+                        });
+                    })()
                     )}
                 </TabsContent>
             </Tabs>

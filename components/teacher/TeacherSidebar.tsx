@@ -8,6 +8,7 @@ import {
     BookOpen,
     FileSignature,
     Users,
+    ClipboardCheck,
     PanelLeftClose,
     PanelLeftOpen
 } from "lucide-react";
@@ -17,7 +18,8 @@ const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/teacher" },
     { icon: BookOpen, label: "Lớp học của tôi", href: "/teacher/classes" },
     { icon: Users, label: "Quản lý Học viên", href: "/teacher/students" },
-    { icon: FileSignature, label: "Quản lý Bài giảng", href: "/teacher/lessons" },
+    { icon: FileSignature, label: "Ngân hàng Tài liệu số", href: "/teacher/lessons" },
+    { icon: ClipboardCheck, label: "Đơn xin nghỉ", href: "/teacher/absence-requests" },
 ];
 
 interface TeacherSidebarProps {

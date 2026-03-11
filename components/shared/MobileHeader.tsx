@@ -29,7 +29,6 @@ const getPageTitle = (pathname: string) => {
     if (pathname.includes("/parent")) return "Parent Dashboard";
 
     if (pathname.includes("/student/classes")) return "Lớp học của tôi";
-    if (pathname.includes("/student/schedule")) return "Lịch học";
     if (pathname.includes("/student/achievements")) return "Thành tích";
     if (pathname.includes("/student/profile")) return "Hồ sơ";
     if (pathname.includes("/student")) return "Student Dashboard";

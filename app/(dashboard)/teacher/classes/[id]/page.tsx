@@ -12,6 +12,8 @@ import AttendanceClient from "./AttendanceClient";
 import ScheduleManagerClient from "./ScheduleManagerClient";
 import { getRooms, getClassSchedules } from "@/lib/actions/schedule";
 import DeleteExamButton from "@/components/teacher/DeleteExamButton";
+import AnnouncementComposer from "@/components/teacher/AnnouncementComposer";
+import { fetchClassAnnouncements } from "@/lib/actions/announcement";
 
 export default async function ClassDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const resolvedParams = await params;
@@ -26,7 +28,8 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
         { data: schedulesData },
         { data: studentProgress },
         { data: classExams },
-        { data: classHomework }
+        { data: classHomework },
+        announcementsResult
     ] = await Promise.all([
         fetchClassDetails(id),
         fetchClassStudents(id),
@@ -35,8 +38,11 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
         getClassSchedules(id),
         fetchStudentProgressForClass(id),
         fetchClassExams(id),
-        fetchClassHomework(id)
+        fetchClassHomework(id),
+        fetchClassAnnouncements(id)
     ]);
+
+    const classAnnouncements = (announcementsResult as any)?.data || [];
 
     const items = courseItems || [];
     const lessonCount = items.filter((i: any) => i.type !== 'folder').length;
@@ -395,38 +401,8 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
 
                 {/* ===== TAB: THÔNG BÁO & FEEDBACK ===== */}
                 <TabsContent value="announcements_feedback" className="mt-6 space-y-6">
-                    {/* KHU VỰC THÔNG BÁO */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                        <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-lg font-bold text-slate-900 flex items-center">
-                                <Bell className="w-5 h-5 mr-2 text-amber-500" /> Thông báo chung đến nhóm
-                            </h3>
-                            <Button className="bg-amber-500 hover:bg-amber-600 text-white shadow-sm">
-                                <PlusCircle className="w-4 h-4 mr-2" /> Tạo thông báo mới
-                            </Button>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div className="border border-amber-100 bg-amber-50/50 rounded-xl p-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                                        <Bell className="w-4 h-4 text-amber-600" />
-                                    </div>
-                                    <div>
-                                        <h4 className="font-semibold text-slate-900 text-sm">Chào mừng các bạn đến với lớp học!</h4>
-                                        <p className="text-xs text-slate-500 mt-1">
-                                            Đây là kênh thông báo chung của lớp. Giáo viên sẽ gửi các thông báo quan trọng tại đây.
-                                        </p>
-                                        <p className="text-[11px] text-slate-400 mt-2">Hôm nay</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="text-center py-6 border border-dashed border-slate-200 rounded-xl">
-                                <p className="text-sm text-slate-400">Tính năng Thông báo sẽ được cập nhật đầy đủ trong phiên bản tiếp theo.</p>
-                            </div>
-                        </div>
-                    </div>
+                    {/* KHU VỰC THÔNG BÁO — dùng AnnouncementComposer */}
+                    <AnnouncementComposer classId={id} initialAnnouncements={classAnnouncements} />
 
                     {/* KHU VỰC FEEDBACK */}
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">

@@ -15,6 +15,9 @@ export async function createExam(classId: string, data: {
     duration_minutes: number;
     due_date?: string;
     total_points: number;
+    is_strict_mode?: boolean;
+    strict_mode_limit?: number;
+    show_answers?: boolean;
 }) {
     try {
         const supabase = await createClient();
@@ -33,6 +36,9 @@ export async function createExam(classId: string, data: {
                 due_date: data.due_date || null,
                 total_points: data.total_points,
                 is_published: false,
+                is_strict_mode: data.is_strict_mode ?? false,
+                strict_mode_limit: data.strict_mode_limit ?? 0,
+                show_answers: data.show_answers ?? true,
                 created_by: user.id
             })
             .select()
@@ -56,6 +62,9 @@ export async function updateExam(examId: string, classId: string, data: {
     due_date?: string;
     total_points: number;
     is_published?: boolean;
+    is_strict_mode?: boolean;
+    strict_mode_limit?: number;
+    show_answers?: boolean;
 }) {
     try {
         const adminSupabase = createAdminClient();
@@ -68,7 +77,10 @@ export async function updateExam(examId: string, classId: string, data: {
                 duration_minutes: data.duration_minutes,
                 due_date: data.due_date || null,
                 total_points: data.total_points,
-                is_published: data.is_published ?? false
+                is_published: data.is_published ?? false,
+                is_strict_mode: data.is_strict_mode ?? false,
+                strict_mode_limit: data.strict_mode_limit ?? 0,
+                show_answers: data.show_answers ?? true
             })
             .eq("id", examId);
 
@@ -182,14 +194,45 @@ export async function fetchExamAnalytics(examId: string) {
                 correctCount,
                 wrongCount,
                 correctPercent: totalStudents > 0 ? Math.round((correctCount / totalStudents) * 100) : 0,
-                optionCounts
+                optionCounts,
+                tags: q.tags || []
             };
         });
 
-        // 5. Điểm mạnh / yếu
-        const sortedByCorrect = [...questionAnalytics].sort((a, b) => b.correctPercent - a.correctPercent);
-        const strengths = sortedByCorrect.slice(0, 3).filter(q => q.correctPercent >= 60);
-        const weaknesses = sortedByCorrect.slice(-3).filter(q => q.correctPercent < 60).reverse();
+        // 5. Điểm mạnh / yếu (Dựa trên Tag nếu có, nếu không thì theo Câu hỏi)
+        const tagMap: Record<string, { correct: number; total: number }> = {};
+        
+        questionAnalytics.forEach((qa: any) => {
+            const tags = qa.tags || [];
+            tags.forEach((tag: string) => {
+                if (!tagMap[tag]) tagMap[tag] = { correct: 0, total: 0 };
+                tagMap[tag].correct += qa.correctCount;
+                tagMap[tag].total += totalStudents;
+            });
+        });
+
+        const tagAnalytics = Object.keys(tagMap).map(tag => {
+            const stats = tagMap[tag];
+            return {
+                name: tag,
+                percent: stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0,
+                type: 'tag'
+            };
+        });
+
+        const sortedTags = [...tagAnalytics].sort((a, b) => b.percent - a.percent);
+        
+        let strengths = [];
+        let weaknesses = [];
+
+        if (sortedTags.length > 0) {
+            strengths = sortedTags.filter(t => t.percent >= 60).slice(0, 3);
+            weaknesses = sortedTags.filter(t => t.percent < 60).slice(-3).reverse();
+        } else {
+            const sortedByCorrect = [...questionAnalytics].sort((a, b) => b.correctPercent - a.correctPercent);
+            strengths = sortedByCorrect.slice(0, 3).filter(q => q.correctPercent >= 60).map(q => ({ name: `Câu ${q.questionIndex + 1}: ${q.question}`, percent: q.correctPercent, type: 'question' }));
+            weaknesses = sortedByCorrect.slice(-3).filter(q => q.correctPercent < 60).reverse().map(q => ({ name: `Câu ${q.questionIndex + 1}: ${q.question}`, percent: q.correctPercent, type: 'question' }));
+        }
 
         return {
             data: {
@@ -261,26 +304,40 @@ export async function fetchStudentExams(classId: string) {
     }
 }
 
-export async function fetchExamQuestions(examId: string) {
+export async function fetchExamQuestions(examId: string, studentId?: string) {
     try {
         const adminSupabase = createAdminClient();
         const { data: exam, error } = await adminSupabase
             .from("exams")
-            .select("id, title, description, questions, duration_minutes, due_date, total_points")
+            .select("id, title, description, questions, duration_minutes, due_date, total_points, show_answers, is_strict_mode, strict_mode_limit")
             .eq("id", examId)
             .eq("is_published", true)
             .single();
 
         if (error) throw error;
 
-        // Strip isCorrect from options to prevent cheating
-        const safeQuestions = ((exam.questions || []) as any[]).map((q: any) => ({
-            ...q,
-            options: (q.options || []).map((o: any) => ({ id: o.id, text: o.text }))
-        }));
+        let hasSubmitted = false;
+        if (studentId) {
+             const { data: existing } = await adminSupabase
+                .from("exam_submissions")
+                .select("id")
+                .eq("exam_id", examId)
+                .eq("student_id", studentId)
+                .single();
+            if (existing) hasSubmitted = true;
+        }
+
+        // Strip isCorrect from options to prevent cheating if not submitted
+        let finalQuestions = exam.questions;
+        if (!hasSubmitted) {
+            finalQuestions = ((exam.questions || []) as any[]).map((q: any) => ({
+                ...q,
+                options: (q.options || []).map((o: any) => ({ id: o.id, text: o.text }))
+            }));
+        }
 
         return {
-            data: { ...exam, questions: safeQuestions },
+            data: { ...exam, questions: finalQuestions },
             error: null
         };
     } catch (error: any) {
@@ -318,13 +375,21 @@ export async function submitExamAnswers(examId: string, classId: string, answers
 
         const questions = (exam.questions || []) as any[];
         let score = 0;
+        let hasEssay = false;
+
         questions.forEach((q: any, idx: number) => {
-            const correctOption = (q.options || []).find((o: any) => o.isCorrect);
-            const studentAnswer = answers[idx];
-            if (studentAnswer?.selectedOptionId === correctOption?.id) {
-                score += (q.points || 1);
+            if (q.type !== "ESSAY") {
+                const correctOption = (q.options || []).find((o: any) => o.isCorrect);
+                const studentAnswer = answers[idx];
+                if (studentAnswer?.selectedOptionId === correctOption?.id) {
+                    score += (q.points || 1);
+                }
+            } else {
+                hasEssay = true;
             }
         });
+
+        const gradingStatus = hasEssay ? 'pending' : 'graded';
 
         // Lưu bài nộp
         const { data: submission, error } = await adminSupabase
@@ -337,7 +402,8 @@ export async function submitExamAnswers(examId: string, classId: string, answers
                 total_points: exam.total_points,
                 started_at: startedAt,
                 submitted_at: new Date().toISOString(),
-                time_taken_seconds: timeTaken
+                time_taken_seconds: timeTaken,
+                grading_status: gradingStatus
             })
             .select()
             .single();
@@ -351,5 +417,25 @@ export async function submitExamAnswers(examId: string, classId: string, answers
     } catch (error: any) {
         console.error("Error submitting exam:", error);
         return { data: null, error: error.message };
+    }
+}
+
+export async function saveManualGrades(submissionId: string, newTotalScore: number) {
+    try {
+        const adminSupabase = createAdminClient();
+        const { error } = await adminSupabase
+            .from("exam_submissions")
+            .update({ 
+                score: newTotalScore, 
+                grading_status: 'graded' 
+            })
+            .eq("id", submissionId);
+            
+        if (error) throw error;
+        
+        return { success: true, error: null };
+    } catch (err: any) {
+        console.error("Error saving manual grades:", err);
+        return { success: false, error: err.message };
     }
 }

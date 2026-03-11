@@ -5,7 +5,8 @@ import Link from "next/link";
 import {
     ArrowLeft, BookOpen, PlayCircle, FileText, Video, ChevronDown, CheckSquare,
     Monitor, FolderPlus, Folder, CheckCircle2, Circle, Music, ClipboardList,
-    MessageSquare, Calendar, Bell, BarChart3, Clock, MapPin, Users, Trophy, Home
+    MessageSquare, Calendar, Bell, BarChart3, Clock, MapPin, Users, Trophy, Home,
+    ExternalLink, Download, Link as LinkIcon, Medal, Target, Star, TrendingUp
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,7 +27,7 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
     const adminSupabase = createAdminClient();
 
     // === DATA FETCHING (song song) ===
-    const [classRes, itemsRes, progressRes, schedulesRes, examsRes, homeworkRes] = await Promise.all([
+    const [classRes, itemsRes, progressRes, schedulesRes, examsRes, homeworkRes, announcementsRes] = await Promise.all([
         // 1. Thông tin lớp
         adminSupabase
             .from('classes')
@@ -55,6 +56,13 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
         fetchStudentExams(id),
         // 6. Bài tập về nhà
         fetchStudentHomework(id),
+        // 7. Thông báo lớp học
+        adminSupabase
+            .from("announcements")
+            .select("id, title, content, resource_id, resource_type, file_url, video_url, link_url, quiz_data, created_at")
+            .eq("class_id", id)
+            .order("created_at", { ascending: false })
+            .limit(20),
     ]);
 
     const classInfo = classRes.data as any;
@@ -62,6 +70,7 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
     const schedules = schedulesRes.data || [];
     const exams = examsRes.data || [];
     const homeworkList = homeworkRes.data || [];
+    const announcements = announcementsRes.data || [];
 
     // Progress set
     const completedSet = new Set(
@@ -74,6 +83,66 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
     const quizCount = items.filter((i: any) => i.type === 'quiz').length;
     const completedCount = items.filter((i: any) => i.type !== 'folder' && completedSet.has(i.id)).length;
     const progressPercent = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
+
+    // TÍNH TOÁN KẾT QUẢ HỌC TẬP & XẾP HẠNG
+    let currentStudentScore = 0;
+    let currentStudentMaxScore = 0;
+    let completedExamsCount = 0;
+    let completedHomeworkCount = 0;
+    let totalAttempts = 0;
+
+    const myFinishedAssignments: any[] = [];
+
+    // Tổng hợp điểm từ Bài kiểm tra
+    exams.forEach((exam: any) => {
+        if (exam.submission) {
+            completedExamsCount++;
+            currentStudentScore += exam.submission.score || 0;
+            currentStudentMaxScore += exam.submission.total_points || exam.total_points || 0;
+            totalAttempts++; // exam chỉ nộp 1 lần (hoặc tính là 1 lượt thành công)
+            myFinishedAssignments.push({ type: 'Kiểm tra', title: exam.title, score: exam.submission.score, total: exam.submission.total_points || exam.total_points, date: exam.submission.submitted_at || exam.submission.created_at });
+        }
+    });
+
+    // Tổng hợp điểm từ Bài tập
+    homeworkList.forEach((hw: any) => {
+        if (hw.submission && hw.submission.status === 'graded') {
+            completedHomeworkCount++;
+            currentStudentScore += hw.submission.score || 0;
+            currentStudentMaxScore += hw.total_points || 0;
+            totalAttempts += hw.submission.attempts || 1;
+            myFinishedAssignments.push({ type: 'Bài tập', title: hw.title, score: hw.submission.score, total: hw.total_points, date: hw.submission.updated_at || hw.submission.created_at });
+        }
+    });
+
+    const gpaPercent = currentStudentMaxScore > 0 ? Math.round((currentStudentScore / currentStudentMaxScore) * 100) : 0;
+    const gpa10 = currentStudentMaxScore > 0 ? Number(((currentStudentScore / currentStudentMaxScore) * 10).toFixed(1)) : 0;
+    
+    // Sắp xếp lịch sử bài làm gần nhất
+    myFinishedAssignments.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    // Tính toán thứ hạng (Rank)
+    const examIds = exams.map((e: any) => e.id);
+    const hwIds = homeworkList.map((h: any) => h.id);
+
+    const [allExamSubsRes, allHwSubsRes] = await Promise.all([
+        examIds.length > 0 ? adminSupabase.from("exam_submissions").select("student_id, score").in("exam_id", examIds) : Promise.resolve({ data: [] }),
+        hwIds.length > 0 ? adminSupabase.from("homework_submissions").select("student_id, score").in("homework_id", hwIds).eq("status", "graded") : Promise.resolve({ data: [] })
+    ]);
+
+    const studentScoresMap: Record<string, number> = {};
+    const allExSubs = allExamSubsRes?.data || [];
+    const allHwSubs = allHwSubsRes?.data || [];
+    
+    [...allExSubs, ...allHwSubs].forEach((sub: any) => {
+        if (!studentScoresMap[sub.student_id]) studentScoresMap[sub.student_id] = 0;
+        studentScoresMap[sub.student_id] += Number(sub.score) || 0;
+    });
+
+    const sortedStudentIds = Object.keys(studentScoresMap).sort((a, b) => studentScoresMap[b] - studentScoresMap[a]);
+    // Hạng của người dùng hiện tại (nội suy 1 nếu không có ai)
+    const myRank = sortedStudentIds.includes(user.id) ? sortedStudentIds.indexOf(user.id) + 1 : (currentStudentScore > 0 ? 1 : null);
+    const totalRankedStudents = sortedStudentIds.length;
 
     // Next lesson
     const flatLessons = items.filter((i: any) => i.type !== 'folder').sort((a: any, b: any) => a.order_index - b.order_index);
@@ -247,6 +316,9 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
                     </TabsTrigger>
                     <TabsTrigger value="homework" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
                         <Home className="w-4 h-4 mr-2" /> Bài tập
+                    </TabsTrigger>
+                    <TabsTrigger value="performance" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
+                        <BarChart3 className="w-4 h-4 mr-2" /> Kết quả học tập
                     </TabsTrigger>
                     <TabsTrigger value="announcements" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
                         <Bell className="w-4 h-4 mr-2" /> Thông báo
@@ -425,6 +497,9 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
                                                     <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
                                                         <span>{hw.total_points} điểm</span>
                                                         <span>{(hw.questions as any[] || []).length} câu</span>
+                                                        {sub?.attempts > 1 && (
+                                                            <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px]" variant="outline">{sub.attempts} lần nộp</Badge>
+                                                        )}
                                                         {hw.due_date && (
                                                             <span className={`flex items-center gap-1 ${isDue && !isSubmitted && !isGraded ? 'text-red-500 font-semibold' : ''}`}>
                                                                 <Clock className="w-3 h-3" />
@@ -460,6 +535,92 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
                     </div>
                 </TabsContent>
 
+                {/* ===== TAB: KẾT QUẢ HỌC TẬP (PERFORMANCE) ===== */}
+                <TabsContent value="performance">
+                    <div className="space-y-6">
+                        {/* 4 Cards Overview */}
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div className="bg-white border border-indigo-100 rounded-xl p-5 shadow-sm shadow-indigo-100/50 flex flex-col items-center justify-center text-center">
+                                <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center mb-3">
+                                    <Target className="w-6 h-6" />
+                                </div>
+                                <p className="text-sm font-semibold text-slate-500 mb-1">Điểm Trung Bình (Hệ 10)</p>
+                                <p className="text-3xl font-extrabold text-indigo-700">{gpa10.toFixed(1)}</p>
+                            </div>
+
+                            <div className="bg-white border border-emerald-100 rounded-xl p-5 shadow-sm shadow-emerald-100/50 flex flex-col items-center justify-center text-center">
+                                <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mb-3">
+                                    <Medal className="w-6 h-6" />
+                                </div>
+                                <p className="text-sm font-semibold text-slate-500 mb-1">Thứ hạng trong lớp</p>
+                                <p className="text-3xl font-extrabold text-emerald-600">
+                                    {myRank !== null ? `${myRank}/${Math.max(totalRankedStudents, myRank)}` : '--'}
+                                </p>
+                            </div>
+
+                            <div className="bg-white border border-amber-100 rounded-xl p-5 shadow-sm shadow-amber-100/50 flex flex-col items-center justify-center text-center">
+                                <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mb-3">
+                                    <CheckCircle2 className="w-6 h-6" />
+                                </div>
+                                <p className="text-sm font-semibold text-slate-500 mb-1">Số bài đã nộp/nhận điểm</p>
+                                <p className="text-3xl font-extrabold text-amber-600">{completedExamsCount + completedHomeworkCount}</p>
+                            </div>
+
+                            <div className="bg-white border border-blue-100 rounded-xl p-5 shadow-sm shadow-blue-100/50 flex flex-col items-center justify-center text-center">
+                                <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center mb-3">
+                                    <TrendingUp className="w-6 h-6" />
+                                </div>
+                                <p className="text-sm font-semibold text-slate-500 mb-1">Tổng số lượt làm</p>
+                                <p className="text-3xl font-extrabold text-blue-600">{totalAttempts}</p>
+                            </div>
+                        </div>
+
+                        {/* List danh sách các bài làm */}
+                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                            <div className="px-5 py-4 border-b border-slate-200 bg-white">
+                                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <BarChart3 className="w-5 h-5 text-indigo-500" /> Lịch sử Điểm số
+                                </h2>
+                                <p className="text-sm text-slate-500 mt-1">Chi tiết điểm các bài tập và bài kiểm tra gần nhất</p>
+                            </div>
+                            
+                            {myFinishedAssignments.length > 0 ? (
+                                <div className="divide-y divide-slate-100">
+                                    {myFinishedAssignments.map((item, idx) => {
+                                        const percent = item.total > 0 ? item.score / item.total : 0;
+                                        const isPass = percent >= 0.5;
+                                        return (
+                                            <div key={idx} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition-colors">
+                                                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${isPass ? 'bg-emerald-50 text-emerald-500' : 'bg-red-50 text-red-500'}`}>
+                                                    {isPass ? <Star className="w-5 h-5" /> : <TrendingUp className="w-5 h-5 rotate-180" />}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-bold text-slate-800 text-sm truncate">{item.title}</p>
+                                                    <p className="text-xs text-slate-500 font-medium mt-0.5">{item.type} • {item.date ? new Date(item.date).toLocaleDateString('vi-VN') : ''}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className={`text-lg font-black ${isPass ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                        {item.score}/{item.total}
+                                                    </p>
+                                                    <Badge className={`text-[10px] uppercase tracking-wider ${isPass ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`} variant="outline">
+                                                        {isPass ? 'Đạt' : 'Chưa đạt'}
+                                                    </Badge>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="text-center py-12 px-6">
+                                    <BarChart3 className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                                    <p className="text-slate-500 font-medium">Bạn chưa hoàn thành bài tập hay kiểm tra nào.</p>
+                                    <p className="text-sm text-slate-400 mt-1">Hãy tích cực học tập để theo dõi điểm số tại đây.</p>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </TabsContent>
+
                 {/* ===== TAB: THÔNG BÁO ===== */}
                 <TabsContent value="announcements">
                     <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
@@ -471,30 +632,74 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
                         </div>
 
                         <div className="p-5 space-y-4">
-                            {/* Welcome message */}
-                            <div className="border border-amber-100 bg-amber-50/50 rounded-xl p-4">
-                                <div className="flex items-start gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                                        <Bell className="w-4 h-4 text-amber-600" />
-                                    </div>
-                                    <div>
-                                        <h4 className="font-semibold text-slate-900 text-sm">Chào mừng đến lớp!</h4>
-                                        <p className="text-xs text-slate-500 mt-1">
-                                            Đây là kênh thông báo chung của lớp {classInfo.name}. Giáo viên {classInfo.teacher?.full_name || ""} sẽ gửi các thông báo quan trọng tại đây.
-                                        </p>
-                                        <p className="text-[10px] text-slate-400 mt-2">Tự động</p>
-                                    </div>
+                            {announcements.length === 0 ? (
+                                <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/30 p-6 text-center">
+                                    <Bell className="w-10 h-10 text-amber-300 mx-auto mb-2" />
+                                    <p className="text-sm font-semibold text-amber-600">Chưa có thông báo nào</p>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        Giáo viên sẽ gửi thông báo và tài liệu tại đây.
+                                    </p>
                                 </div>
-                            </div>
-
-                            {/* Realtime notification placeholder */}
-                            <div className="rounded-xl border border-dashed border-indigo-200 bg-indigo-50/30 p-6 text-center">
-                                <MessageSquare className="w-10 h-10 text-indigo-300 mx-auto mb-2" />
-                                <p className="text-sm font-semibold text-indigo-600">Kênh giao tiếp Realtime</p>
-                                <p className="text-xs text-slate-500 mt-1">
-                                    Thông báo và tin nhắn nhóm sẽ xuất hiện ở đây theo thời gian thực khi tính năng được kích hoạt.
-                                </p>
-                            </div>
+                            ) : (
+                                announcements.map((ann: any) => (
+                                    <div key={ann.id} className="border border-amber-100 bg-amber-50/50 rounded-xl p-4">
+                                        <div className="flex items-start gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                                                <Bell className="w-4 h-4 text-amber-600" />
+                                            </div>
+                                            <div className="flex-1">
+                                                <h4 className="font-semibold text-slate-900 text-sm">{ann.title}</h4>
+                                                <p className="text-xs text-slate-600 mt-1 whitespace-pre-wrap">{ann.content}</p>
+                                                {/* === Nút truy cập tài liệu đính kèm === */}
+                                                <div className="flex flex-wrap gap-2 mt-3">
+                                                    {ann.file_url && (
+                                                        <a
+                                                            href={ann.file_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 border border-blue-200 rounded-lg text-xs font-semibold hover:bg-blue-100 hover:border-blue-300 transition-colors"
+                                                        >
+                                                            <Download className="w-3.5 h-3.5" />
+                                                            Tải tài liệu
+                                                        </a>
+                                                    )}
+                                                    {ann.video_url && (
+                                                        <a
+                                                            href={ann.video_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 text-rose-600 border border-rose-200 rounded-lg text-xs font-semibold hover:bg-rose-100 hover:border-rose-300 transition-colors"
+                                                        >
+                                                            <Video className="w-3.5 h-3.5" />
+                                                            Xem video
+                                                        </a>
+                                                    )}
+                                                    {ann.link_url && (
+                                                        <a
+                                                            href={ann.link_url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-600 border border-violet-200 rounded-lg text-xs font-semibold hover:bg-violet-100 hover:border-violet-300 transition-colors"
+                                                        >
+                                                            <LinkIcon className="w-3.5 h-3.5" />
+                                                            Mở link
+                                                        </a>
+                                                    )}
+                                                    {ann.resource_type && !ann.file_url && !ann.video_url && !ann.link_url && (
+                                                        <span className="inline-flex items-center gap-1 text-[10px] bg-indigo-50 text-indigo-600 px-2 py-1 rounded-md font-medium">
+                                                            <FileText className="w-3 h-3" />
+                                                            Loại: {ann.resource_type}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <p className="text-[10px] text-slate-400 mt-2">
+                                                    {new Date(ann.created_at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </div>
 

@@ -99,6 +99,9 @@ export interface Assignment {
     deadline: string | null;
     max_score: number;
     ai_graded: boolean;
+    is_strict_mode: boolean;
+    strict_mode_limit: number | null;
+    show_answers: boolean;
     created_at: string;
 }
 
@@ -156,6 +159,12 @@ export interface Announcement {
     teacher_id: string;
     title: string;
     content: string | null;
+    resource_id: string | null;
+    resource_type: string | null;
+    file_url: string | null;
+    video_url: string | null;
+    link_url: string | null;
+    quiz_data: Record<string, unknown> | null;
     created_at: string;
 }
 
@@ -221,6 +230,76 @@ export interface GradeReport {
     period: string;
     report_json: Record<string, unknown> | null;
     sent_at: string | null;
+}
+
+// ============================================================
+// 8. AI QUIZ ANALYSIS
+// ============================================================
+
+export interface QuizClassAnalysis {
+    id: string;
+    exam_id: string;
+    class_id: string;
+    teacher_id: string;
+    total_submissions: number;
+    avg_score: number;
+    pass_count: number;
+    fail_count: number;
+    strengths: string[];
+    weaknesses: string[];
+    knowledge_gaps: any[];
+    question_stats: any;
+    teaching_suggestions: string[];
+    score_distribution: Record<string, number>;
+    ai_summary: string | null;
+    generated_at: string;
+    status: 'draft' | 'reviewed' | 'sent';
+}
+
+export interface QuizIndividualAnalysis {
+    id: string;
+    submission_id: string;
+    student_id: string;
+    exam_id: string;
+    knowledge_gaps: string[];
+    wrong_questions: any[];
+    ai_feedback: string | null;
+    improvement_tasks: any[];
+    teacher_edited_feedback: string | null;
+    teacher_edited_tasks: any[] | null;
+    status: 'ai_draft' | 'approved' | 'edited' | 'sent';
+    sent_at: string | null;
+    deadline: string | null;
+    created_at: string;
+}
+
+export interface ImprovementProgress {
+    id: string;
+    analysis_id: string;
+    student_id: string;
+    task_index: number;
+    status: 'pending' | 'in_progress' | 'completed';
+    quiz_score: number | null;
+    quiz_total: number | null;
+    quiz_answers: Record<string, string> | null;
+    completed_at: string | null;
+}
+
+export interface SupplementaryQuiz {
+    id: string;
+    analysis_id: string;
+    exam_id: string;
+    student_id: string;
+    teacher_id: string;
+    title: string;
+    questions: any[];
+    total_questions: number;
+    student_answers: Record<string, string> | null;
+    score: number | null;
+    status: 'pending' | 'completed';
+    sent_at: string;
+    completed_at: string | null;
+    created_at: string;
 }
 
 // ============================================================

@@ -4,12 +4,18 @@ import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
+import { fetchParentDashboardData } from "@/lib/actions/parentStudent";
 import {
     GraduationCap, CalendarDays, FileText, Bell, TrendingUp,
-    CheckCircle2, XCircle, Clock, UserPlus, Loader2, BookOpen
+    CheckCircle2, XCircle, Clock, UserPlus, Loader2, BookOpen,
+    MessageSquare, AlertTriangle, ArrowRight
 } from "lucide-react";
-import { fetchParentDashboardData } from "@/lib/actions/parentStudent";
+import { parseISO, format } from "date-fns";
+import { vi } from "date-fns/locale";
+import { Progress } from "@/components/ui/progress";
 import UpcomingSessionsWidget from "@/components/shared/UpcomingSessionsWidget";
+import AbsenceRequestModal from "@/components/shared/AbsenceRequestModal";
+import { createClient } from "@/lib/supabase/client";
 
 type StudentInfo = {
     id: string;
@@ -23,6 +29,13 @@ export default function ParentDashboardClient({ students }: { students: StudentI
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(students[0]?.id || null);
     const [dashboardData, setDashboardData] = useState<any>(null);
     const [loading, setLoading] = useState(false);
+    
+    // Schedule state: default 3 (1 past + 2 upcoming)
+    const [visibleScheduleCount, setVisibleScheduleCount] = useState(3);
+    const [isAbsenceModalOpen, setIsAbsenceModalOpen] = useState(false);
+    const [selectedSessionForAbsence, setSelectedSessionForAbsence] = useState<{ class_id: string, class_name: string, session_date: string } | null>(null);
+    const [feedbackData, setFeedbackData] = useState<any[]>([]);
+    const [feedbackLoading, setFeedbackLoading] = useState(false);
 
     useEffect(() => {
         if (selectedStudentId) {
@@ -32,9 +45,45 @@ export default function ParentDashboardClient({ students }: { students: StudentI
 
     const loadDashboard = async (studentId: string) => {
         setLoading(true);
-        const res = await fetchParentDashboardData(studentId);
-        setDashboardData(res.data);
-        setLoading(false);
+        try {
+            const dashRes = await fetchParentDashboardData(studentId);
+            setDashboardData(dashRes.data);
+            setVisibleScheduleCount(4); // Reset view more state
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoading(false);
+        }
+        // Load feedback
+        loadFeedback(studentId);
+    };
+
+    const loadFeedback = async (studentId: string) => {
+        setFeedbackLoading(true);
+        try {
+            const supabase = createClient();
+            const { data } = await supabase
+                .from("quiz_individual_analysis")
+                .select("*, improvement_progress(*), exam:exams!exam_id(id, title, class_id), supplementary_quizzes(id, title, status, score, total_questions)")
+                .eq("student_id", studentId)
+                .eq("status", "sent")
+                .order("sent_at", { ascending: false })
+                .limit(5);
+            setFeedbackData(data || []);
+        } catch (err) {
+            console.error("Error loading feedback:", err);
+        } finally {
+            setFeedbackLoading(false);
+        }
+    };
+
+    const handleOpenAbsenceModal = (session: any) => {
+        setSelectedSessionForAbsence({
+            class_id: session.class_id,
+            class_name: session.class_name || session.class?.name || "Lớp học",
+            session_date: session.session_date
+        });
+        setIsAbsenceModalOpen(true);
     };
 
     // ----- Nếu chưa liên kết con nào -----
@@ -99,21 +148,7 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                 </div>
             )}
 
-            {/* Quick Actions cho Student đã chọn */}
-            {selectedStudent && (
-                <div className="flex flex-wrap gap-3">
-                    <Link href={`/parent/children/${selectedStudent.id}/schedule`}>
-                        <Button className="bg-white border-indigo-200 text-indigo-700 hover:bg-indigo-50 shadow-sm" variant="outline">
-                            <CalendarDays className="w-4 h-4 mr-2" /> Xem Lịch học & Xin nghỉ
-                        </Button>
-                    </Link>
-                    <Link href={`/parent/children/${selectedStudent.id}/progress`}>
-                        <Button className="bg-white border-emerald-200 text-emerald-700 hover:bg-emerald-50 shadow-sm" variant="outline">
-                            <TrendingUp className="w-4 h-4 mr-2" /> Xem Điểm số & Tiến độ
-                        </Button>
-                    </Link>
-                </div>
-            )}
+
 
             {/* Lịch học sắp tới */}
             {!loading && dashboardData && dashboardData.upcomingSessions && (
@@ -123,16 +158,155 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                             <h3 className="font-bold text-slate-800 flex items-center gap-2">
                                 <CalendarDays className="w-5 h-5 text-indigo-500" /> Lịch học sắp tới
                             </h3>
-                            <p className="text-sm text-slate-500 mt-1">Lịch học và bài tập về nhà của con</p>
+                            <p className="text-sm text-slate-500 mt-1">1 buổi gần nhất đã qua + 2 buổi tiếp theo</p>
                         </div>
-                        <Link href={`/parent/children/${selectedStudent?.id}/schedule`}>
-                            <Button variant="link" className="text-indigo-600 font-semibold p-0 h-auto text-sm">
-                                Xem tất cả
-                            </Button>
-                        </Link>
                     </div>
                     <div className="p-4 sm:p-5">
-                        <UpcomingSessionsWidget sessions={dashboardData.upcomingSessions || []} limit={2} />
+                        <UpcomingSessionsWidget 
+                            sessions={dashboardData.upcomingSessions || []} 
+                            limit={visibleScheduleCount}
+                            onSessionClick={handleOpenAbsenceModal} 
+                        />
+                        
+                        <div className="mt-4 flex items-center justify-center gap-3">
+                            {(dashboardData.upcomingSessions?.length || 0) > visibleScheduleCount && (
+                                <Button 
+                                    variant="outline" 
+                                    className="text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border-indigo-200 border-dashed text-sm"
+                                    onClick={() => setVisibleScheduleCount(prev => prev + 3)}
+                                >
+                                    Xem thêm lịch học
+                                </Button>
+                            )}
+                            {visibleScheduleCount > 3 && (
+                                <Button 
+                                    variant="ghost" 
+                                    className="text-slate-500 hover:text-slate-700 text-sm"
+                                    onClick={() => setVisibleScheduleCount(3)}
+                                >
+                                    Thu gọn
+                                </Button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Nhận xét bài kiểm tra */}
+            {!loading && !feedbackLoading && feedbackData.length > 0 && (
+                <div className="bg-white rounded-2xl border border-purple-200 shadow-sm mb-6 overflow-hidden">
+                    <div className="p-5 border-b border-purple-100 bg-purple-50/50">
+                        <h3 className="font-bold text-purple-800 flex items-center gap-2">
+                            <MessageSquare className="w-5 h-5" /> Nhận xét bài kiểm tra
+                        </h3>
+                        <p className="text-xs text-purple-600 mt-1">Giáo viên đã gửi nhận xét và bài tập cải thiện</p>
+                    </div>
+                    <div className="p-4 space-y-4">
+                        {feedbackData.map((analysis: any) => {
+                            const examObj = Array.isArray(analysis.exam) ? analysis.exam[0] : analysis.exam;
+                            const progress = analysis.improvement_progress || [];
+                            const totalTasks = progress.length;
+                            const completedTasks = progress.filter((p: any) => p.status === 'completed').length;
+                            const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+                            const feedbackText = analysis.teacher_edited_feedback || analysis.ai_feedback || "";
+                            const supQuizzes = analysis.supplementary_quizzes || [];
+
+                            // Tính điểm quiz cải thiện
+                            let quizScore = 0, quizTotal = 0;
+                            progress.forEach((p: any) => {
+                                if (p.quiz_score !== null && p.quiz_total !== null) {
+                                    quizScore += p.quiz_score;
+                                    quizTotal += p.quiz_total;
+                                }
+                            });
+
+                            const deadline = analysis.deadline ? new Date(analysis.deadline) : null;
+                            const daysLeft = deadline ? Math.max(0, Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : null;
+
+                            return (
+                                <div key={analysis.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-purple-200 transition-colors">
+                                    <div className="flex items-start justify-between mb-3">
+                                        <div>
+                                            <p className="font-bold text-slate-800 text-sm">📝 {examObj?.title || 'Bài kiểm tra'}</p>
+                                        </div>
+                                        {daysLeft !== null && (
+                                            <Badge className={`text-[9px] ${daysLeft <= 2 ? 'bg-red-100 text-red-700' : 'bg-blue-100 text-blue-700'} border-none shrink-0`}>
+                                                <Clock className="w-2.5 h-2.5 mr-0.5" /> Còn {daysLeft} ngày
+                                            </Badge>
+                                        )}
+                                    </div>
+
+                                    {/* Nhận xét */}
+                                    {feedbackText && (
+                                        <div className="bg-white border border-purple-100 rounded-lg p-3 mb-3">
+                                            <p className="text-xs text-purple-700 font-semibold mb-1 flex items-center gap-1">
+                                                <MessageSquare className="w-3 h-3" /> Nhận xét của giáo viên:
+                                            </p>
+                                            <p className="text-xs text-slate-600 leading-relaxed">{feedbackText}</p>
+                                        </div>
+                                    )}
+
+                                    {/* Kiến thức hổng */}
+                                    {analysis.knowledge_gaps && analysis.knowledge_gaps.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mb-3">
+                                            <span className="text-[10px] text-amber-700 font-semibold flex items-center gap-0.5">
+                                                <AlertTriangle className="w-3 h-3" /> Kiến thức cần cải thiện:
+                                            </span>
+                                            {analysis.knowledge_gaps.map((gap: string, i: number) => (
+                                                <Badge key={i} className="bg-red-50 text-red-700 border-none text-[9px]">🔴 {gap}</Badge>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Tiến độ */}
+                                    <div className="mb-2">
+                                        <div className="flex items-center justify-between mb-1">
+                                            <span className="text-[10px] font-bold text-slate-600">📚 Tiến độ bài tập: {completedTasks}/{totalTasks}</span>
+                                            <span className="text-[10px] font-bold text-indigo-600">{progressPercent}%</span>
+                                        </div>
+                                        <Progress value={progressPercent} className="h-2" />
+                                    </div>
+
+                                    {/* Điểm mini quiz */}
+                                    {quizTotal > 0 && (
+                                        <p className="text-[10px] text-slate-500 mb-2">
+                                            ✅ Điểm mini quiz: <span className="font-bold text-emerald-600">{quizScore}/{quizTotal}</span>
+                                        </p>
+                                    )}
+
+                                    {/* Bài quiz bổ trợ */}
+                                    {supQuizzes.length > 0 && (
+                                        <div className="space-y-1 mb-2">
+                                            {supQuizzes.map((sq: any) => (
+                                                <div key={sq.id} className="flex items-center justify-between text-[10px] bg-purple-50 border border-purple-100 rounded-lg px-3 py-1.5">
+                                                    <span className="text-purple-800 font-medium">📝 {sq.title}</span>
+                                                    {sq.status === 'completed' ? (
+                                                        <Badge className="bg-emerald-50 text-emerald-700 border-none text-[9px]">
+                                                            ✅ {sq.score}/{sq.total_questions}
+                                                        </Badge>
+                                                    ) : (
+                                                        <Badge className="bg-amber-50 text-amber-700 border-none text-[9px]">
+                                                            ⏳ Chưa làm
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Trạng thái tổng */}
+                                    {completedTasks === totalTasks && totalTasks > 0 ? (
+                                        <div className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 text-xs font-bold">
+                                            <CheckCircle2 className="w-3.5 h-3.5" /> Con đã hoàn thành tất cả bài tập!
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center gap-1.5 text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs">
+                                            <Clock className="w-3.5 h-3.5" /> Con chưa hoàn thành hết bài tập cải thiện
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             )}
@@ -148,116 +322,7 @@ export default function ParentDashboardClient({ students }: { students: StudentI
             {!loading && dashboardData && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-                    {/* Section A: Tổng quan */}
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-6 col-span-full">
-                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2">
-                            <TrendingUp className="w-5 h-5 text-amber-500" /> Tổng quan
-                        </h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-                            <div className="p-3 sm:p-4 bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-xl text-center">
-                                <p className="text-2xl sm:text-3xl font-extrabold text-indigo-600">
-                                    {dashboardData.recentExams.length}
-                                </p>
-                                <p className="text-[11px] sm:text-xs text-indigo-500 font-medium mt-1">Bài KT đã làm</p>
-                            </div>
-                            <div className="p-3 sm:p-4 bg-gradient-to-br from-emerald-50 to-emerald-100 rounded-xl text-center">
-                                <p className="text-2xl sm:text-3xl font-extrabold text-emerald-600">
-                                    {dashboardData.attendanceSummary.present}
-                                </p>
-                                <p className="text-[11px] sm:text-xs text-emerald-500 font-medium mt-1">Buổi có mặt</p>
-                            </div>
-                            <div className="p-3 sm:p-4 bg-gradient-to-br from-rose-50 to-rose-100 rounded-xl text-center">
-                                <p className="text-2xl sm:text-3xl font-extrabold text-rose-600">
-                                    {dashboardData.attendanceSummary.total - dashboardData.attendanceSummary.present}
-                                </p>
-                                <p className="text-[11px] sm:text-xs text-rose-500 font-medium mt-1">Buổi vắng</p>
-                            </div>
-                            <div className="p-3 sm:p-4 bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl text-center">
-                                <p className="text-2xl sm:text-3xl font-extrabold text-blue-600">
-                                    {(dashboardData.classes || []).length}
-                                </p>
-                                <p className="text-[11px] sm:text-xs text-blue-500 font-medium mt-1">Lớp đang học</p>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* Section A2: Lớp đang học */}
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden col-span-full">
-                        <div className="p-5 border-b border-slate-100 bg-blue-50/50">
-                            <h3 className="font-bold text-blue-800 flex items-center gap-2">
-                                <BookOpen className="w-5 h-5" /> Lớp đang học
-                            </h3>
-                        </div>
-                        <div className="p-4">
-                            {(dashboardData.classes || []).length === 0 ? (
-                                <p className="text-sm text-slate-400 text-center py-6">Chưa đăng ký lớp nào.</p>
-                            ) : (
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                    {(dashboardData.classes || []).map((cls: any) => {
-                                        const teacherObj = cls?.teacher;
-                                        const teacherName = Array.isArray(teacherObj) ? teacherObj[0]?.full_name : teacherObj?.full_name;
-                                        const courseObj = cls?.course;
-                                        const courseName = Array.isArray(courseObj) ? courseObj[0]?.name : courseObj?.name;
-
-                                        return (
-                                            <div key={cls?.id} className="flex items-center gap-3 p-3.5 bg-slate-50 rounded-xl border border-slate-100 hover:border-indigo-200 transition-colors">
-                                                <div className="w-10 h-10 rounded-lg bg-indigo-100 flex items-center justify-center shrink-0">
-                                                    <BookOpen className="w-5 h-5 text-indigo-600" />
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="font-semibold text-sm text-slate-800 truncate">{courseName || "Khóa học"}</p>
-                                                    <p className="text-xs text-slate-500 font-medium">Lớp: {cls?.name || "—"}</p>
-                                                    <p className="text-[11px] text-slate-400 mt-0.5">GV: {teacherName || "Chưa xếp"}</p>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Section B: Điểm số gần đây */}
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div className="p-5 border-b border-slate-100 bg-indigo-50/50">
-                            <h3 className="font-bold text-indigo-800 flex items-center gap-2">
-                                <FileText className="w-5 h-5" /> Điểm kiểm tra gần đây
-                            </h3>
-                        </div>
-                        <div className="p-4">
-                            {dashboardData.recentExams.length === 0 ? (
-                                <p className="text-sm text-slate-400 text-center py-8">Chưa có bài kiểm tra nào.</p>
-                            ) : (
-                                <div className="space-y-2">
-                                    {dashboardData.recentExams.map((exam: any) => {
-                                        const ratio = exam.total_points ? (exam.score / exam.total_points) : 0;
-                                        return (
-                                            <div key={exam.id} className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-medium text-slate-800 truncate">
-                                                        {exam.exam?.title || "Bài kiểm tra"}
-                                                    </p>
-                                                    <p className="text-xs text-slate-400">
-                                                        {exam.submitted_at ? new Date(exam.submitted_at).toLocaleDateString("vi-VN") : ""}
-                                                    </p>
-                                                </div>
-                                                <div className="text-right">
-                                                    <p className={`text-lg font-extrabold ${ratio >= 0.7 ? "text-emerald-600" :
-                                                        ratio >= 0.5 ? "text-amber-600" : "text-rose-600"
-                                                        }`}>
-                                                        {exam.score}/{exam.total_points || 0}
-                                                    </p>
-                                                    <p className="text-[10px] text-slate-400">
-                                                        {Math.round(ratio * 100)}%
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                    {/* Removed Section A (Tổng quan), Section A2 (Lớp đang học), Section B (Điểm số gần đây) */}
 
                     {/* Section C: Điểm danh tháng */}
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -364,6 +429,13 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                     </div>
                 </div>
             )}
+
+            <AbsenceRequestModal 
+                isOpen={isAbsenceModalOpen} 
+                onClose={() => setIsAbsenceModalOpen(false)} 
+                session={selectedSessionForAbsence} 
+                studentId={selectedStudentId || ""} 
+            />
         </div>
     );
 }

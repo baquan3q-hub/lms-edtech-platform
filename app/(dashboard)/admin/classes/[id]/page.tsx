@@ -20,7 +20,7 @@ import EditScheduleDialog from "@/components/admin/EditScheduleDialog";
 import ImportStudentsDialog from "@/components/admin/ImportStudentsDialog";
 import ScheduleManagerClient from "@/app/(dashboard)/teacher/classes/[id]/ScheduleManagerClient";
 import { getRooms, getClassSchedules } from "@/lib/actions/schedule";
-import { getAttendanceHistory } from "@/lib/actions/attendance";
+import { getAttendanceHistory, getAbsenceRequests } from "@/lib/actions/attendance";
 import AdminClassTabsClient from "./AdminClassTabsClient";
 
 function formatDate(dateString: string) {
@@ -43,13 +43,14 @@ export default async function ClassDetailPage({
     const currentMonth = new Date().getMonth() + 1;
     const currentYear = new Date().getFullYear();
 
-    const [classRes, enrollmentsRes, studentsRes, roomsRes, schedulesRes, attendanceRes] = await Promise.all([
+    const [classRes, enrollmentsRes, studentsRes, roomsRes, schedulesRes, attendanceRes, absenceRes] = await Promise.all([
         fetchClassDetail(classId),
         fetchEnrollments(classId),
         fetchStudents(),
         getRooms(),
         getClassSchedules(classId),
-        getAttendanceHistory(classId, currentMonth, currentYear)
+        getAttendanceHistory(classId, currentMonth, currentYear),
+        getAbsenceRequests({ class_id: classId })
     ]);
 
     const classData = classRes.data;
@@ -58,6 +59,7 @@ export default async function ClassDetailPage({
     const allRooms = roomsRes.data || [];
     const schedules = schedulesRes.data || [];
     const attendanceData = attendanceRes.data;
+    const absenceRequests = absenceRes.data || [];
 
     // Danh sách ID học sinh đã enroll (active)
     const enrolledIds = enrollments
@@ -176,6 +178,7 @@ export default async function ClassDetailPage({
                 schedules={schedules}
                 allRooms={allRooms}
                 attendanceData={attendanceData}
+                absenceRequests={absenceRequests}
             />
         </div>
     );

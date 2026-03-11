@@ -14,7 +14,6 @@ import UserAvatarMenu from "@/components/shared/UserAvatarMenu";
 
 const navigation = [
     { name: "Tổng quan", href: "/student", icon: LayoutDashboard },
-    { name: "Lịch học", href: "/student/schedule", icon: CalendarDays },
     { name: "Lớp học", href: "/student/classes", icon: BookOpen },
     { name: "Bài tập", href: "/student/assignments", icon: FileText },
     { name: "Kết quả học tập", href: "/student/grades", icon: TrendingUp },

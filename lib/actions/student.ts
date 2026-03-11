@@ -111,48 +111,75 @@ export async function fetchStudentDashboardStats() {
             .eq("student_id", user.id)
             .eq("status", "completed");
 
-        // 3. Bài tập / Trắc nghiệm đã làm
-        const { count: assignmentsCount } = await adminSupabase
+        // 3. Lấy dữ liệu điểm để tính trung bình và đếm
+        // a. Quizzes (lấy score cao nhất cho mỗi item_id)
+        const { data: quizAttempts } = await adminSupabase
             .from("quiz_attempts")
-            .select('*', { count: 'exact', head: true })
-            .eq("student_id", user.id);
-
-        // 4. Điểm trung bình (Dựa trên quiz_attempts và exam_submissions)
-        const { data: attempts } = await adminSupabase
-            .from("quiz_attempts")
-            .select('score')
+            .select('item_id, score')
             .eq("student_id", user.id)
             .not('score', 'is', null);
 
+        // b. Exams (1 học sinh/1 exam = 1 row)
         const { data: examSubmissions } = await adminSupabase
             .from("exam_submissions")
-            .select('score')
+            .select('exam_id, score, total_points')
             .eq("student_id", user.id)
             .not('score', 'is', null);
 
-        let averageScore = 0;
+        // c. Homework (1 học sinh/1 homework = 1 row, có thể nộp nhiều lần nhưng điểm lưu ở row là mới nhất/cao nhất)
+        const { data: homeworkSubmissions } = await adminSupabase
+            .from("homework_submissions")
+            .select('homework_id, score')
+            .eq("student_id", user.id)
+            .not('score', 'is', null);
+
         let totalScores = 0;
-        let count = 0;
+        let assignmentCount = 0;
 
-        if (attempts && attempts.length > 0) {
-            totalScores += attempts.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0);
-            count += attempts.length;
+        // Xử lý Quizzes: Group by item_id, lấy max
+        const quizScores = new Map<string, number>();
+        if (quizAttempts) {
+            for (const attempt of quizAttempts) {
+                const current = quizScores.get(attempt.item_id) || 0;
+                const score = Number(attempt.score) || 0;
+                if (score > current) {
+                    quizScores.set(attempt.item_id, score);
+                }
+            }
+        }
+        for (const score of quizScores.values()) {
+            totalScores += score;
+            assignmentCount++;
         }
 
-        if (examSubmissions && examSubmissions.length > 0) {
-            totalScores += examSubmissions.reduce((acc, curr) => acc + (Number(curr.score) || 0), 0);
-            count += examSubmissions.length;
+        // Xử lý Exams
+        if (examSubmissions) {
+            for (const sub of examSubmissions) {
+                // Để công bằng, điểm exam nên quy đổi ra hệ quy chiếu nào đó nếu khác thang điểm (hiện tại cộng dồn)
+                // Tuy nhiên theo logic cũ: sum(score) / count
+                totalScores += Number(sub.score) || 0;
+                assignmentCount++;
+            }
         }
 
-        if (count > 0) {
-            averageScore = totalScores / count;
+        // Xử lý Homeworks
+        if (homeworkSubmissions) {
+            for (const sub of homeworkSubmissions) {
+                totalScores += Number(sub.score) || 0;
+                assignmentCount++;
+            }
+        }
+
+        let averageScore = 0;
+        if (assignmentCount > 0) {
+            averageScore = totalScores / assignmentCount;
         }
 
         return {
             data: {
                 enrolledCount: enrolledCount || 0,
                 completedCount: completedCount || 0,
-                assignmentsCount: assignmentsCount || 0,
+                assignmentsCount: assignmentCount,
                 averageScore: averageScore.toFixed(1)
             },
             error: null
@@ -220,6 +247,19 @@ export async function fetchStudentAssignments() {
             .eq("student_id", user.id)
             .in("exam_id", examIds);
 
+        // Lấy thêm Bài tập về nhà (Homework) thuộc các classIds này
+        const { data: homeworks, error: hwError } = await adminSupabase
+            .from("homework")
+            .select("id, class_id, title, due_date, total_points")
+            .in("class_id", classIds);
+
+        const hwIds = homeworks?.map(h => h.id) || [];
+        const { data: hwSubmissions } = await adminSupabase
+            .from("homework_submissions")
+            .select("homework_id, score, status, submitted_at, attempts")
+            .eq("student_id", user.id)
+            .in("homework_id", hwIds);
+
         // Trộn dữ liệu course_items
         const enrichedAssignments = assignments?.map(assignment => {
             const classInfo = enrollments.find(e => e.class_id === assignment.class_id)?.class;
@@ -257,7 +297,25 @@ export async function fetchStudentAssignments() {
             };
         }) || [];
 
-        const allAssignments = [...enrichedAssignments, ...enrichedExams];
+        // Trộn dữ liệu Homework
+        const enrichedHomeworks = homeworks?.map(hw => {
+            const classInfo = enrollments.find(e => e.class_id === hw.class_id)?.class;
+            const sub = hwSubmissions?.find(s => s.homework_id === hw.id);
+
+            return {
+                id: hw.id,
+                class_id: hw.class_id,
+                title: hw.title,
+                type: "homework",
+                className: (classInfo as any)?.name || "Lớp học chưa rõ",
+                courseName: (classInfo as any)?.course?.name || "Khóa học",
+                deadline: hw.due_date,
+                maxAttempts: null, // Homework uses soft limit usually or we rely on 'attempts' count
+                progress: sub ? { status: sub.status === 'graded' ? 'completed' : 'submitted', score: sub.score, completed_at: sub.submitted_at, attempts: sub.attempts } : null
+            };
+        }) || [];
+
+        const allAssignments = [...enrichedAssignments, ...enrichedExams, ...enrichedHomeworks];
 
         // Sắp xếp: Hạn chót gần nhất lên trước NULL (không có hạn)
         allAssignments.sort((a, b) => {
@@ -428,6 +486,7 @@ export async function fetchSuggestedLessons() {
                     className: classInfo?.name || "Lớp học",
                     courseName: classInfo?.course?.name || "Khóa học",
                     nextItem: nextItem,
+                    type: "lesson", // label as lesson
                     totalItems,
                     completedItems: completedInClass,
                     progressPercent: totalItems > 0 ? Math.round((completedInClass / totalItems) * 100) : 0
@@ -435,9 +494,87 @@ export async function fetchSuggestedLessons() {
             }
         }
 
+        // 5. Thêm phần gợi ý Bài tập về nhà (Homework) chưa làm
+        const { data: homeworks } = await adminSupabase
+            .from("homework")
+            .select("id, class_id, title, due_date, total_points")
+            .in("class_id", classIds);
+
+        const { data: homeworkSubmissions } = await adminSupabase
+            .from("homework_submissions")
+            .select("homework_id, status")
+            .eq("student_id", user.id);
+
+        const hwSubmittedIds = new Set(homeworkSubmissions?.map(s => s.homework_id) || []);
+
+        if (homeworks) {
+            for (const hw of homeworks) {
+                // Chỉ gợi ý nếu chưa nộp
+                if (!hwSubmittedIds.has(hw.id)) {
+                    const enrollment = enrollments.find(e => e.class_id === hw.class_id);
+                    if (enrollment) {
+                        const classInfo = enrollment.class as any;
+                        suggestions.push({
+                            classId: hw.class_id,
+                            className: classInfo?.name || "Lớp học",
+                            courseName: classInfo?.course?.name || "Khóa học",
+                            nextItem: { id: hw.id, title: hw.title, type: "homework" },
+                            type: "homework",
+                            dueDate: hw.due_date,
+                            progressPercent: 0 // Placeholder
+                        });
+                    }
+                }
+            }
+        }
+
+        // Ưu tiên sắp xếp theo Hạn chót (nếu có), sau đó là bài học lộ trình
+        suggestions.sort((a, b) => {
+            if (a.dueDate && b.dueDate) return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+            if (a.dueDate) return -1;
+            if (b.dueDate) return 1;
+            return 0;
+        });
+
         return { data: suggestions, error: null };
     } catch (error: any) {
         console.error("Lỗi lấy bài học gợi ý:", error);
+        return { data: [], error: error.message };
+    }
+}
+
+/**
+ * Lấy thông báo gần đây từ tất cả lớp học sinh đang ghi danh
+ */
+export async function fetchStudentAnnouncements() {
+    try {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { data: [], error: "Unauthorized" };
+
+        const adminSupabase = createAdminClient();
+
+        // Lấy class IDs từ enrollments
+        const { data: enrollments } = await adminSupabase
+            .from("enrollments")
+            .select("class_id")
+            .eq("student_id", user.id)
+            .eq("status", "active");
+
+        const classIds = (enrollments || []).map((e: any) => e.class_id);
+        if (classIds.length === 0) return { data: [], error: null };
+
+        const { data, error } = await adminSupabase
+            .from("announcements")
+            .select("id, title, content, resource_type, class_id, created_at")
+            .in("class_id", classIds)
+            .order("created_at", { ascending: false })
+            .limit(10);
+
+        if (error) throw error;
+        return { data: data || [], error: null };
+    } catch (error: any) {
+        console.error("fetchStudentAnnouncements error:", error);
         return { data: [], error: error.message };
     }
 }

@@ -16,11 +16,12 @@ import {
 import { toast } from "sonner";
 import {
     Plus, Trash2, Save, ArrowLeft, CheckCircle2, GripVertical,
-    FileText, Video, Paperclip, ListChecks, Calendar, Sparkles
+    FileText, Video, Paperclip, ListChecks, Calendar, Sparkles, BookOpen
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AIGenerateModal from "@/components/teacher/AIGenerateModal";
+import ImportFromBankModal from "@/components/teacher/ImportFromBankModal";
 
 type QuestionType = "multiple_choice" | "essay" | "video" | "attachment";
 
@@ -91,6 +92,7 @@ export default function HomeworkEditorClient({
     );
     const [saving, setSaving] = useState(false);
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+    const [isBankModalOpen, setIsBankModalOpen] = useState(false);
 
     const totalPoints = questions.reduce((s, q) => s + (q.points || 0), 0);
 
@@ -166,6 +168,26 @@ export default function HomeworkEditorClient({
         });
 
         // If the current list only has 1 empty question, replace it. Otherwise append.
+        setQuestions(prev => {
+            if (prev.length === 1 && prev[0].type === "multiple_choice" && !prev[0].question.trim() && (prev[0].options || []).every(o => !o.text.trim())) {
+                return formatted;
+            }
+            return [...prev, ...formatted];
+        });
+    };
+
+    const handleBankImport = (importedQuestions: any[]) => {
+        const formatted: HomeworkQuestion[] = importedQuestions.map(q => ({
+            id: genId(),
+            type: "multiple_choice" as QuestionType,
+            question: q.question || "",
+            points: q.points || 1,
+            options: (q.options || []).map((o: any) => ({
+                id: genId(),
+                text: o.text || "",
+                isCorrect: !!o.isCorrect,
+            })),
+        }));
         setQuestions(prev => {
             if (prev.length === 1 && prev[0].type === "multiple_choice" && !prev[0].question.trim() && (prev[0].options || []).every(o => !o.text.trim())) {
                 return formatted;
@@ -459,9 +481,14 @@ export default function HomeworkEditorClient({
             <div className="bg-white rounded-2xl border-2 border-dashed border-slate-200 p-6">
                 <div className="flex items-center justify-between mb-4">
                     <p className="text-sm font-bold text-slate-700">Thêm câu hỏi mới</p>
-                    <Button variant="secondary" size="sm" onClick={() => setIsAIModalOpen(true)} className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200">
-                        <Sparkles className="w-4 h-4 mr-2" /> Sinh trắc nghiệm bằng AI
-                    </Button>
+                    <div className="flex gap-2">
+                        <Button variant="secondary" size="sm" onClick={() => setIsBankModalOpen(true)} className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
+                            <BookOpen className="w-4 h-4 mr-2" /> Nhập từ Ngân hàng đề
+                        </Button>
+                        <Button variant="secondary" size="sm" onClick={() => setIsAIModalOpen(true)} className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200">
+                            <Sparkles className="w-4 h-4 mr-2" /> Sinh trắc nghiệm bằng AI
+                        </Button>
+                    </div>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {(Object.entries(typeConfig) as [QuestionType, typeof typeConfig[QuestionType]][]).map(([type, cfg]) => {
@@ -484,6 +511,11 @@ export default function HomeworkEditorClient({
                 open={isAIModalOpen}
                 onOpenChange={setIsAIModalOpen}
                 onQuestionsGenerated={handleAIGenerated}
+            />
+            <ImportFromBankModal
+                open={isBankModalOpen}
+                onOpenChange={setIsBankModalOpen}
+                onImport={handleBankImport}
             />
         </div>
     );

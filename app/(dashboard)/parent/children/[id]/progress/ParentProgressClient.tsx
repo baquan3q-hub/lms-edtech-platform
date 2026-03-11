@@ -245,7 +245,7 @@ export default function ParentProgressClient({ studentName, stats, history }: Pa
                 </div>
             </div>
 
-            {/* Bảng lịch sử Test/Exam chi tiết (Mock) */}
+            {/* Bảng lịch sử Test/Exam chi tiết */}
             <Card className="shadow-sm">
                 <CardHeader>
                     <CardTitle>Lịch sử Bài kiểm tra gần đây</CardTitle>
@@ -271,7 +271,7 @@ export default function ParentProgressClient({ studentName, stats, history }: Pa
                                             {item.exam}
                                         </td>
                                         <td className="px-6 py-4 text-slate-600">
-                                            {item.date}/2024
+                                            {item.date}
                                         </td>
                                         <td className="px-6 py-4 text-center">
                                             <span className={`text-base ${getScoreColor(item.score)}`}>

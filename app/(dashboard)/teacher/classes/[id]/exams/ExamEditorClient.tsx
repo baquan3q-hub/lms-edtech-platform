@@ -14,15 +14,25 @@ import {
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AIGenerateModal from "@/components/teacher/AIGenerateModal";
+import ImportFromBankModal from "@/components/teacher/ImportFromBankModal";
 
 type QuizOption = { id: string; text: string; isCorrect: boolean };
-type QuizQuestion = { id: string; question: string; options: QuizOption[]; points: number };
+type QuizQuestion = { 
+    id: string; 
+    type?: "MULTIPLE_CHOICE" | "ESSAY";
+    question: string; 
+    options: QuizOption[]; 
+    points: number; 
+    tags?: string[];
+    isPointsLocked?: boolean;
+};
 
 function genId() { return Math.random().toString(36).substring(2, 10); }
 
 function emptyQuestion(): QuizQuestion {
     return {
         id: genId(),
+        type: "MULTIPLE_CHOICE",
         question: "",
         options: [
             { id: genId(), text: "", isCorrect: true },
@@ -31,6 +41,8 @@ function emptyQuestion(): QuizQuestion {
             { id: genId(), text: "", isCorrect: false },
         ],
         points: 1,
+        tags: [],
+        isPointsLocked: false
     };
 }
 
@@ -43,12 +55,16 @@ export default function ExamEditorClient({
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
     const [isAIModalOpen, setIsAIModalOpen] = useState(false);
+    const [isBankModalOpen, setIsBankModalOpen] = useState(false);
 
     const [title, setTitle] = useState(existingExam?.title || "");
     const [description, setDescription] = useState(existingExam?.description || "");
     const [duration, setDuration] = useState(existingExam?.duration_minutes || 30);
     const [dueDate, setDueDate] = useState(existingExam?.due_date?.slice(0, 16) || "");
     const [isPublished, setIsPublished] = useState(existingExam?.is_published || false);
+    const [isStrictMode, setIsStrictMode] = useState(existingExam?.is_strict_mode || false);
+    const [strictModeLimit, setStrictModeLimit] = useState(existingExam?.strict_mode_limit || 0);
+    const [showAnswers, setShowAnswers] = useState(existingExam?.show_answers ?? true);
     const [questions, setQuestions] = useState<QuizQuestion[]>(() => {
         if (existingExam?.questions && Array.isArray(existingExam.questions)) {
             return existingExam.questions;
@@ -56,19 +72,48 @@ export default function ExamEditorClient({
         return [emptyQuestion()];
     });
 
-    // Force total points to be exactly 10 and keep points synchronized with number of questions
+    // Force total points to be exactly 10
     const totalPoints = 10;
 
-    // Auto-distribute points whenever questions length changes (except when handled by handleAIGenerated initially)
+    // Distribute remaining points among unlocked questions
     const distributePoints = (qs: QuizQuestion[]) => {
         const N = qs.length;
         if (N === 0) return qs;
-        const basePoints = Math.floor((10 / N) * 100) / 100; // 2 decimal places
-        const remainder = 10 - (basePoints * N);
-        return qs.map((q, idx) => ({
-            ...q,
-            points: idx === 0 ? Number((basePoints + remainder).toFixed(2)) : basePoints
-        }));
+
+        let lockedPoints = 0;
+        let unlockedCount = 0;
+
+        qs.forEach(q => {
+            if (q.isPointsLocked) {
+                lockedPoints += q.points;
+            } else {
+                unlockedCount++;
+            }
+        });
+
+        // If all are locked or locked points exceed 10, don't change anything (or might need warning)
+        if (unlockedCount === 0 || lockedPoints > 10) return qs;
+
+        const pointsRemaining = 10 - lockedPoints;
+        const basePoints = Math.floor((pointsRemaining / unlockedCount) * 100) / 100;
+        const remainder = pointsRemaining - (basePoints * unlockedCount);
+
+        let remainderDistributed = false;
+
+        return qs.map(q => {
+            if (q.isPointsLocked) return q;
+            let pts = basePoints;
+            if (!remainderDistributed) {
+                pts += remainder;
+                remainderDistributed = true;
+            }
+            return { ...q, points: Number(pts.toFixed(2)) };
+        });
+    };
+
+    const resetPointsDistribution = () => {
+        const unlocked = questions.map(q => ({ ...q, isPointsLocked: false }));
+        setQuestions(distributePoints(unlocked));
     };
 
     const addQuestion = () => setQuestions(distributePoints([...questions, emptyQuestion()]));
@@ -92,13 +137,16 @@ export default function ExamEditorClient({
 
             return {
                 id: genId(),
+                type: "MULTIPLE_CHOICE" as const,
                 question: gq.question,
                 options: (gq.options || []).map((optLabel: string, oIdx: number) => ({
                     id: genId(),
                     text: optLabel,
                     isCorrect: oIdx === gq.correctIndex
                 })),
-                points: pts || 1
+                points: pts || 1,
+                tags: [],
+                isPointsLocked: false
             };
         });
 
@@ -110,10 +158,34 @@ export default function ExamEditorClient({
         }
     };
 
+    const handleBankImport = (importedQuestions: any[]) => {
+        const formatted = importedQuestions.map(q => ({
+            ...q,
+            type: "MULTIPLE_CHOICE" as const,
+            tags: [],
+            isPointsLocked: false,
+        }));
+        if (questions.length === 1 && !questions[0].question.trim() && questions[0].options.every(o => !o.text.trim())) {
+            setQuestions(distributePoints(formatted));
+        } else {
+            setQuestions(distributePoints([...questions, ...formatted]));
+        }
+    };
+
     const updateQuestion = (idx: number, field: string, value: any) => {
         const updated = [...questions];
         (updated[idx] as any)[field] = value;
-        setQuestions(updated);
+        setQuestions(updated); // We don't distribute here unless points change manually
+    };
+
+    const handlePointChange = (idx: number, val: string) => {
+        let numericVal = parseFloat(val);
+        if (isNaN(numericVal) || numericVal < 0) numericVal = 0;
+        
+        const updated = [...questions];
+        updated[idx].points = numericVal;
+        updated[idx].isPointsLocked = true;
+        setQuestions(distributePoints(updated));
     };
 
     const updateOption = (qIdx: number, oIdx: number, field: string, value: any) => {
@@ -146,10 +218,19 @@ export default function ExamEditorClient({
         for (let i = 0; i < questions.length; i++) {
             const q = questions[i];
             if (!q.question.trim()) { toast.error(`Câu ${i + 1}: Chưa nhập nội dung.`); return; }
-            const hasCorrect = q.options.some(o => o.isCorrect);
-            if (!hasCorrect) { toast.error(`Câu ${i + 1}: Chưa chọn đáp án đúng.`); return; }
-            const filled = q.options.filter(o => o.text.trim());
-            if (filled.length < 2) { toast.error(`Câu ${i + 1}: Cần ít nhất 2 đáp án.`); return; }
+            
+            if (q.type !== "ESSAY") {
+                const hasCorrect = q.options.some(o => o.isCorrect);
+                if (!hasCorrect) { toast.error(`Câu ${i + 1}: Chưa chọn đáp án đúng.`); return; }
+                const filled = q.options.filter(o => o.text.trim());
+                if (filled.length < 2) { toast.error(`Câu ${i + 1}: Cần ít nhất 2 đáp án.`); return; }
+            }
+        }
+        
+        let currentTotal = questions.reduce((sum, q) => sum + q.points, 0);
+        if (Math.abs(currentTotal - 10) > 0.1) {
+            toast.error(`Tổng số điểm phải bằng 10. Hiện tại là ${currentTotal.toFixed(2)}.`);
+            return;
         }
 
         setIsLoading(true);
@@ -161,7 +242,10 @@ export default function ExamEditorClient({
                 duration_minutes: duration,
                 due_date: dueDate || undefined,
                 total_points: totalPoints,
-                is_published: isPublished
+                is_published: isPublished,
+                is_strict_mode: isStrictMode,
+                strict_mode_limit: strictModeLimit,
+                show_answers: showAnswers
             };
 
             if (existingExam) {
@@ -224,6 +308,32 @@ export default function ExamEditorClient({
                         </div>
                     </div>
 
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2">
+                                <Switch checked={isStrictMode} onCheckedChange={setIsStrictMode} />
+                                <Label className="text-sm font-bold text-slate-700">Chế độ thi an toàn</Label>
+                            </div>
+                            {isStrictMode && (
+                                <div className="flex items-center gap-2">
+                                    <Label className="text-sm font-medium text-slate-600">Số lần cảnh báo:</Label>
+                                    <Input 
+                                        type="number" 
+                                        min={0} 
+                                        max={10} 
+                                        value={strictModeLimit} 
+                                        onChange={e => setStrictModeLimit(parseInt(e.target.value) || 0)} 
+                                        className="w-20"
+                                    />
+                                </div>
+                            )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Switch checked={showAnswers} onCheckedChange={setShowAnswers} />
+                            <Label className="text-sm font-bold text-slate-700">Hiển thị đáp án sau khi nộp</Label>
+                        </div>
+                    </div>
+
                     <div>
                         <Label className="text-sm font-bold text-slate-700 mb-1.5 block">Mô tả</Label>
                         <Textarea value={description} onChange={e => setDescription(e.target.value)} placeholder="Hướng dẫn, lưu ý..." rows={2} />
@@ -245,19 +355,27 @@ export default function ExamEditorClient({
                                 <div className="bg-slate-50 px-4 py-3 flex items-center justify-between border-b border-slate-200">
                                     <div className="flex items-center gap-2">
                                         <GripVertical className="w-4 h-4 text-slate-300" />
-                                        <span className="text-sm font-bold text-slate-700">Câu {qIdx + 1}</span>
+                                        <select 
+                                            value={q.type || "MULTIPLE_CHOICE"} 
+                                            onChange={(e) => updateQuestion(qIdx, "type", e.target.value)}
+                                            className="text-xs font-bold text-slate-700 bg-transparent outline-none border-b border-dashed border-slate-300 pb-0.5"
+                                        >
+                                            <option value="MULTIPLE_CHOICE">Trắc nghiệm</option>
+                                            <option value="ESSAY">Tự luận</option>
+                                        </select>
+                                        <span className="text-sm font-bold text-slate-700 ml-2">Câu {qIdx + 1}</span>
                                         <span className="text-xs text-slate-400">({q.points} điểm)</span>
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <Input
-                                            type="number" min={0.1} max={10} step="0.1"
-                                            value={q.points}
-                                            readOnly
-                                            className="w-16 h-8 text-xs text-center bg-slate-50 cursor-not-allowed text-slate-500 font-medium"
-                                            title="Điểm được chia đều tự động"
+                                            type="number" min={0} max={10} step="0.5"
+                                            value={q.points === 0 ? '' : q.points}
+                                            onChange={(e) => handlePointChange(qIdx, e.target.value)}
+                                            className={`w-16 h-8 text-xs text-center font-bold ${q.isPointsLocked ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-slate-50 text-slate-700'}`}
+                                            title="Nhập số để gán điểm thủ công"
                                         />
-                                        <span className="text-xs text-slate-400">điểm</span>
-                                        <Button variant="ghost" size="sm" onClick={() => removeQuestion(qIdx)} className="text-red-400 hover:text-red-600 h-7 w-7 p-0">
+                                        <span className="text-xs text-slate-500 font-medium whitespace-nowrap">điểm {q.isPointsLocked && '(Đã khóa)'}</span>
+                                        <Button variant="ghost" size="sm" onClick={() => removeQuestion(qIdx)} className="text-red-400 hover:text-red-600 h-7 w-7 p-0 ml-2">
                                             <Trash2 className="w-3.5 h-3.5" />
                                         </Button>
                                     </div>
@@ -272,7 +390,17 @@ export default function ExamEditorClient({
                                         className="font-medium"
                                     />
 
-                                    <div className="space-y-2">
+                                    <div>
+                                        <Input
+                                            value={(q.tags || []).join(", ")}
+                                            onChange={e => updateQuestion(qIdx, "tags", e.target.value.split(",").map(t => t.trim()).filter(t => t))}
+                                            placeholder="Gắn thẻ/Nhãn (cách nhau dấu phẩy, VD: Ngữ pháp, Từ vựng)..."
+                                            className="text-xs text-indigo-600 bg-indigo-50/30 border-dashed border-indigo-200"
+                                        />
+                                    </div>
+
+                                    {q.type !== "ESSAY" && (
+                                        <div className="space-y-2">
                                         {q.options.map((opt, oIdx) => (
                                             <div key={opt.id} className="flex items-center gap-2">
                                                 <button
@@ -299,7 +427,8 @@ export default function ExamEditorClient({
                                         <Button variant="ghost" size="sm" className="text-indigo-500 text-xs h-7" onClick={() => addOption(qIdx)}>
                                             <Plus className="w-3 h-3 mr-1" /> Thêm đáp án
                                         </Button>
-                                    </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -310,6 +439,12 @@ export default function ExamEditorClient({
                         <div className="flex items-center gap-3">
                             <Button variant="outline" onClick={addQuestion} className="text-indigo-600 border-indigo-200">
                                 <Plus className="w-4 h-4 mr-2" /> Thêm câu hỏi
+                            </Button>
+                            <Button variant="outline" onClick={resetPointsDistribution} className="text-slate-600 border-slate-200" title="Chia đều lại điểm số">
+                                Chia đều 10 điểm
+                            </Button>
+                            <Button variant="secondary" onClick={() => setIsBankModalOpen(true)} className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200">
+                                <Plus className="w-4 h-4 mr-2" /> Nhập từ Ngân hàng đề
                             </Button>
                             <Button variant="secondary" onClick={() => setIsAIModalOpen(true)} className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200">
                                 <Sparkles className="w-4 h-4 mr-2" /> Sinh bằng AI
@@ -326,6 +461,11 @@ export default function ExamEditorClient({
                 open={isAIModalOpen}
                 onOpenChange={setIsAIModalOpen}
                 onQuestionsGenerated={handleAIGenerated}
+            />
+            <ImportFromBankModal
+                open={isBankModalOpen}
+                onOpenChange={setIsBankModalOpen}
+                onImport={handleBankImport}
             />
         </div>
     );

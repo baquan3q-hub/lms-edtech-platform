@@ -26,6 +26,7 @@ interface AIGenerateModalProps {
 
 export default function AIGenerateModal({ open, onOpenChange, onQuestionsGenerated }: AIGenerateModalProps) {
     const [prompt, setPrompt] = useState("");
+    const [difficulty, setDifficulty] = useState("Trung bình");
     const [numQuestions, setNumQuestions] = useState(5);
     const [file, setFile] = useState<File | null>(null);
     const [isGenerating, setIsGenerating] = useState(false);
@@ -87,6 +88,7 @@ export default function AIGenerateModal({ open, onOpenChange, onQuestionsGenerat
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     prompt,
+                    difficulty,
                     numQuestions,
                     fileData,
                     fileMimeType
@@ -108,6 +110,7 @@ export default function AIGenerateModal({ open, onOpenChange, onQuestionsGenerat
                 onQuestionsGenerated(data.questions);
                 // Reset form
                 setPrompt("");
+                setDifficulty("Trung bình");
                 setFile(null);
                 setNumQuestions(5);
                 setError(null);
@@ -209,6 +212,22 @@ export default function AIGenerateModal({ open, onOpenChange, onQuestionsGenerat
                             rows={4}
                             disabled={isGenerating}
                         />
+                    </div>
+
+                    <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-slate-700">Độ khó *</Label>
+                        <select 
+                            value={difficulty} 
+                            onChange={e => setDifficulty(e.target.value)}
+                            className="w-full text-sm p-2 border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                            disabled={isGenerating}
+                        >
+                            <option value="Dễ">Dễ (Nhận biết, Ghi nhớ)</option>
+                            <option value="Trung bình">Trung bình (Thông hiểu, Vận dụng)</option>
+                            <option value="Khó">Khó (Phân tích, Đánh giá)</option>
+                            <option value="Cực khó">Cực khó (Sáng tạo, Tổng hợp)</option>
+                            <option value="Từ dễ đến khó">Từ dễ đến khó (Hỗn hợp, tăng dần độ khó)</option>
+                        </select>
                     </div>
 
                     <div className="space-y-2">

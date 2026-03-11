@@ -33,7 +33,6 @@ export function BottomNav() {
         navItems = [
             { href: "/student", label: "Trang chủ", icon: Home },
             { href: "/student/classes", label: "Lớp học", icon: BookOpen },
-            { href: "/student/schedule", label: "Lịch", icon: Calendar },
             { href: "/student/achievements", label: "Thành tích", icon: Trophy },
             { href: "/student/profile", label: "Cá nhân", icon: User },
         ];
@@ -47,9 +46,9 @@ export function BottomNav() {
     } else if (role === "teacher") {
         navItems = [
             { href: "/teacher", label: "Tổng quan", icon: Home },
-            { href: "/teacher/attendance", label: "Điểm danh", icon: ClipboardList },
+            { href: "/teacher/classes", label: "Lớp học", icon: BookOpen },
+            { href: "/teacher/absence-requests", label: "Đơn nghỉ", icon: FileCheck },
             { href: "/teacher/students", label: "Học viên", icon: Users },
-            { href: "/teacher/schedule", label: "Lịch dạy", icon: Calendar },
         ];
     } else if (role === "admin") {
         navItems = [

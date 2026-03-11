@@ -599,6 +599,32 @@ export async function fetchParentDashboardData(studentId: string) {
                     course_name: s.class?.course?.name
                 }));
             }
+
+            // Fetch absence requests to mark "Xin nghỉ" status properly
+            if (upcomingSessions.length > 0) {
+                const sessionDatesRange = upcomingSessions.map(s => s.session_date);
+                const { data: absenceRequests } = await supabase
+                    .from("absence_requests")
+                    .select("absence_date, class_id, status")
+                    .eq("student_id", studentId)
+                    .in("class_id", classIds)
+                    .in("absence_date", sessionDatesRange);
+
+                // Override attendance_status with absence request status
+                upcomingSessions = upcomingSessions.map((s: any) => {
+                    const req = (absenceRequests || []).find(
+                        (r: any) => r.absence_date === s.session_date && r.class_id === s.class_id
+                    );
+                    if (req) {
+                        return {
+                            ...s,
+                            attendance_status: req.status === "approved" ? "excused" : "absence_requested",
+                            absence_request_status: req.status
+                        };
+                    }
+                    return s;
+                });
+            }
         }
 
         // 4. Bài kiểm tra gần đây (exam_submissions)
@@ -635,6 +661,65 @@ export async function fetchParentDashboardData(studentId: string) {
             announcements = data || [];
         }
 
+        // 6. Tính điểm trung bình và thống kê bài tập
+        const { data: quizAttempts } = await supabase
+            .from("quiz_attempts")
+            .select('item_id, score')
+            .eq("student_id", studentId)
+            .not('score', 'is', null);
+
+        const { data: examSubmissions } = await supabase
+            .from("exam_submissions")
+            .select('exam_id, score, total_points')
+            .eq("student_id", studentId)
+            .not('score', 'is', null);
+
+        const { data: homeworkSubmissions } = await supabase
+            .from("homework_submissions")
+            .select('homework_id, score')
+            .eq("student_id", studentId)
+            .not('score', 'is', null);
+
+        let totalScores = 0;
+        let assignmentCount = 0;
+
+        // Xử lý Quizzes: Group by item_id, lấy max
+        const quizScores = new Map<string, number>();
+        if (quizAttempts) {
+            for (const attempt of quizAttempts) {
+                const current = quizScores.get(attempt.item_id) || 0;
+                const score = Number(attempt.score) || 0;
+                if (score > current) {
+                    quizScores.set(attempt.item_id, score);
+                }
+            }
+        }
+        for (const score of quizScores.values()) {
+            totalScores += score;
+            assignmentCount++;
+        }
+
+        // Xử lý Exams
+        if (examSubmissions) {
+            for (const sub of examSubmissions) {
+                totalScores += Number(sub.score) || 0;
+                assignmentCount++;
+            }
+        }
+
+        // Xử lý Homeworks
+        if (homeworkSubmissions) {
+            for (const sub of homeworkSubmissions) {
+                totalScores += Number(sub.score) || 0;
+                assignmentCount++;
+            }
+        }
+
+        let averageScore = 0;
+        if (assignmentCount > 0) {
+            averageScore = totalScores / assignmentCount;
+        }
+
         // Tính toán tổng quan
         const totalAttendance = attendance.length;
         const presentDays = attendance.filter(a => a.status === 'present').length;
@@ -649,6 +734,10 @@ export async function fetchParentDashboardData(studentId: string) {
                 announcements,
                 upcomingSessions,
                 upcomingSchedules,
+                stats: {
+                    averageScore: averageScore.toFixed(1),
+                    assignmentsCount: assignmentCount
+                }
             },
             error: null,
         };

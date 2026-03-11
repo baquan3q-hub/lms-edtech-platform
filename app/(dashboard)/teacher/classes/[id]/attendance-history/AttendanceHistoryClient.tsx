@@ -19,6 +19,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAttendanceHistory, deleteAttendanceSession } from "@/lib/actions/attendance";
+import { calcAttendanceRate } from "@/lib/utils/attendance-rate";
 import * as XLSX from "xlsx";
 import {
     AlertDialog,
@@ -100,7 +101,7 @@ export default function AttendanceHistoryClient({
     const absentCount = records.filter((r) => r.status === "absent").length;
     const lateCount = records.filter((r) => r.status === "late").length;
     const excusedCount = records.filter((r) => r.status === "excused").length;
-    const avgRate = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
+    const avgRate = calcAttendanceRate(presentCount, lateCount, excusedCount, absentCount);
 
     // Per-student stats
     const studentStats = students.map((s) => {
@@ -110,7 +111,7 @@ export default function AttendanceHistoryClient({
         const absent = sRecords.filter((r: any) => r.status === "absent").length;
         const late = sRecords.filter((r: any) => r.status === "late").length;
         const excused = sRecords.filter((r: any) => r.status === "excused").length;
-        const rate = total > 0 ? Math.round((present / total) * 100) : 0;
+        const rate = calcAttendanceRate(present, late, excused, absent);
         return { ...s, total, present, absent, late, excused, rate };
     });
 

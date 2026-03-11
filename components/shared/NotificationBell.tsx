@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { createClient } from "@/lib/supabase/client";
-import { Bell, Check, Calendar, FileText, Info } from "lucide-react";
+import { Bell, Check, Calendar, FileText, Info, BookOpen, BarChart3 } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -22,12 +22,16 @@ import { markNotificationAsRead, markAllNotificationsAsRead } from "@/lib/action
 const ICONS: Record<string, React.ElementType> = {
     attendance: Calendar,
     absence_request: FileText,
+    quiz_feedback: BookOpen,
+    child_quiz_feedback: BarChart3,
     system: Info,
 };
 
 const COLORS: Record<string, string> = {
     attendance: "text-amber-500 bg-amber-50",
     absence_request: "text-emerald-500 bg-emerald-50",
+    quiz_feedback: "text-purple-500 bg-purple-50",
+    child_quiz_feedback: "text-indigo-500 bg-indigo-50",
     system: "text-blue-500 bg-blue-50",
 };
 

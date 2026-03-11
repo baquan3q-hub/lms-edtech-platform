@@ -96,6 +96,11 @@ export default function SubmissionsClient({
                                         <p className="text-xs text-slate-400">{sub.student?.email}</p>
                                     </div>
                                     <Badge variant="outline" className={st.color}>{st.label}</Badge>
+                                    {sub.attempts > 1 && (
+                                        <Badge variant="secondary" className="bg-slate-100 text-slate-600 hidden sm:inline-flex">
+                                            {sub.attempts} lần nộp
+                                        </Badge>
+                                    )}
                                     {sub.score !== null && sub.status === "graded" && (
                                         <span className="text-lg font-black text-emerald-600">{sub.score}/{homework?.total_points}</span>
                                     )}
@@ -157,7 +162,9 @@ export default function SubmissionsClient({
 
                                         {/* Grading form */}
                                         <div className="mt-4 p-4 bg-emerald-50 rounded-xl border border-emerald-100 space-y-3">
-                                            <p className="text-sm font-bold text-emerald-800">Chấm điểm</p>
+                                            <p className="text-sm font-bold text-emerald-800">
+                                                Chấm điểm {sub.status !== 'graded' && sub.score !== null ? `(Điểm trắc nghiệm tạm tính: ${sub.score})` : ''}
+                                            </p>
                                             <div className="flex gap-3">
                                                 <div className="w-32">
                                                     <label className="text-xs text-emerald-600 font-medium block mb-1">Điểm / {homework?.total_points}</label>

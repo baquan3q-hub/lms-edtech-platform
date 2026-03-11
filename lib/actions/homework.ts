@@ -231,24 +231,125 @@ export async function submitHomework(homeworkId: string, answers: any[]) {
     try {
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return { success: false, error: "Chưa đăng nhập" };
+
+        if (!user) {
+            return { error: "Bạn chưa đăng nhập." };
+        }
 
         const adminSupabase = createAdminClient();
 
-        // Upsert submission
-        const { error } = await adminSupabase
-            .from("homework_submissions")
-            .upsert({
-                homework_id: homeworkId,
-                student_id: user.id,
-                answers,
-                status: "submitted",
-                submitted_at: new Date().toISOString(),
-            }, { onConflict: "homework_id,student_id" });
+        // 1. Fetch homework details for auto-grading
+        const { data: homework, error: hwError } = await adminSupabase
+            .from("homework")
+            .select("questions")
+            .eq("id", homeworkId)
+            .single();
 
-        if (error) throw error;
-        return { success: true, error: null };
+        if (hwError || !homework) {
+            return { error: "Không tìm thấy bài tập." };
+        }
+
+        const questions = homework.questions as any[] || [];
+        
+        let autoScore = 0;
+        let requiresManualGrading = false;
+
+        // 2. Process answers and auto-grade MCQs
+        const processedAnswers = answers.map((answer: any) => {
+            const question = questions.find((q: any) => q.id === answer.question_id);
+            if (!question) return answer;
+
+            if (question.type === 'multiple_choice') {
+                const correctOption = question.options?.find((opt: any) => opt.isCorrect);
+                if (correctOption && answer.selected_option_id === correctOption.id) {
+                    autoScore += Number(question.points) || 0;
+                }
+            } else {
+                requiresManualGrading = true;
+            }
+
+            return answer;
+        });
+
+        // 3. Determine submission status
+        // If there are manual grading questions, status remains 'submitted' pending teacher review
+        // If all are MCQs, status is automatically 'graded'
+        const finalStatus = requiresManualGrading ? 'submitted' : 'graded';
+        const gradedAt = requiresManualGrading ? null : new Date().toISOString();
+
+        // 4. Check if a submission already exists to handle multiple attempts
+        const { data: existingSubmission, error: existingError } = await adminSupabase
+            .from("homework_submissions")
+            .select("*")
+            .eq("homework_id", homeworkId)
+            .eq("student_id", user.id)
+            .maybeSingle();
+
+        if (existingError) {
+             console.error("Lỗi khi kiểm tra bài nộp hiện tại:", existingError);
+             return { error: existingError.message };
+        }
+
+        if (existingSubmission) {
+            // Push current state into attempt_history
+            const currentHistory = Array.isArray(existingSubmission.attempt_history) 
+                ? existingSubmission.attempt_history 
+                : [];
+            
+            const historyEntry = {
+                answers: existingSubmission.answers,
+                score: existingSubmission.score,
+                status: existingSubmission.status,
+                submitted_at: existingSubmission.submitted_at,
+                graded_at: existingSubmission.graded_at,
+                feedback: existingSubmission.feedback,
+            };
+
+            const updatedHistory = [...currentHistory, historyEntry];
+            const newAttemptsCount = (existingSubmission.attempts || 1) + 1;
+
+            const { data, error } = await adminSupabase
+                .from("homework_submissions")
+                .update({
+                    answers: processedAnswers,
+                    score: autoScore,
+                    status: finalStatus,
+                    submitted_at: new Date().toISOString(),
+                    graded_at: gradedAt,
+                    attempts: newAttemptsCount,
+                    attempt_history: updatedHistory
+                })
+                .eq("id", existingSubmission.id)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return { data, error: null };
+            
+        } else {
+            // First time submission
+            const { data, error } = await adminSupabase
+                .from("homework_submissions")
+                .insert({
+                    homework_id: homeworkId,
+                    student_id: user.id,
+                    answers: processedAnswers,
+                    score: autoScore,
+                    status: finalStatus,
+                    submitted_at: new Date().toISOString(),
+                    graded_at: gradedAt,
+                    attempts: 1,
+                    attempt_history: []
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+            return { data, error: null };
+        }
+
     } catch (error: any) {
-        return { success: false, error: error.message };
+        console.error("Lỗi nộp bài tập:", error);
+        return { error: error.message };
     }
 }

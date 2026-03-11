@@ -70,7 +70,7 @@ CREATE TABLE public.student_progress (
 -- 6. LỊCH SỬ LÀM BÀI TRẮC NGHIỆM (QUIZ ATTEMPTS)
 CREATE TABLE public.quiz_attempts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    student_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+    student_id UUID NOT NULL REFERENCES public.user~s(id) ON DELETE CASCADE,
     item_id UUID NOT NULL REFERENCES public.course_items(id) ON DELETE CASCADE,
     answers JSONB NOT NULL DEFAULT '{}'::jsonb, -- Đáp án học sinh chọn {"question_id_1": ["a"], "question_id_2": ["c", "d"]}
     score NUMERIC,

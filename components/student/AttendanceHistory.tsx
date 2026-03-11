@@ -10,6 +10,7 @@ import {
     CalendarDays, TrendingUp,
 } from "lucide-react";
 import { getStudentAttendanceHistory } from "@/lib/actions/attendance";
+import { calcAttendanceRate } from "@/lib/utils/attendance-rate";
 
 interface AttendanceHistoryProps {
     studentId: string;
@@ -59,7 +60,7 @@ export default function AttendanceHistory({ studentId, studentName }: Attendance
     const absentCount = records.filter((r: any) => r.status === "absent").length;
     const lateCount = records.filter((r: any) => r.status === "late").length;
     const excusedCount = records.filter((r: any) => r.status === "excused").length;
-    const attendanceRate = totalSessions > 0 ? Math.round((presentCount / totalSessions) * 100) : 0;
+    const attendanceRate = calcAttendanceRate(presentCount, lateCount, excusedCount, absentCount);
 
     const months = Array.from({ length: 12 }, (_, i) => i + 1);
 

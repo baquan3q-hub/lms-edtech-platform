@@ -2,12 +2,20 @@
 
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutDashboard, Users, CalendarDays, ClipboardCheck, BookOpen } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, ClipboardCheck, BookOpen, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
 import EnrollStudentCombobox from "@/components/admin/EnrollStudentCombobox";
 import ImportStudentsDialog from "@/components/admin/ImportStudentsDialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import ScheduleManagerClient from "@/app/(dashboard)/teacher/classes/[id]/ScheduleManagerClient";
+import { format, parseISO } from "date-fns";
+import { vi } from "date-fns/locale";
+
+// Mapping từ day_of_week số → tên tiếng Việt
+const DAY_NAMES: Record<number, string> = {
+    0: "CN", 1: "T.2", 2: "T.3", 3: "T.4", 4: "T.5", 5: "T.6", 6: "T.7"
+};
 
 function formatDate(dateString: string) {
     return new Date(dateString).toLocaleDateString("vi-VN", {
@@ -27,7 +35,8 @@ export default function AdminClassTabsClient({
     enrollments,
     schedules,
     allRooms,
-    attendanceData
+    attendanceData,
+    absenceRequests = []
 }: {
     classId: string;
     activeCount: number;
@@ -37,9 +46,29 @@ export default function AdminClassTabsClient({
     schedules: any[];
     allRooms: any[];
     attendanceData: any;
+    absenceRequests?: any[];
 }) {
     const [currentMonth, setCurrentMonth] = useState(new Date().getMonth() + 1);
     const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+    
+    // Xem thêm / thu gọn session columns
+    const INITIAL_SESSION_COLS = 5;
+    const [visibleSessionCount, setVisibleSessionCount] = useState(INITIAL_SESSION_COLS);
+
+    // Build a set of valid day_of_week from schedules (e.g. [1, 4] for Thứ 2 & Thứ 5)
+    const validDays = new Set<number>(schedules.map((s: any) => s.day_of_week));
+
+    // Filter attendance sessions to those matching schedule days
+    const allSessions = (attendanceData?.sessions || []);
+    const filteredSessions = allSessions.filter((sess: any) => {
+        const date = new Date(sess.session_date);
+        // getDay() returns 0=Sun,1=Mon,...,6=Sat (matches day_of_week in DB)
+        return validDays.size === 0 || validDays.has(date.getDay());
+    });
+
+    const visibleSessions = filteredSessions.slice(0, visibleSessionCount);
+    const hasMoreSessions = filteredSessions.length > visibleSessionCount;
+    const isExpanded = visibleSessionCount > INITIAL_SESSION_COLS;
 
     return (
         <Tabs defaultValue="students" className="w-full">
@@ -159,97 +188,204 @@ export default function AdminClassTabsClient({
 
             {/* TAB ĐIỂM DANH */}
             <TabsContent value="attendance" className="space-y-6">
-                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-                    <div className="flex items-center justify-between mb-6 border-b border-gray-100 pb-4">
-                        <div className="flex items-center gap-2">
-                            <ClipboardCheck className="w-5 h-5 text-indigo-600" />
-                            <h3 className="text-lg font-semibold text-gray-900">
-                                Lịch sử Điểm danh ({currentMonth}/{currentYear})
+
+                {/* Section: Đơn xin nghỉ từ phụ huynh */}
+                {absenceRequests.length > 0 && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/30 overflow-hidden shadow-sm">
+                        <div className="px-5 py-4 border-b border-amber-100 flex items-center gap-2">
+                            <AlertCircle className="w-5 h-5 text-amber-600" />
+                            <h3 className="text-base font-semibold text-amber-900">
+                                Đơn xin nghỉ học ({absenceRequests.length} đơn)
                             </h3>
                         </div>
-                        {/* Pagination or Date Picker could go here */}
+                        <div className="p-4">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="hover:bg-transparent border-amber-100">
+                                        <TableHead className="text-amber-700 font-medium">Học sinh</TableHead>
+                                        <TableHead className="text-amber-700 font-medium">Ngày nghỉ</TableHead>
+                                        <TableHead className="text-amber-700 font-medium">Lý do</TableHead>
+                                        <TableHead className="text-amber-700 font-medium">Phụ huynh</TableHead>
+                                        <TableHead className="text-amber-700 font-medium text-center">Trạng thái</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {absenceRequests.map((req: any) => (
+                                        <TableRow key={req.id} className="border-amber-100 hover:bg-amber-50/50">
+                                            <TableCell className="font-medium text-gray-800">
+                                                {req.student?.full_name || "—"}
+                                            </TableCell>
+                                            <TableCell className="text-gray-600">
+                                                {req.absence_date
+                                                    ? (() => {
+                                                        try {
+                                                            const d = parseISO(req.absence_date);
+                                                            return `${DAY_NAMES[d.getDay()] || ""} - ${format(d, "dd/MM/yyyy")}`;
+                                                        } catch { return req.absence_date; }
+                                                    })()
+                                                    : "—"}
+                                            </TableCell>
+                                            <TableCell className="text-gray-600 max-w-xs truncate">
+                                                {req.reason || "—"}
+                                            </TableCell>
+                                            <TableCell className="text-gray-500 text-sm">
+                                                {req.parent?.full_name || "—"}
+                                            </TableCell>
+                                            <TableCell className="text-center">
+                                                {req.status === "pending" && (
+                                                    <Badge className="bg-amber-100 text-amber-700 border-amber-200 hover:bg-amber-100">Chờ duyệt</Badge>
+                                                )}
+                                                {req.status === "approved" && (
+                                                    <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">Đã duyệt</Badge>
+                                                )}
+                                                {req.status === "rejected" && (
+                                                    <Badge className="bg-red-100 text-red-700 border-red-200 hover:bg-red-100">Từ chối</Badge>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+                )}
+
+                {/* Section: Lịch sử điểm danh */}
+                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-4 border-b border-gray-100 pb-4">
+                        <div className="flex items-center gap-2">
+                            <ClipboardCheck className="w-5 h-5 text-indigo-600" />
+                            <div>
+                                <h3 className="text-lg font-semibold text-gray-900">
+                                    Lịch sử Điểm danh ({currentMonth}/{currentYear})
+                                </h3>
+                                {schedules.length > 0 && (
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                        Hiển thị theo đúng lịch học: {schedules.map((s: any) => DAY_NAMES[s.day_of_week]).join(", ")}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
                     </div>
 
-                    {(!attendanceData?.sessions || attendanceData.sessions.length === 0) ? (
+                    {filteredSessions.length === 0 ? (
                         <div className="text-center py-10">
                             <CalendarDays className="w-10 h-10 text-gray-300 mx-auto mb-3" />
                             <p className="text-gray-500 font-medium">Chưa có dữ liệu điểm danh tháng này.</p>
                             <p className="text-sm text-gray-400 mt-1">Giáo viên cần thực hiện điểm danh ở ứng dụng của họ.</p>
                         </div>
                     ) : (
-                        <div className="overflow-x-auto">
-                            <Table className="min-w-max">
-                                <TableHeader>
-                                    <TableRow className="border-gray-100 hover:bg-transparent">
-                                        <TableHead className="text-gray-500 font-medium whitespace-nowrap bg-white sticky left-0 z-10 w-48 shadow-[1px_0_0_0_#f3f4f6]">
-                                            Học sinh
-                                        </TableHead>
-                                        {/* Cột cho từng Session */}
-                                        {attendanceData.sessions.map((sess: any) => {
-                                            const dateObj = new Date(sess.session_date);
-                                            const day = dateObj.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+                        <>
+                            <div className="overflow-x-auto mb-4">
+                                <Table className="min-w-max">
+                                    <TableHeader>
+                                        <TableRow className="border-gray-100 hover:bg-transparent">
+                                            <TableHead className="text-gray-500 font-medium whitespace-nowrap bg-white sticky left-0 z-10 w-48 shadow-[1px_0_0_0_#f3f4f6]">
+                                                Học sinh
+                                            </TableHead>
+                                            {/* Cột cho từng Session (lọc theo lịch) */}
+                                            {visibleSessions.map((sess: any) => {
+                                                let date: Date;
+                                                try { date = parseISO(sess.session_date); } catch { date = new Date(sess.session_date); }
+                                                const dayName = DAY_NAMES[date.getDay()] || "";
+                                                const dateStr = format(date, "dd/MM", { locale: vi });
+                                                return (
+                                                    <TableHead key={sess.id} className="text-center min-w-[84px]">
+                                                        <div className="flex flex-col items-center">
+                                                            <span className="text-[11px] font-bold text-indigo-600">{dayName}</span>
+                                                            <span className="text-sm font-semibold text-gray-700">{dateStr}</span>
+                                                            <span className="text-[10px] text-gray-400 mt-0.5 whitespace-nowrap">
+                                                                {sess.status === "closed" ? "Hoàn tất" : "Mở"}
+                                                            </span>
+                                                        </div>
+                                                    </TableHead>
+                                                );
+                                            })}
+                                            <TableHead className="text-center whitespace-nowrap opacity-75 bg-emerald-50 text-emerald-600">Có mặt</TableHead>
+                                            <TableHead className="text-center whitespace-nowrap opacity-75 bg-rose-50 text-rose-600">Vắng</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {enrollments.filter((e: any) => e.status === "active").map((enrollment: any) => {
+                                            const studentId = enrollment.student?.id;
+                                            let totalPresent = 0;
+                                            let totalAbsent = 0;
+
                                             return (
-                                                <TableHead key={sess.id} className="text-center min-w-[80px]">
-                                                    <div className="flex flex-col items-center">
-                                                        <span className="text-sm font-semibold text-gray-700">{day}</span>
-                                                        <span className="text-[10px] text-gray-400 mt-1 opacity-80 whitespace-nowrap">
-                                                            T/T: {sess.status === "closed" ? "Hoàn tất" : "Mở"}
-                                                        </span>
-                                                    </div>
-                                                </TableHead>
+                                                <TableRow key={enrollment.id} className="border-gray-100 hover:bg-gray-50">
+                                                    <TableCell className="font-medium text-gray-900 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#f3f4f6] whitespace-nowrap">
+                                                        {enrollment.student?.full_name || "—"}
+                                                    </TableCell>
+                                                    {visibleSessions.map((sess: any) => {
+                                                        const record = (attendanceData?.records || []).find(
+                                                            (r: any) => r.session_id === sess.id && r.student_id === studentId
+                                                        );
+
+                                                        let displayBadge = <span className="text-gray-300">–</span>;
+                                                        if (record) {
+                                                            if (record.status === "present") {
+                                                                displayBadge = <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0 text-[11px]">Có mặt</Badge>;
+                                                                totalPresent++;
+                                                            } else if (record.status === "late") {
+                                                                displayBadge = <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100 border-0 text-[11px]">Đi trễ</Badge>;
+                                                                totalAbsent++;
+                                                            } else if (record.status === "absent") {
+                                                                // Check if there's an absence request for this student on this date
+                                                                const hasAbsenceReq = absenceRequests.some(
+                                                                    (r: any) => r.student_id === studentId && r.absence_date === sess.session_date && r.status === "approved"
+                                                                );
+                                                                displayBadge = hasAbsenceReq
+                                                                    ? <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 border-0 text-[11px]">Có phép</Badge>
+                                                                    : <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-0 text-[11px]">Vắng</Badge>;
+                                                                totalAbsent++;
+                                                            } else if (record.status === "excused") {
+                                                                displayBadge = <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100 border-0 text-[11px]">Có phép</Badge>;
+                                                            }
+                                                        }
+
+                                                        return (
+                                                            <TableCell key={sess.id} className="text-center p-2">
+                                                                {displayBadge}
+                                                            </TableCell>
+                                                        );
+                                                    })}
+                                                    <TableCell className="text-center font-bold text-emerald-600 bg-emerald-50/50">{totalPresent}</TableCell>
+                                                    <TableCell className="text-center font-bold text-rose-600 bg-rose-50/50">{totalAbsent}</TableCell>
+                                                </TableRow>
                                             );
                                         })}
-                                        <TableHead className="text-center whitespace-nowrap opacity-75">Tốt</TableHead>
-                                        <TableHead className="text-center whitespace-nowrap opacity-75">Vắng</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {/* Lấy ra danh sách các học sinh (từ enrollments) để map cho khớp */}
-                                    {enrollments.filter(e => e.status === "active").map((enrollment: any) => {
-                                        const studentId = enrollment.student?.id;
-                                        // Tính tổng
-                                        let totalPresent = 0;
-                                        let totalAbsent = 0;
+                                    </TableBody>
+                                </Table>
+                            </div>
 
-                                        return (
-                                            <TableRow key={enrollment.id} className="border-gray-100 hover:bg-gray-50">
-                                                <TableCell className="font-medium text-gray-900 bg-white sticky left-0 z-10 shadow-[1px_0_0_0_#f3f4f6] whitespace-nowrap">
-                                                    {enrollment.student?.full_name || "—"}
-                                                </TableCell>
-                                                {/* Cell tương ứng với từng session */}
-                                                {attendanceData.sessions.map((sess: any) => {
-                                                    // Tìm record của học sinh này trong session này
-                                                    const record = attendanceData.records.find(
-                                                        (r: any) => r.session_id === sess.id && r.student_id === studentId
-                                                    );
-
-                                                    let displayBadge = <span className="text-gray-300">-</span>;
-                                                    if (record) {
-                                                        if (record.status === "present") {
-                                                            displayBadge = <Badge className="bg-emerald-100 text-emerald-700 hover:bg-emerald-100 border-0">Có mặt</Badge>;
-                                                            totalPresent++;
-                                                        } else if (record.status === "absent" || record.status === "late") {
-                                                            displayBadge = <Badge className="bg-rose-100 text-rose-700 hover:bg-rose-100 border-0">{record.status === "late" ? "Đi trễ" : "Vắng"}</Badge>;
-                                                            totalAbsent++;
-                                                        } else if (record.status === "excused") {
-                                                            displayBadge = <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-0">Có phép</Badge>;
-                                                        }
-                                                    }
-
-                                                    return (
-                                                        <TableCell key={sess.id} className="text-center p-2">
-                                                            {displayBadge}
-                                                        </TableCell>
-                                                    );
-                                                })}
-                                                <TableCell className="text-center font-bold text-emerald-600 bg-emerald-50/50">{totalPresent}</TableCell>
-                                                <TableCell className="text-center font-bold text-rose-600 bg-rose-50/50">{totalAbsent}</TableCell>
-                                            </TableRow>
-                                        );
-                                    })}
-                                </TableBody>
-                            </Table>
-                        </div>
+                            {/* View more / Collapse buttons */}
+                            {(hasMoreSessions || isExpanded) && (
+                                <div className="flex items-center justify-center gap-3 border-t border-gray-100 pt-4">
+                                    {hasMoreSessions && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="text-indigo-600 border-indigo-200 hover:bg-indigo-50 text-xs"
+                                            onClick={() => setVisibleSessionCount(prev => prev + 5)}
+                                        >
+                                            <ChevronDown className="w-3.5 h-3.5 mr-1" />
+                                            Xem thêm ({filteredSessions.length - visibleSessionCount} buổi)
+                                        </Button>
+                                    )}
+                                    {isExpanded && (
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-gray-500 hover:text-gray-700 text-xs"
+                                            onClick={() => setVisibleSessionCount(INITIAL_SESSION_COLS)}
+                                        >
+                                            <ChevronUp className="w-3.5 h-3.5 mr-1" />
+                                            Thu gọn
+                                        </Button>
+                                    )}
+                                </div>
+                            )}
+                        </>
                     )}
                 </div>
             </TabsContent>
