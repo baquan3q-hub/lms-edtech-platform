@@ -69,7 +69,7 @@ export async function POST(req: NextRequest) {
                         message: `Giáo viên đã gửi nhận xét và ${tasks.length} bài tập cải thiện cho bài "${exam?.title || 'kiểm tra'}". Xem nhận xét và làm bài ngay!`,
                         type: "quiz_feedback",
                         link: studentFeedbackUrl,
-                        read: false
+                        is_read: false
                     });
 
                 // Tạo notification cho phụ huynh (nếu có)
@@ -89,7 +89,7 @@ export async function POST(req: NextRequest) {
                                 message: `Giáo viên đã gửi nhận xét bài kiểm tra "${exam?.title || ''}" kèm ${tasks.length} bài tập cải thiện.`,
                                 type: "child_quiz_feedback",
                                 link: `/parent/progress`,
-                                read: false
+                                is_read: false
                             });
                     }
                 }

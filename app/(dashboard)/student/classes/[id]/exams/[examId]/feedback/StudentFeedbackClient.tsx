@@ -11,8 +11,13 @@ import {
     ChevronDown, ChevronUp, XCircle, FileQuestion
 } from "lucide-react";
 import { fetchStudentFeedback, updateImprovementProgress, fetchSupplementaryQuizzes, submitSupplementaryQuiz } from "@/lib/actions/quiz-analysis";
+import { formatKnowledgeGap } from "@/lib/utils";
 import { toast } from "sonner";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 interface StudentFeedbackPageProps {
     examId: string;
@@ -35,6 +40,7 @@ export default function StudentFeedbackClient({ examId, classId, examTitle }: St
     const [supAnswers, setSupAnswers] = useState<Record<string, Record<string, string>>>({});
     const [supSubmitted, setSupSubmitted] = useState<Record<string, boolean>>({});
     const [expandedSupQuiz, setExpandedSupQuiz] = useState<string | null>(null);
+    const [showAllSupQuizzes, setShowAllSupQuizzes] = useState(false);
 
     useEffect(() => {
         loadFeedback();
@@ -146,7 +152,8 @@ export default function StudentFeedbackClient({ examId, classId, examTitle }: St
     const progressPercent = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0;
 
     const deadlineDate = feedback.deadline ? new Date(feedback.deadline) : null;
-    const daysLeft = deadlineDate ? Math.max(0, Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : null;
+    const isExpired = deadlineDate ? Date.now() > deadlineDate.getTime() : false;
+    const daysLeft = deadlineDate && !isExpired ? Math.max(0, Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : null;
     const displayFeedback = feedback.teacher_edited_feedback || feedback.ai_feedback || "";
 
     return (
@@ -168,7 +175,14 @@ export default function StudentFeedbackClient({ examId, classId, examTitle }: St
                     </h3>
                 </div>
                 <CardContent className="p-5">
-                    <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{displayFeedback}</p>
+                    <div className="text-sm text-slate-700 leading-relaxed prose prose-sm max-w-none prose-p:mb-2 prose-pre:bg-slate-100 prose-pre:text-slate-800 prose-pre:border prose-pre:border-slate-200">
+                        <ReactMarkdown 
+                            remarkPlugins={[remarkMath]} 
+                            rehypePlugins={[rehypeKatex]}
+                        >
+                            {displayFeedback}
+                        </ReactMarkdown>
+                    </div>
                     {feedback.knowledge_gaps && feedback.knowledge_gaps.length > 0 && (
                         <div className="mt-4 pt-4 border-t border-slate-100">
                             <h4 className="text-xs font-bold text-amber-700 flex items-center gap-1.5 mb-2">
@@ -176,8 +190,19 @@ export default function StudentFeedbackClient({ examId, classId, examTitle }: St
                             </h4>
                             <div className="flex flex-wrap gap-1.5">
                                 {feedback.knowledge_gaps.map((gap: string, i: number) => (
-                                    <Badge key={i} className="bg-red-50 text-red-700 border-none text-[10px]">🔴 {gap}</Badge>
+                                    <Badge key={i} className="bg-red-50 text-red-700 border-none text-[10px]">🔴 {formatKnowledgeGap(gap)}</Badge>
                                 ))}
+                            </div>
+                        </div>
+                    )}
+                    {/* Đề xuất học lên phần cao hơn (cho HS điểm cao) */}
+                    {feedback.advancement_suggestion && (
+                        <div className="mt-4 pt-4 border-t border-slate-100">
+                            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4">
+                                <h4 className="text-xs font-bold text-amber-800 flex items-center gap-1.5 mb-2">
+                                    🚀 Đề xuất phát triển
+                                </h4>
+                                <p className="text-sm text-amber-900 leading-relaxed">{feedback.advancement_suggestion}</p>
                             </div>
                         </div>
                     )}
@@ -190,7 +215,11 @@ export default function StudentFeedbackClient({ examId, classId, examTitle }: St
                     <CardContent className="p-5">
                         <div className="flex items-center justify-between mb-3">
                             <span className="text-sm font-bold text-slate-800">Hoàn thành: {completedCount}/{totalTasks} bài tập</span>
-                            {daysLeft !== null && (
+                            {isExpired ? (
+                                <Badge className="text-[10px] bg-red-50 text-red-700 border-red-200">
+                                    <Clock className="w-3 h-3 mr-1" /> Đã hết hạn
+                                </Badge>
+                            ) : daysLeft !== null && (
                                 <Badge className={`text-[10px] ${daysLeft <= 2 ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'} border-none`}>
                                     <Clock className="w-3 h-3 mr-1" /> Còn {daysLeft} ngày
                                 </Badge>
@@ -203,7 +232,7 @@ export default function StudentFeedbackClient({ examId, classId, examTitle }: St
             )}
 
             {/* Bài tập cải thiện */}
-            {totalTasks > 0 && (
+            {totalTasks > 0 && !isExpired && (
                 <div>
                     <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4">
                         <BookOpen className="w-5 h-5 text-indigo-500" /> Bài tập cải thiện ({totalTasks})
@@ -234,9 +263,15 @@ export default function StudentFeedbackClient({ examId, classId, examTitle }: St
                                             )}
                                             <div>
                                                 <h4 className={`font-bold text-sm ${isCompleted ? 'text-emerald-700' : 'text-slate-800'}`}>
-                                                    📘 Bài tập {idx + 1}: {task.title}
+                                                    {task.type === 'review' ? '📚' : task.type === 'extension' ? '🚀' : '📘'} Bài tập {idx + 1}: {task.title}
                                                 </h4>
                                                 <div className="flex items-center gap-2 mt-1">
+                                                    {task.type === 'review' && (
+                                                        <Badge className="bg-blue-50 text-blue-700 border-none text-[9px]">📚 Ôn tập</Badge>
+                                                    )}
+                                                    {task.type === 'extension' && (
+                                                        <Badge className="bg-purple-50 text-purple-700 border-none text-[9px]">🚀 Nâng cao</Badge>
+                                                    )}
                                                     <Badge className="bg-slate-100 text-slate-500 border-none text-[9px]">
                                                         <Clock className="w-2.5 h-2.5 mr-0.5" /> {task.estimated_time || '15 phút'}
                                                     </Badge>
@@ -260,7 +295,9 @@ export default function StudentFeedbackClient({ examId, classId, examTitle }: St
                                                     <h5 className="font-bold text-sm text-blue-800 flex items-center gap-1.5 mb-3">
                                                         <Lightbulb className="w-4 h-4" /> Lý thuyết nhanh
                                                     </h5>
-                                                    <p className="text-sm text-slate-700 leading-relaxed mb-3">{theory.explanation}</p>
+                                                    <div className="text-sm text-slate-700 leading-relaxed mb-3 prose prose-sm max-w-none prose-p:mb-2">
+                                                        <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{theory.explanation}</ReactMarkdown>
+                                                    </div>
                                                     {theory.formula && (
                                                         <div className="bg-white border border-blue-100 rounded-lg p-3 mb-3 font-mono text-sm text-blue-900">
                                                             📐 {theory.formula}
@@ -396,13 +433,13 @@ export default function StudentFeedbackClient({ examId, classId, examTitle }: St
             )}
 
             {/* Bài tập bổ trợ (MCQ + Tự luận) */}
-            {supQuizzes.length > 0 && (
+            {supQuizzes.length > 0 && !isExpired && (
                 <div>
                     <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4">
                         <FileQuestion className="w-5 h-5 text-purple-500" /> Bài tập bổ trợ ({supQuizzes.length})
                     </h3>
                     <div className="space-y-4">
-                        {supQuizzes.map((sq: any) => {
+                        {(showAllSupQuizzes ? supQuizzes : supQuizzes.slice(0, 2)).map((sq: any) => {
                             const isExpanded = expandedSupQuiz === sq.id;
                             const isComplete = sq.status === 'completed' || supSubmitted[sq.id];
                             const sqAnswers = supAnswers[sq.id] || {};

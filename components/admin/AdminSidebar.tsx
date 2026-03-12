@@ -13,6 +13,7 @@ import {
     ChevronRight,
     MapPin,
     Link2,
+    MessageSquare,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ export const sidebarItems = [
     { title: "Quản lý Lớp học", href: "/admin/classes", icon: School },
     { title: "Quản lý Phòng học", href: "/admin/rooms", icon: MapPin },
     { title: "Liên kết PH-HS", href: "/admin/students/link-parent", icon: Link2 },
+    { title: "Phản hồi & Hỗ trợ", href: "/admin/feedback", icon: MessageSquare }, // Added missing route
     { title: "Tài chính", href: "/admin/finance", icon: DollarSign },
 ];
 

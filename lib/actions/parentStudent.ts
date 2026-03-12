@@ -748,6 +748,108 @@ export async function fetchParentDashboardData(studentId: string) {
 }
 
 // ============================================================
+// PARENT: Fetch all notifications + announcements for parent
+// ============================================================
+export async function fetchParentNotifications(
+    studentId: string,
+    options: { limit?: number; offset?: number; filter?: 'all' | 'announcement' | 'system' } = {}
+) {
+    const { limit = 30, offset = 0, filter = 'all' } = options;
+
+    try {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { data: null, error: "Unauthorized" };
+
+        const adminSupabase = createAdminClient();
+
+        // Verify parent-student relationship
+        const { data: link } = await adminSupabase
+            .from("parent_students")
+            .select("id")
+            .eq("parent_id", user.id)
+            .eq("student_id", studentId)
+            .single();
+
+        if (!link) return { data: null, error: "Không có quyền xem" };
+
+        // Get student's class IDs
+        const { data: enrollments } = await adminSupabase
+            .from("class_students")
+            .select("class_id")
+            .eq("student_id", studentId);
+        const classIds = (enrollments || []).map((e: any) => e.class_id);
+
+        let notifications: any[] = [];
+        let announcements: any[] = [];
+
+        // 1. System notifications for the parent
+        if (filter === 'all' || filter === 'system') {
+            const { data: notifData } = await adminSupabase
+                .from("notifications")
+                .select("*")
+                .eq("user_id", user.id)
+                .order("created_at", { ascending: false })
+                .range(offset, offset + limit - 1);
+            notifications = (notifData || []).map((n: any) => ({
+                ...n,
+                source: 'notification' as const,
+                sort_date: n.created_at,
+            }));
+        }
+
+        // 2. Class announcements
+        if ((filter === 'all' || filter === 'announcement') && classIds.length > 0) {
+            const { data: annData } = await adminSupabase
+                .from("announcements")
+                .select("id, title, content, file_url, video_url, link_url, resource_type, created_at, class_id, teacher:users!announcements_teacher_id_fkey(full_name)")
+                .in("class_id", classIds)
+                .order("created_at", { ascending: false })
+                .range(offset, offset + limit - 1);
+
+            // Get class names
+            const { data: classes } = await adminSupabase
+                .from("classes")
+                .select("id, name")
+                .in("id", classIds);
+            const classMap = new Map((classes || []).map((c: any) => [c.id, c.name]));
+
+            announcements = (annData || []).map((a: any) => ({
+                ...a,
+                source: 'announcement' as const,
+                sort_date: a.created_at,
+                class_name: classMap.get(a.class_id) || "Lớp học",
+                teacher_name: Array.isArray(a.teacher) ? a.teacher[0]?.full_name : a.teacher?.full_name,
+            }));
+        }
+
+        // Merge and sort
+        const merged = [...notifications, ...announcements]
+            .sort((a, b) => new Date(b.sort_date).getTime() - new Date(a.sort_date).getTime())
+            .slice(0, limit);
+
+        // Count unread notifications
+        const { count: unreadCount } = await adminSupabase
+            .from("notifications")
+            .select("id", { count: "exact", head: true })
+            .eq("user_id", user.id)
+            .eq("is_read", false);
+
+        return {
+            data: {
+                items: merged,
+                unreadCount: unreadCount || 0,
+                classIds,
+            },
+            error: null,
+        };
+    } catch (error: any) {
+        console.error("Error fetching parent notifications:", error);
+        return { data: null, error: error.message };
+    }
+}
+
+// ============================================================
 // ADMIN: Bulk import liên kết PH-HS từ Excel
 // ============================================================
 export async function bulkLinkParentStudents(
@@ -818,5 +920,60 @@ export async function bulkLinkParentStudents(
     } catch (error: any) {
         console.error("Error bulk linking:", error);
         return { results: [], error: error.message };
+    }
+}
+
+// ============================================================
+// PARENT: Fetch Student Feedback Analysis
+// ============================================================
+export async function fetchStudentFeedbackForParent(analysisId: string, studentId: string) {
+    try {
+        const supabaseServer = await createClient();
+        const { data: { user } } = await supabaseServer.auth.getUser();
+        if (!user) return { data: null, error: "Unauthorized" };
+
+        const adminSupabase = createAdminClient();
+
+        // 1. Verify parent can view student
+        const hasAccess = await canParentViewStudent(user.id, studentId);
+        if (!hasAccess) return { data: null, error: "Access denied" };
+
+        // 2. Fetch analysis
+        const { data: analysis, error: analysisError } = await adminSupabase
+            .from("quiz_individual_analysis")
+            .select("*, exam:exams!exam_id(title, class_id)")
+            .eq("id", analysisId)
+            .eq("student_id", studentId)
+            .single();
+
+        if (analysisError || !analysis) throw new Error("Feedback not found");
+
+        // 3. Fetch progress
+        const { data: progress } = await adminSupabase
+            .from("improvement_progress")
+            .select("*")
+            .eq("analysis_id", analysisId)
+            .eq("student_id", studentId)
+            .order("task_index", { ascending: true });
+
+        // 4. Fetch supplementary quizzes (if any exist)
+        const { data: supQuizzes } = await adminSupabase
+            .from("supplementary_quizzes")
+            .select("*")
+            .eq("analysis_id", analysisId)
+            .eq("student_id", studentId)
+            .order("created_at", { ascending: false });
+
+        return { 
+            data: { 
+                ...analysis, 
+                progress: progress || [],
+                supQuizzes: supQuizzes || []
+            }, 
+            error: null 
+        };
+    } catch (error: any) {
+        console.error("Error fetching feedback for parent:", error);
+        return { data: null, error: error.message };
     }
 }

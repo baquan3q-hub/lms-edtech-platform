@@ -2,6 +2,7 @@
 
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { sendNotificationToStudentAndParents } from "@/lib/notifications/send-notification";
 
 // ============================================================
 // TEACHER: Fetch & Manage AI Analysis
@@ -124,6 +125,14 @@ export async function editAnalysis(analysisId: string, data: {
 }) {
     try {
         const adminSupabase = createAdminClient();
+
+        // Lấy thông tin bài kiểm tra để lấy user_id và title cho notification
+        const { data: analysis } = await adminSupabase
+            .from("quiz_individual_analysis")
+            .select("*, exams:exam_id(title, class_id)")
+            .eq("id", analysisId)
+            .single();
+
         const updateData: any = { status: "edited" };
         if (data.feedback !== undefined) updateData.teacher_edited_feedback = data.feedback;
         if (data.tasks !== undefined) updateData.teacher_edited_tasks = data.tasks;
@@ -135,6 +144,22 @@ export async function editAnalysis(analysisId: string, data: {
             .eq("id", analysisId);
 
         if (error) throw error;
+
+        // Gửi notification cho phụ huynh và học sinh
+        if (analysis) {
+            const examTitle = Array.isArray(analysis.exams) ? analysis.exams[0]?.title : analysis.exams?.title;
+            const classId = Array.isArray(analysis.exams) ? analysis.exams[0]?.class_id : analysis.exams?.class_id;
+
+            await sendNotificationToStudentAndParents({
+                studentId: analysis.student_id,
+                title: "📝 Nhận xét & Đề xuất học tập mới",
+                message: `Giáo viên vừa đánh giá và giao lộ trình cải thiện cho bài kiểm tra "${examTitle || 'gần đây'}".`,
+                type: "feedback",
+                link: `/parent/children/${analysis.student_id}/progress`,
+                metadata: { analysisId: analysis.id, classId },
+            });
+        }
+
         return { success: true, error: null };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -167,6 +192,70 @@ export async function updateImprovementProgress(
             .eq("student_id", user.id);
 
         if (error) throw error;
+
+        // === Tự động thông báo cho giáo viên khi HS hoàn thành task ===
+        if (status === "completed") {
+            try {
+                // Lấy thông tin progress → analysis → exam → class → teacher
+                const { data: prog } = await adminSupabase
+                    .from("improvement_progress")
+                    .select("analysis_id, task_index")
+                    .eq("id", progressId)
+                    .single();
+
+                if (prog) {
+                    const { data: analysis } = await adminSupabase
+                        .from("quiz_individual_analysis")
+                        .select("id, student_id, exam_id")
+                        .eq("id", prog.analysis_id)
+                        .single();
+
+                    if (analysis) {
+                        // Lấy thông tin student, exam, class
+                        const [{ data: student }, { data: exam }] = await Promise.all([
+                            adminSupabase.from("users").select("full_name").eq("id", analysis.student_id).single(),
+                            adminSupabase.from("exams").select("title, class_id").eq("id", analysis.exam_id).single(),
+                        ]);
+
+                        if (exam?.class_id) {
+                            const { data: cls } = await adminSupabase
+                                .from("classes").select("teacher_id").eq("id", exam.class_id).single();
+
+                            if (cls?.teacher_id) {
+                                // Kiểm tra tất cả tasks đã hoàn thành chưa
+                                const { data: allProgress } = await adminSupabase
+                                    .from("improvement_progress")
+                                    .select("status")
+                                    .eq("analysis_id", prog.analysis_id);
+
+                                const allDone = allProgress?.every((p: any) => p.status === "completed");
+                                const doneCount = allProgress?.filter((p: any) => p.status === "completed").length || 0;
+                                const totalCount = allProgress?.length || 0;
+                                const studentName = student?.full_name || "Học sinh";
+                                const examTitle = exam?.title || "bài kiểm tra";
+
+                                const message = allDone
+                                    ? `🎉 ${studentName} đã hoàn thành TẤT CẢ ${totalCount} bài tập cải thiện cho "${examTitle}". Điểm quiz: ${quizData?.quiz_score ?? 0}/${quizData?.quiz_total ?? 0}`
+                                    : `📝 ${studentName} hoàn thành bài tập ${doneCount}/${totalCount} cho "${examTitle}". Điểm quiz: ${quizData?.quiz_score ?? 0}/${quizData?.quiz_total ?? 0}`;
+
+                                await adminSupabase.from("notifications").insert({
+                                    user_id: cls.teacher_id,
+                                    title: allDone ? "✅ Học sinh hoàn thành tất cả bài tập" : "📊 Cập nhật tiến độ học sinh",
+                                    message,
+                                    type: "student_progress",
+                                    link: `/teacher/classes/${exam.class_id}/exams/${analysis.exam_id}/analytics`,
+                                    is_read: false,
+                                });
+                            }
+                        }
+                    }
+                }
+            } catch (notifyErr: any) {
+                console.error("Lỗi gửi notification cho GV:", notifyErr.message);
+                // Không throw — notification failure không ảnh hưởng kết quả chính
+            }
+        }
+
         return { success: true, error: null };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -189,6 +278,7 @@ export async function fetchSupplementaryQuizzes(examId: string) {
             .select("*")
             .eq("exam_id", examId)
             .eq("student_id", user.id)
+            .neq("status", "draft")
             .order("created_at", { ascending: false });
 
         if (error) throw error;
@@ -252,6 +342,36 @@ export async function submitSupplementaryQuiz(
             .eq("student_id", user.id);
 
         if (error) throw error;
+
+        // === Tự động thông báo cho giáo viên khi HS nộp bài bổ trợ ===
+        try {
+            if (quiz.teacher_id) {
+                const { data: student } = await adminSupabase
+                    .from("users").select("full_name").eq("id", user.id).single();
+
+                const studentName = student?.full_name || "Học sinh";
+                const essayCount = Object.keys(essayAnswers).filter(k => essayAnswers[k]?.trim()).length;
+
+                let message = `${studentName} đã hoàn thành bài bổ trợ "${quiz.title}". Trắc nghiệm: ${score}/${mcqQuestions.length}`;
+                if (essayCount > 0) {
+                    message += `. Có ${essayCount} câu tự luận cần chấm.`;
+                }
+
+                await adminSupabase.from("notifications").insert({
+                    user_id: quiz.teacher_id,
+                    title: "📝 Học sinh nộp bài bổ trợ",
+                    message,
+                    type: "student_progress",
+                    link: quiz.exam_id
+                        ? `/teacher/classes/${quiz.exam?.class_id || ""}/exams/${quiz.exam_id}/analytics`
+                        : "/teacher",
+                    is_read: false,
+                });
+            }
+        } catch (notifyErr: any) {
+            console.error("Lỗi gửi notification cho GV (supplementary):", notifyErr.message);
+        }
+
         return { success: true, score, total: mcqQuestions.length, error: null };
     } catch (error: any) {
         return { success: false, error: error.message };
@@ -348,7 +468,7 @@ export async function sendSupplementaryQuiz(quizId: string) {
             message: `Giáo viên gửi bài tập bổ trợ "${quiz.title}" với ${quiz.total_questions} câu hỏi. Hãy làm bài ngay!`,
             type: "quiz_feedback",
             link: `/student/classes/${examObj?.class_id || ''}/exams/${quiz.exam_id}/feedback`,
-            read: false
+            is_read: false
         });
 
         return { success: true, error: null };

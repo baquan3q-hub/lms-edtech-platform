@@ -8,6 +8,7 @@ import {
     Brain, Loader2, Send, Eye, CheckCircle2, Edit3, SendHorizonal, FileQuestion
 } from "lucide-react";
 import StudentFeedbackDrawer from "./StudentFeedbackDrawer";
+import { formatKnowledgeGap } from "@/lib/utils";
 
 interface AIStudentAnalysisProps {
     examId: string;
@@ -212,7 +213,7 @@ export default function AIStudentAnalysis({ examId, classId, analyses, submissio
                                         <td className="py-3 px-4 text-center">
                                             <div className="flex flex-wrap justify-center gap-1">
                                                 {(a.knowledge_gaps || []).slice(0, 3).map((gap: string, i: number) => (
-                                                    <Badge key={i} className="bg-amber-50 text-amber-700 border-none text-[9px]">{gap}</Badge>
+                                                    <Badge key={i} className="bg-amber-50 text-amber-700 border-none text-[9px]">{formatKnowledgeGap(gap)}</Badge>
                                                 ))}
                                             </div>
                                         </td>

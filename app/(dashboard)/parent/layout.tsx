@@ -24,6 +24,7 @@ export default async function ParentLayout({ children }: { children: React.React
             <ParentSidebar
                 userName={userData?.full_name || "Phụ huynh"}
                 userEmail={userData?.email || ""}
+                userId={user.id}
             />
 
             {/* Main content */}

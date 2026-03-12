@@ -12,6 +12,7 @@ import {
     CheckCircle2, Target, Users, Trophy
 } from "lucide-react";
 import { toast } from "sonner";
+import { formatKnowledgeGap } from "@/lib/utils";
 
 interface AIClassAnalysisProps {
     examId: string;
@@ -190,7 +191,7 @@ export default function AIClassAnalysis({ examId, classId, existingAnalysis, tot
                                             <Badge className={`text-[10px] ${gap.severity === 'high' ? 'bg-red-100 text-red-700' : gap.severity === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'} border-none`}>
                                                 {gap.severity === 'high' ? 'Nghiêm trọng' : gap.severity === 'medium' ? 'Trung bình' : 'Nhẹ'}
                                             </Badge>
-                                            <span className="text-xs font-semibold text-slate-800">{gap.topic}</span>
+                                            <span className="text-xs font-semibold text-slate-800">{formatKnowledgeGap(gap.topic)}</span>
                                         </div>
                                         <span className="text-xs text-slate-500">{gap.affected_students_percent}% HS yếu</span>
                                     </div>

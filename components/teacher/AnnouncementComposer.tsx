@@ -1,21 +1,31 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useCallback } from "react";
 import { createAnnouncement, deleteAnnouncement, fetchClassAnnouncements } from "@/lib/actions/announcement";
 import { fetchTeacherQuizResources } from "@/lib/actions/resourceBank";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
-    Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
     Send, Loader2, Bell, Trash2, LinkIcon, Upload, FileText,
-    Video, ListChecks, Plus, X, ExternalLink, Download, BookOpen
+    Video, ListChecks, X, ExternalLink, Download, BookOpen,
+    Pin, Users, GripVertical, File as FileIcon
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+
+interface AttachmentInfo {
+    url: string;
+    name: string;
+    size: number;
+    type: string;
+}
 
 interface AnnouncementComposerProps {
     classId: string;
@@ -26,11 +36,14 @@ export default function AnnouncementComposer({ classId, initialAnnouncements }: 
     const [announcements, setAnnouncements] = useState<any[]>(initialAnnouncements || []);
     const [title, setTitle] = useState("");
     const [content, setContent] = useState("");
-    const [fileUrl, setFileUrl] = useState("");
     const [videoUrl, setVideoUrl] = useState("");
     const [linkUrl, setLinkUrl] = useState("");
     const [sending, setSending] = useState(false);
     const [deleting, setDeleting] = useState<string | null>(null);
+
+    // Multi-file upload state
+    const [files, setFiles] = useState<File[]>([]);
+    const [uploadedAttachments, setUploadedAttachments] = useState<AttachmentInfo[]>([]);
     const [uploading, setUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -40,46 +53,139 @@ export default function AnnouncementComposer({ classId, initialAnnouncements }: 
     const [showFile, setShowFile] = useState(false);
     const [showVideo, setShowVideo] = useState(false);
 
+    // New: pinned & target roles
+    const [isPinned, setIsPinned] = useState(false);
+    const [targetStudents, setTargetStudents] = useState(true);
+    const [targetParents, setTargetParents] = useState(true);
+
     // Quiz bank dialog
     const [showQuizBank, setShowQuizBank] = useState(false);
     const [quizResources, setQuizResources] = useState<any[]>([]);
     const [loadingQuiz, setLoadingQuiz] = useState(false);
-    const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
     const [selectedQuizData, setSelectedQuizData] = useState<any>(null);
 
-    // Upload handler
-    const handleFileUpload = async (file: File) => {
-        const maxSize = 100 * 1024 * 1024;
-        if (file.size > maxSize) {
-            toast.error(`File quá lớn (${(file.size / 1024 / 1024).toFixed(1)}MB). Tối đa 100MB.`);
-            return;
+    // Drag state
+    const [isDragOver, setIsDragOver] = useState(false);
+
+    // Allowed types
+    const ALLOWED_TYPES = [
+        'application/pdf', 'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-powerpoint',
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+        'video/mp4', 'video/webm',
+    ];
+    const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB mỗi file
+    const MAX_TOTAL_SIZE = 200 * 1024 * 1024; // 200MB tổng
+
+    const getFileIcon = (type: string) => {
+        if (type?.includes("pdf")) return "📄";
+        if (type?.includes("word") || type?.includes("document")) return "📝";
+        if (type?.includes("presentation") || type?.includes("powerpoint")) return "📊";
+        if (type?.includes("image")) return "🖼️";
+        if (type?.includes("video")) return "🎥";
+        return "📎";
+    };
+
+    const formatFileSize = (bytes: number) => {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+        return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    };
+
+    // Xử lý thêm file (từ input hoặc drag & drop)
+    const handleAddFiles = useCallback((newFiles: FileList | File[]) => {
+        const fileArray = Array.from(newFiles);
+        const validFiles: File[] = [];
+        const currentTotalSize = files.reduce((sum, f) => sum + f.size, 0);
+        let addedSize = 0;
+
+        for (const file of fileArray) {
+            if (file.size > MAX_FILE_SIZE) {
+                toast.error(`"${file.name}" quá lớn (${formatFileSize(file.size)}). Tối đa 50MB/file.`);
+                continue;
+            }
+            if (currentTotalSize + addedSize + file.size > MAX_TOTAL_SIZE) {
+                toast.error(`Tổng dung lượng vượt quá 200MB.`);
+                break;
+            }
+            // Kiểm tra trùng tên
+            if (files.some(f => f.name === file.name)) {
+                toast.error(`File "${file.name}" đã được thêm.`);
+                continue;
+            }
+            validFiles.push(file);
+            addedSize += file.size;
         }
+
+        if (validFiles.length > 0) {
+            setFiles(prev => [...prev, ...validFiles]);
+            if (!showFile) setShowFile(true);
+        }
+    }, [files, showFile]);
+
+    const removeFile = (index: number) => {
+        setFiles(prev => prev.filter((_, i) => i !== index));
+    };
+
+    // Drag & drop handlers
+    const handleDragOver = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOver(true);
+    };
+    const handleDragLeave = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOver(false);
+    };
+    const handleDrop = (e: React.DragEvent) => {
+        e.preventDefault();
+        setIsDragOver(false);
+        if (e.dataTransfer.files.length > 0) {
+            handleAddFiles(e.dataTransfer.files);
+        }
+    };
+
+    // Upload tuần tự lên Supabase Storage (tránh rate limit)
+    const uploadAllFiles = async (): Promise<AttachmentInfo[]> => {
+        if (files.length === 0) return [];
+
         setUploading(true);
         setUploadProgress(0);
-        const progressInterval = setInterval(() => {
-            setUploadProgress(prev => {
-                if (prev >= 90) { clearInterval(progressInterval); return 90; }
-                return prev + Math.random() * 15;
-            });
-        }, 300);
+        const results: AttachmentInfo[] = [];
+        const supabase = createClient();
 
-        try {
-            const supabase = createClient();
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
             const ext = file.name.split(".").pop();
-            const fileName = `announcements/${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
-            const { error } = await supabase.storage.from("lesson-files").upload(fileName, file, { cacheControl: "3600", upsert: true });
-            clearInterval(progressInterval);
-            if (error) throw error;
-            const { data: urlData } = supabase.storage.from("lesson-files").getPublicUrl(fileName);
-            setUploadProgress(100);
-            setFileUrl(urlData.publicUrl);
-            toast.success("Upload thành công!");
-        } catch (err: any) {
-            clearInterval(progressInterval);
-            toast.error("Lỗi upload: " + (err.message || "Không thể tải lên"));
-        } finally {
-            setUploading(false);
+            const fileName = `${classId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+            try {
+                const { error } = await supabase.storage
+                    .from("lesson-files")
+                    .upload(`announcements/${fileName}`, file, { cacheControl: "3600", upsert: false });
+
+                if (error) throw error;
+
+                const { data: urlData } = supabase.storage
+                    .from("lesson-files")
+                    .getPublicUrl(`announcements/${fileName}`);
+
+                results.push({
+                    url: urlData.publicUrl,
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                });
+            } catch (err: any) {
+                toast.error(`Lỗi upload "${file.name}": ${err.message}`);
+            }
+
+            setUploadProgress(Math.round(((i + 1) / files.length) * 100));
         }
+
+        setUploading(false);
+        return results;
     };
 
     // Open quiz bank
@@ -92,7 +198,6 @@ export default function AnnouncementComposer({ classId, initialAnnouncements }: 
     };
 
     const selectQuiz = (resource: any) => {
-        setSelectedQuizId(resource.id);
         setSelectedQuizData(resource.content);
         setShowQuizBank(false);
         toast.success(`Đã đính kèm bộ đề "${resource.title}"`);
@@ -103,13 +208,27 @@ export default function AnnouncementComposer({ classId, initialAnnouncements }: 
         if (!title.trim()) { toast.error("Vui lòng nhập tiêu đề thông báo"); return; }
 
         setSending(true);
+
+        // Upload files trước
+        let attachments: AttachmentInfo[] = [];
+        if (files.length > 0) {
+            attachments = await uploadAllFiles();
+        }
+
+        // Xây dựng target_roles
+        const targetRoles: string[] = [];
+        if (targetStudents) targetRoles.push("student");
+        if (targetParents) targetRoles.push("parent");
+
         const res = await createAnnouncement(classId, {
             title: title.trim(),
             content: content.trim() || undefined,
-            file_url: fileUrl || undefined,
             video_url: videoUrl || undefined,
             link_url: linkUrl || undefined,
             quiz_data: selectedQuizData || undefined,
+            attachments: attachments.length > 0 ? attachments : undefined,
+            target_roles: targetRoles,
+            is_pinned: isPinned,
         });
 
         if (res.error) {
@@ -117,20 +236,12 @@ export default function AnnouncementComposer({ classId, initialAnnouncements }: 
         } else {
             toast.success("Đã gửi thông báo thành công!");
             // Reset form
-            setTitle("");
-            setContent("");
-            setFileUrl("");
-            setVideoUrl("");
-            setLinkUrl("");
-            setSelectedQuizId(null);
+            setTitle(""); setContent(""); setVideoUrl(""); setLinkUrl("");
             setSelectedQuizData(null);
-            setShowLink(false);
-            setShowFile(false);
-            setShowVideo(false);
-            // Add to list
-            if (res.data) {
-                setAnnouncements(prev => [res.data, ...prev]);
-            }
+            setShowLink(false); setShowFile(false); setShowVideo(false);
+            setFiles([]); setUploadedAttachments([]);
+            setIsPinned(false); setTargetStudents(true); setTargetParents(true);
+            if (res.data) setAnnouncements(prev => [res.data, ...prev]);
         }
         setSending(false);
     };
@@ -152,7 +263,12 @@ export default function AnnouncementComposer({ classId, initialAnnouncements }: 
     return (
         <div className="space-y-6">
             {/* === COMPOSER === */}
-            <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
+            <div
+                className={`bg-white border rounded-2xl shadow-sm overflow-hidden transition-all ${isDragOver ? "border-amber-400 ring-2 ring-amber-200 bg-amber-50/30" : "border-slate-200"}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+            >
                 <div className="bg-gradient-to-r from-amber-50 to-orange-50 px-5 py-3 border-b border-amber-100">
                     <h3 className="font-bold text-slate-800 flex items-center gap-2">
                         <Bell className="w-4 h-4 text-amber-500" />
@@ -182,6 +298,37 @@ export default function AnnouncementComposer({ classId, initialAnnouncements }: 
                         />
                     </div>
 
+                    {/* Settings: Pin + Target Roles */}
+                    <div className="flex flex-wrap items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                        <div className="flex items-center gap-2">
+                            <Switch checked={isPinned} onCheckedChange={setIsPinned} id="pin-toggle" />
+                            <label htmlFor="pin-toggle" className="text-xs font-medium text-slate-600 flex items-center gap-1 cursor-pointer">
+                                <Pin className="w-3.5 h-3.5" /> Ghim thông báo
+                            </label>
+                        </div>
+                        <div className="w-px h-6 bg-slate-200" />
+                        <div className="flex items-center gap-1">
+                            <Users className="w-3.5 h-3.5 text-slate-400 mr-1" />
+                            <span className="text-xs font-medium text-slate-500">Gửi đến:</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Checkbox
+                                id="target-students"
+                                checked={targetStudents}
+                                onCheckedChange={(v) => setTargetStudents(!!v)}
+                            />
+                            <label htmlFor="target-students" className="text-xs text-slate-600 cursor-pointer">Học sinh</label>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Checkbox
+                                id="target-parents"
+                                checked={targetParents}
+                                onCheckedChange={(v) => setTargetParents(!!v)}
+                            />
+                            <label htmlFor="target-parents" className="text-xs text-slate-600 cursor-pointer">Phụ huynh</label>
+                        </div>
+                    </div>
+
                     {/* Attachment toolbar */}
                     <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-xs font-semibold text-slate-500">Đính kèm:</span>
@@ -194,7 +341,7 @@ export default function AnnouncementComposer({ classId, initialAnnouncements }: 
                         </Button>
                         <Button
                             variant="outline" size="sm"
-                            onClick={() => setShowFile(!showFile)}
+                            onClick={() => { setShowFile(!showFile); if (!showFile) fileInputRef.current?.click(); }}
                             className={`text-xs h-8 ${showFile ? 'bg-blue-50 text-blue-600 border-blue-300' : ''}`}
                         >
                             <FileText className="w-3.5 h-3.5 mr-1" /> File / Tài liệu
@@ -231,51 +378,75 @@ export default function AnnouncementComposer({ classId, initialAnnouncements }: 
                         </div>
                     )}
 
-                    {/* File upload */}
+                    {/* Multi-file upload zone */}
                     {showFile && (
-                        <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 space-y-2">
-                            {fileUrl ? (
-                                <div className="flex items-center gap-2">
-                                    <FileText className="w-4 h-4 text-blue-500 shrink-0" />
-                                    <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline truncate flex-1">
-                                        {fileUrl.split("/").pop()?.slice(0, 40)}...
-                                    </a>
-                                    <Button variant="ghost" size="sm" onClick={() => setFileUrl("")} className="h-7 w-7 p-0 text-red-400">
-                                        <Trash2 className="w-3 h-3" />
-                                    </Button>
+                        <div className="p-4 bg-blue-50 rounded-xl border border-blue-200 space-y-3">
+                            {/* File list */}
+                            {files.length > 0 && (
+                                <div className="space-y-2">
+                                    {files.map((file, idx) => (
+                                        <div key={idx} className="flex items-center gap-2 p-2 bg-white rounded-lg border border-blue-100">
+                                            <span className="text-base shrink-0">{getFileIcon(file.type)}</span>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-sm font-medium text-slate-700 truncate">{file.name}</p>
+                                                <p className="text-[10px] text-slate-400">{formatFileSize(file.size)}</p>
+                                            </div>
+                                            <Button
+                                                variant="ghost" size="sm"
+                                                onClick={() => removeFile(idx)}
+                                                className="h-7 w-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
+                                            >
+                                                <X className="w-3.5 h-3.5" />
+                                            </Button>
+                                        </div>
+                                    ))}
                                 </div>
-                            ) : uploading ? (
+                            )}
+
+                            {/* Upload progress */}
+                            {uploading && (
                                 <div className="flex items-center gap-3">
-                                    <Loader2 className="w-5 h-5 text-blue-500 animate-spin" />
+                                    <Loader2 className="w-5 h-5 text-blue-500 animate-spin shrink-0" />
                                     <div className="flex-1">
-                                        <p className="text-xs font-medium text-blue-700">Đang tải lên... {Math.round(uploadProgress)}%</p>
+                                        <p className="text-xs font-medium text-blue-700">Đang tải lên... {uploadProgress}%</p>
                                         <div className="w-full bg-blue-200 rounded-full h-1.5 mt-1">
                                             <div className="bg-blue-500 h-1.5 rounded-full transition-all" style={{ width: `${uploadProgress}%` }} />
                                         </div>
                                     </div>
                                 </div>
-                            ) : (
+                            )}
+
+                            {/* Add more files */}
+                            {!uploading && (
                                 <div className="flex items-center gap-2">
                                     <Button
                                         variant="outline" size="sm"
                                         onClick={() => fileInputRef.current?.click()}
-                                        className="text-xs bg-white border-blue-200 text-blue-600"
+                                        className="text-xs bg-white border-blue-200 text-blue-600 hover:bg-blue-100"
                                     >
-                                        <Upload className="w-3.5 h-3.5 mr-1" /> Chọn file
+                                        <Upload className="w-3.5 h-3.5 mr-1" />
+                                        {files.length > 0 ? "Thêm file" : "Chọn file"}
                                     </Button>
-                                    <span className="text-xs text-blue-500">hoặc dán link:</span>
-                                    <Input
-                                        placeholder="https://drive.google.com/..."
-                                        value={fileUrl}
-                                        onChange={(e) => setFileUrl(e.target.value)}
-                                        className="flex-1 h-8 text-xs"
-                                    />
-                                    <Button variant="ghost" size="sm" onClick={() => { setShowFile(false); setFileUrl(""); }} className="h-8 w-8 p-0 text-slate-400">
+                                    <span className="text-[10px] text-blue-400">
+                                        Kéo thả hoặc click • PDF, DOCX, PPTX, Ảnh, Video • Tối đa 50MB/file
+                                    </span>
+                                    <Button variant="ghost" size="sm" onClick={() => { setShowFile(false); setFiles([]); }} className="h-8 w-8 p-0 text-slate-400 ml-auto">
                                         <X className="w-4 h-4" />
                                     </Button>
-                                    <input ref={fileInputRef} type="file" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }} />
                                 </div>
                             )}
+
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                className="hidden"
+                                multiple
+                                accept=".pdf,.doc,.docx,.ppt,.pptx,.jpg,.jpeg,.png,.gif,.webp,.mp4,.webm"
+                                onChange={(e) => {
+                                    if (e.target.files) handleAddFiles(e.target.files);
+                                    e.target.value = "";
+                                }}
+                            />
                         </div>
                     )}
 
@@ -302,17 +473,30 @@ export default function AnnouncementComposer({ classId, initialAnnouncements }: 
                             <span className="text-sm text-indigo-700 font-medium flex-1">
                                 Đã đính kèm bộ trắc nghiệm ({selectedQuizData.questions?.length || 0} câu hỏi)
                             </span>
-                            <Button variant="ghost" size="sm" onClick={() => { setSelectedQuizId(null); setSelectedQuizData(null); }} className="h-7 w-7 p-0 text-red-400">
+                            <Button variant="ghost" size="sm" onClick={() => setSelectedQuizData(null)} className="h-7 w-7 p-0 text-red-400">
                                 <X className="w-4 h-4" />
                             </Button>
                         </div>
                     )}
 
+                    {/* Drag overlay */}
+                    {isDragOver && (
+                        <div className="flex items-center justify-center p-8 border-2 border-dashed border-amber-400 rounded-xl bg-amber-50/50">
+                            <div className="text-center">
+                                <Upload className="w-8 h-8 text-amber-500 mx-auto mb-2" />
+                                <p className="text-sm font-semibold text-amber-700">Thả file vào đây</p>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Send button */}
-                    <div className="flex justify-end pt-2">
+                    <div className="flex justify-between items-center pt-2">
+                        <div className="text-[10px] text-slate-400">
+                            {files.length > 0 && `📎 ${files.length} file • ${formatFileSize(files.reduce((s, f) => s + f.size, 0))}`}
+                        </div>
                         <Button
                             onClick={handleSend}
-                            disabled={sending || !title.trim()}
+                            disabled={sending || uploading || !title.trim()}
                             className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-6"
                         >
                             {sending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
@@ -383,13 +567,20 @@ export default function AnnouncementComposer({ classId, initialAnnouncements }: 
                     </div>
                 ) : (
                     announcements.map((ann: any) => (
-                        <div key={ann.id} className="border border-amber-100 bg-amber-50/50 rounded-xl p-4 group">
+                        <div key={ann.id} className={`border rounded-xl p-4 group transition-all ${ann.is_pinned ? "border-amber-300 bg-amber-50/50 ring-1 ring-amber-200" : "border-amber-100 bg-amber-50/50"}`}>
                             <div className="flex items-start gap-3">
                                 <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                                    <Bell className="w-4 h-4 text-amber-600" />
+                                    {ann.is_pinned ? <Pin className="w-4 h-4 text-amber-600" /> : <Bell className="w-4 h-4 text-amber-600" />}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <h4 className="font-semibold text-slate-900 text-sm">{ann.title}</h4>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <h4 className="font-semibold text-slate-900 text-sm">{ann.title}</h4>
+                                        {ann.is_pinned && (
+                                            <Badge className="bg-amber-100 text-amber-700 border-amber-200 text-[9px]" variant="outline">
+                                                <Pin className="w-2.5 h-2.5 mr-0.5" /> Ghim
+                                            </Badge>
+                                        )}
+                                    </div>
                                     {ann.content && (
                                         <p className="text-xs text-slate-600 mt-1 whitespace-pre-wrap">{ann.content}</p>
                                     )}
@@ -400,6 +591,12 @@ export default function AnnouncementComposer({ classId, initialAnnouncements }: 
                                                className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 border border-blue-200 rounded-md text-[10px] font-semibold hover:bg-blue-100 transition-colors">
                                                 <Download className="w-3 h-3" /> Tài liệu
                                             </a>
+                                        )}
+                                        {/* Multi-file attachments */}
+                                        {ann.attachments && ann.attachments.length > 0 && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 border border-blue-200 rounded-md text-[10px] font-semibold">
+                                                📎 {ann.attachments.length} file
+                                            </span>
                                         )}
                                         {ann.video_url && (
                                             <a href={ann.video_url} target="_blank" rel="noopener noreferrer"
@@ -416,6 +613,11 @@ export default function AnnouncementComposer({ classId, initialAnnouncements }: 
                                         {ann.quiz_data && (
                                             <span className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 text-indigo-600 border border-indigo-200 rounded-md text-[10px] font-semibold">
                                                 <ListChecks className="w-3 h-3" /> Quiz ({ann.quiz_data?.questions?.length || 0} câu)
+                                            </span>
+                                        )}
+                                        {ann.target_roles && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-slate-50 text-slate-500 border border-slate-200 rounded-md text-[10px]">
+                                                <Users className="w-3 h-3" /> {ann.target_roles?.join(", ")}
                                             </span>
                                         )}
                                     </div>

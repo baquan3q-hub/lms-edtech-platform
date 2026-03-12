@@ -14,12 +14,27 @@ import {
     Tooltip,
     ResponsiveContainer,
     Area,
-    AreaChart
+    AreaChart,
+    RadarChart,
+    Radar,
+    PolarGrid,
+    PolarAngleAxis,
+    PolarRadiusAxis,
 } from "recharts";
-import { TrendingUp, Users, BookOpen, Clock, Target, Award, Star, SearchX } from "lucide-react";
+import { 
+    TrendingUp, Users, BookOpen, Clock, Target, Award, Star, SearchX,
+    MessageSquare, AlertTriangle, ChevronDown, ChevronUp, CheckCircle2, Circle
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
 
 interface ClassStats {
     class_id: string;
@@ -47,17 +62,36 @@ interface ScoreHistory {
     exam: string;
 }
 
+interface CompetencyAxis {
+    key: string;
+    label: string;
+    value: number;
+    icon: string;
+}
+
+interface CompetencyData {
+    axes: CompetencyAxis[];
+    strengths: CompetencyAxis[];
+    weaknesses: CompetencyAxis[];
+    overallScore: number;
+}
+
 interface ParentProgressClientProps {
     students: { id: string; name: string; avatar_url?: string }[];
     activeStudentId: string;
     activeStudentName: string;
     stats: ClassStats[];
     history: ScoreHistory[];
+    feedbackList: any[];
+    competencyData: CompetencyData | null;
 }
 
-export default function ParentProgressClient({ students, activeStudentId, activeStudentName, stats, history }: ParentProgressClientProps) {
+export default function ParentProgressClient({ students, activeStudentId, activeStudentName, stats, history, feedbackList, competencyData }: ParentProgressClientProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const [selectedFeedback, setSelectedFeedback] = useState<any>(null);
+    const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+    const [showAllFeedback, setShowAllFeedback] = useState(false);
 
     const handleStudentChange = (newStudentId: string) => {
         const params = new URLSearchParams(searchParams.toString());
@@ -75,6 +109,20 @@ export default function ParentProgressClient({ students, activeStudentId, active
         if (score >= 6.5) return "text-amber-600 font-bold";
         return "text-red-600 font-bold";
     };
+
+    const getCompetencyLabel = (value: number) => {
+        if (value >= 80) return { text: "Xuất sắc", color: "text-emerald-600 bg-emerald-50" };
+        if (value >= 60) return { text: "Tốt", color: "text-blue-600 bg-blue-50" };
+        if (value >= 40) return { text: "Trung bình", color: "text-amber-600 bg-amber-50" };
+        return { text: "Cần cải thiện", color: "text-red-600 bg-red-50" };
+    };
+
+    const openFeedbackDetail = (fb: any) => {
+        setSelectedFeedback(fb);
+        setFeedbackModalOpen(true);
+    };
+
+    const displayedFeedback = showAllFeedback ? feedbackList : feedbackList.slice(0, 3);
 
     // Tooltip custom cho Recharts
     const CustomTooltip = ({ active, payload, label }: any) => {
@@ -185,20 +233,225 @@ export default function ParentProgressClient({ students, activeStudentId, active
                     </CardContent>
                 </Card>
 
-                <Card className="shadow-sm border-amber-100 bg-amber-50/30">
+                <Card className="shadow-sm border-purple-100 bg-purple-50/30">
                     <CardContent className="p-6">
                         <div className="flex justify-between items-start mb-4">
-                            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+                            <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center text-purple-600">
                                 <Star className="w-5 h-5" />
                             </div>
                         </div>
-                        <p className="text-sm font-medium text-slate-500">Đánh Giá Chung</p>
+                        <p className="text-sm font-medium text-slate-500">Năng lực Tổng hợp</p>
                         <h4 className="text-3xl font-black text-slate-800 mt-1">
-                            Tốt
+                            {competencyData?.overallScore ?? '—'}<span className="text-lg font-medium text-slate-500">/100</span>
                         </h4>
                     </CardContent>
                 </Card>
             </div>
+
+            {/* ===================== BIỂU ĐỒ NĂNG LỰC (RADAR CHART) ===================== */}
+            {competencyData && (
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
+                    {/* Radar Chart */}
+                    <Card className="lg:col-span-3 shadow-sm overflow-hidden">
+                        <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-100">
+                            <CardTitle className="flex items-center gap-2">
+                                <Target className="w-5 h-5 text-indigo-600" /> Biểu đồ Năng lực
+                            </CardTitle>
+                            <CardDescription>
+                                Đánh giá toàn diện dựa trên Bloom&apos;s Taxonomy & Competency-Based Education
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="pt-6 pb-2">
+                            <div className="h-[350px] w-full">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <RadarChart data={competencyData.axes.map(a => ({ subject: a.label, value: a.value, fullMark: 100 }))}>
+                                        <PolarGrid stroke="#e2e8f0" />
+                                        <PolarAngleAxis
+                                            dataKey="subject"
+                                            tick={{ fill: '#475569', fontSize: 13, fontWeight: 600 }}
+                                        />
+                                        <PolarRadiusAxis
+                                            angle={30}
+                                            domain={[0, 100]}
+                                            tick={{ fill: '#94a3b8', fontSize: 10 }}
+                                        />
+                                        <Radar
+                                            name="Năng lực"
+                                            dataKey="value"
+                                            stroke="#6366f1"
+                                            fill="#6366f1"
+                                            fillOpacity={0.25}
+                                            strokeWidth={2}
+                                        />
+                                    </RadarChart>
+                                </ResponsiveContainer>
+                            </div>
+                            {/* Axis detail grid */}
+                            <div className="grid grid-cols-3 gap-3 mt-4 px-2">
+                                {competencyData.axes.map(axis => {
+                                    const label = getCompetencyLabel(axis.value);
+                                    return (
+                                        <div key={axis.key} className="flex items-center gap-2 p-2.5 rounded-lg bg-slate-50 border border-slate-100">
+                                            <span className="text-lg">{axis.icon}</span>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-semibold text-slate-700 truncate">{axis.label}</p>
+                                                <p className="text-lg font-black text-slate-900">{axis.value}</p>
+                                            </div>
+                                            <Badge className={`text-[9px] border-none shrink-0 ${label.color}`}>{label.text}</Badge>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Strengths & Weaknesses Panel */}
+                    <Card className="lg:col-span-2 shadow-sm flex flex-col">
+                        <CardHeader className="bg-gradient-to-r from-emerald-50 to-amber-50 border-b border-emerald-100">
+                            <CardTitle className="flex items-center gap-2">
+                                <Award className="w-5 h-5 text-emerald-600" /> Điểm mạnh & Điểm yếu
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-5 flex-1 flex flex-col gap-6">
+                            {/* Strengths */}
+                            <div>
+                                <h4 className="text-sm font-bold text-emerald-700 flex items-center gap-1.5 mb-3">
+                                    <CheckCircle2 className="w-4 h-4" /> Điểm mạnh nổi bật
+                                </h4>
+                                {competencyData.strengths.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {competencyData.strengths.map(s => (
+                                            <div key={s.key} className="flex items-center gap-3 p-3 bg-emerald-50/70 rounded-xl border border-emerald-100">
+                                                <span className="text-xl">{s.icon}</span>
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-bold text-emerald-800">{s.label}</p>
+                                                    <p className="text-xs text-emerald-600">Đạt {s.value}/100 điểm</p>
+                                                </div>
+                                                <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs">
+                                                    {s.value >= 80 ? '🌟 Xuất sắc' : '✅ Tốt'}
+                                                </Badge>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-slate-400 italic">Chưa đủ dữ liệu để đánh giá</p>
+                                )}
+                            </div>
+
+                            {/* Weaknesses */}
+                            <div>
+                                <h4 className="text-sm font-bold text-amber-700 flex items-center gap-1.5 mb-3">
+                                    <AlertTriangle className="w-4 h-4" /> Cần cải thiện
+                                </h4>
+                                {competencyData.weaknesses.length > 0 ? (
+                                    <div className="space-y-2">
+                                        {competencyData.weaknesses.map(w => (
+                                            <div key={w.key} className="flex items-center gap-3 p-3 bg-amber-50/70 rounded-xl border border-amber-100">
+                                                <span className="text-xl">{w.icon}</span>
+                                                <div className="flex-1">
+                                                    <p className="text-sm font-bold text-amber-800">{w.label}</p>
+                                                    <p className="text-xs text-amber-600">Hiện tại: {w.value}/100 điểm</p>
+                                                </div>
+                                                <Badge className="bg-amber-100 text-amber-700 border-none text-xs">
+                                                    {w.value < 40 ? '⚠️ Yếu' : '📈 TB'}
+                                                </Badge>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <p className="text-sm text-emerald-500 font-medium">🎉 Tuyệt vời! Không có kỹ năng nào cần cải thiện.</p>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
+
+            {/* ===================== NHẬN XÉT TỪ GIÁO VIÊN ===================== */}
+            {feedbackList.length > 0 && (
+                <Card className="shadow-sm overflow-hidden">
+                    <CardHeader className="bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-100">
+                        <CardTitle className="flex items-center gap-2">
+                            <MessageSquare className="w-5 h-5 text-purple-600" /> Nhận xét từ Giáo viên ({feedbackList.length})
+                        </CardTitle>
+                        <CardDescription>Nhận xét chi tiết về bài kiểm tra và đề xuất cải thiện</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <div className="divide-y divide-slate-100">
+                            {displayedFeedback.map((fb: any) => {
+                                const examObj = Array.isArray(fb.exam) ? fb.exam[0] : fb.exam;
+                                const subObj = Array.isArray(fb.submission) ? fb.submission[0] : fb.submission;
+                                const score = subObj?.score;
+                                const totalP = examObj?.total_points || 10;
+                                const norm = score != null ? ((score / totalP) * 10).toFixed(1) : null;
+                                const displayFeedback = fb.teacher_edited_feedback || fb.ai_feedback || "";
+                                const tasks = fb.teacher_edited_tasks || fb.improvement_tasks || [];
+                                const progress = fb.improvement_progress || [];
+                                const completedTasks = progress.filter((p: any) => p.status === 'completed').length;
+
+                                return (
+                                    <div
+                                        key={fb.id}
+                                        className="p-5 hover:bg-slate-50/50 transition-colors cursor-pointer"
+                                        onClick={() => openFeedbackDetail(fb)}
+                                    >
+                                        <div className="flex items-start justify-between gap-4">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <h4 className="text-sm font-bold text-slate-800 truncate">
+                                                        📝 {examObj?.title || 'Bài kiểm tra'}
+                                                    </h4>
+                                                    {norm && (
+                                                        <Badge className={`text-[10px] border-none shrink-0 ${
+                                                            parseFloat(norm) >= 8 ? 'bg-emerald-50 text-emerald-700'
+                                                            : parseFloat(norm) >= 6 ? 'bg-amber-50 text-amber-700'
+                                                            : 'bg-red-50 text-red-700'
+                                                        }`}>
+                                                            Điểm: {norm}/10
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                                <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{displayFeedback}</p>
+                                                <div className="flex items-center gap-3 mt-2">
+                                                    {tasks.length > 0 && (
+                                                        <Badge className="bg-indigo-50 text-indigo-600 border-none text-[9px]">
+                                                            📚 {completedTasks}/{tasks.length} bài tập hoàn thành
+                                                        </Badge>
+                                                    )}
+                                                    {fb.knowledge_gaps && fb.knowledge_gaps.length > 0 && (
+                                                        <Badge className="bg-red-50 text-red-600 border-none text-[9px]">
+                                                            ⚠️ {fb.knowledge_gaps.length} kiến thức cần cải thiện
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="text-[10px] text-slate-400 font-medium whitespace-nowrap">
+                                                {fb.sent_at && new Date(fb.sent_at).toLocaleDateString("vi-VN")}
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {feedbackList.length > 3 && (
+                            <div className="p-3 border-t border-slate-100 text-center">
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => setShowAllFeedback(!showAllFeedback)}
+                                    className="text-purple-600 hover:text-purple-700"
+                                >
+                                    {showAllFeedback ? (
+                                        <><ChevronUp className="w-4 h-4 mr-1" /> Thu gọn</>
+                                    ) : (
+                                        <><ChevronDown className="w-4 h-4 mr-1" /> Xem thêm {feedbackList.length - 3} nhận xét</>
+                                    )}
+                                </Button>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -352,6 +605,116 @@ export default function ParentProgressClient({ students, activeStudentId, active
                     </div>
                 </CardContent>
             </Card>
+
+            {/* ===================== FEEDBACK DETAIL DIALOG ===================== */}
+            <Dialog open={feedbackModalOpen} onOpenChange={setFeedbackModalOpen}>
+                <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-0 bg-slate-50">
+                    <DialogHeader className="p-5 bg-white border-b border-slate-100 shrink-0">
+                        <DialogTitle className="text-xl font-bold flex items-center gap-2 text-indigo-900">
+                            <BookOpen className="w-5 h-5 text-indigo-500" />
+                            Chi tiết Nhận xét & Đề xuất
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    {selectedFeedback && (() => {
+                        const examObj = Array.isArray(selectedFeedback.exam) ? selectedFeedback.exam[0] : selectedFeedback.exam;
+                        const subObj = Array.isArray(selectedFeedback.submission) ? selectedFeedback.submission[0] : selectedFeedback.submission;
+                        const score = subObj?.score;
+                        const totalP = examObj?.total_points || 10;
+                        const norm = score != null ? ((score / totalP) * 10).toFixed(1) : null;
+                        const displayFb = selectedFeedback.teacher_edited_feedback || selectedFeedback.ai_feedback || "";
+                        const tasks = selectedFeedback.teacher_edited_tasks || selectedFeedback.improvement_tasks || [];
+                        const progress = selectedFeedback.improvement_progress || [];
+
+                        return (
+                            <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                                {/* Exam Info */}
+                                <div className="bg-white rounded-xl p-4 border border-slate-200 flex items-center justify-between">
+                                    <div>
+                                        <h3 className="font-bold text-slate-900">📝 {examObj?.title || 'Bài kiểm tra'}</h3>
+                                        <p className="text-xs text-slate-500 mt-0.5">
+                                            Gửi ngày: {selectedFeedback.sent_at ? new Date(selectedFeedback.sent_at).toLocaleDateString("vi-VN") : '—'}
+                                        </p>
+                                    </div>
+                                    {norm && (
+                                        <div className={`text-center px-4 py-2 rounded-xl ${
+                                            parseFloat(norm) >= 8 ? 'bg-emerald-50 text-emerald-700'
+                                            : parseFloat(norm) >= 6 ? 'bg-amber-50 text-amber-700'
+                                            : 'bg-red-50 text-red-700'
+                                        }`}>
+                                            <p className="text-2xl font-black">{norm}</p>
+                                            <p className="text-[10px] font-medium">/ 10 điểm</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Teacher Feedback */}
+                                <div className="bg-white rounded-xl border border-indigo-100 overflow-hidden">
+                                    <div className="bg-indigo-50/50 px-5 py-3 border-b border-indigo-100">
+                                        <h3 className="font-bold text-indigo-900 flex items-center gap-2">
+                                            <MessageSquare className="w-4 h-4 text-indigo-500" /> Nhận xét từ Giáo viên
+                                        </h3>
+                                    </div>
+                                    <div className="p-5">
+                                        <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{displayFb}</p>
+
+                                        {selectedFeedback.knowledge_gaps && selectedFeedback.knowledge_gaps.length > 0 && (
+                                            <div className="mt-4 pt-4 border-t border-slate-100">
+                                                <h4 className="text-xs font-bold text-amber-700 flex items-center gap-1.5 mb-2">
+                                                    <AlertTriangle className="w-3.5 h-3.5" /> Kiến thức cần cải thiện
+                                                </h4>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {selectedFeedback.knowledge_gaps.map((gap: string, i: number) => (
+                                                        <Badge key={i} className="bg-red-50 text-red-700 border-none text-[10px]">🔴 {gap}</Badge>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Improvement Tasks */}
+                                {tasks.length > 0 && (
+                                    <div>
+                                        <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-3">
+                                            <BookOpen className="w-5 h-5 text-indigo-500" /> Bài tập cải thiện ({tasks.length})
+                                        </h3>
+                                        <div className="space-y-2">
+                                            {tasks.map((task: any, idx: number) => {
+                                                const prog = progress.find((p: any) => p.task_index === idx);
+                                                const isCompleted = prog?.status === 'completed';
+
+                                                return (
+                                                    <div key={idx} className={`p-3 rounded-xl border ${isCompleted ? 'bg-emerald-50/30 border-emerald-200' : 'bg-white border-slate-200'}`}>
+                                                        <div className="flex items-center gap-3">
+                                                            {isCompleted ? (
+                                                                <CheckCircle2 className="w-5 h-5 text-emerald-500 shrink-0" />
+                                                            ) : (
+                                                                <Circle className="w-5 h-5 text-slate-300 shrink-0" />
+                                                            )}
+                                                            <div className="flex-1">
+                                                                <h4 className={`font-bold text-sm ${isCompleted ? 'text-emerald-700' : 'text-slate-800'}`}>
+                                                                    Bài {idx + 1}: {task.title}
+                                                                </h4>
+                                                                {isCompleted && prog?.quiz_score != null && (
+                                                                    <p className="text-xs text-emerald-600 mt-0.5">
+                                                                        ✅ Quiz: {prog.quiz_score}/{prog.quiz_total}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })()}
+                </DialogContent>
+            </Dialog>
+
                 </div>
             )}
         </div>

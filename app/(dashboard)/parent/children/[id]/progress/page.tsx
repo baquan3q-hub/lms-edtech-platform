@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import ParentProgressClient from "./ParentProgressClient";
-import { getStudentProgressStats } from "@/lib/actions/parent-progress";
+import { getStudentProgressStats, getStudentFeedbackList, getStudentCompetencyData } from "@/lib/actions/parent-progress";
 
 export const dynamic = "force-dynamic";
 
@@ -29,19 +29,37 @@ export default async function ParentChildProgressPage({
         redirect(`/${userData?.role || "login"}`);
     }
 
-    // 2. Fetch student details to ensure parent has link
+    // 2. Fetch student details to ensure parent has link or if user is admin
     const adminSupabase = createAdminClient();
-    const { data: parentLink } = await adminSupabase
-        .from("parent_students")
-        .select(`
-            student_id,
-            student:users!student_id(full_name, avatar_url)
-        `)
-        .eq("parent_id", user.id)
-        .eq("student_id", params.id)
-        .single();
+    let studentInfo: any = null;
 
-    if (!parentLink) {
+    if (userData?.role === "admin") {
+        const { data: studentItem } = await adminSupabase
+            .from("users")
+            .select("id as student_id, full_name, avatar_url")
+            .eq("id", params.id)
+            .single();
+        
+        if (studentItem) {
+            studentInfo = studentItem;
+        }
+    } else {
+        const { data: parentLink } = await adminSupabase
+            .from("parent_students")
+            .select(`
+                student_id,
+                student:users!student_id(full_name, avatar_url)
+            `)
+            .eq("parent_id", user.id)
+            .eq("student_id", params.id)
+            .single();
+
+        if (parentLink) {
+            studentInfo = Array.isArray(parentLink.student) ? parentLink.student[0] : parentLink.student;
+        }
+    }
+
+    if (!studentInfo) {
         return (
             <div className="p-6">
                 <div className="bg-red-50 text-red-600 p-4 rounded-lg">
@@ -51,9 +69,12 @@ export default async function ParentChildProgressPage({
         );
     }
 
-    // 3. Fetch progress stats
-    const studentInfo = Array.isArray(parentLink.student) ? parentLink.student[0] : parentLink.student;
-    const { data: progressData } = await getStudentProgressStats(params.id);
+    // 3. Fetch all data in parallel
+    const [progressRes, feedbackRes, competencyRes] = await Promise.all([
+        getStudentProgressStats(params.id),
+        getStudentFeedbackList(params.id),
+        getStudentCompetencyData(params.id),
+    ]);
 
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -69,9 +90,12 @@ export default async function ParentChildProgressPage({
             <ParentProgressClient
                 studentId={params.id}
                 studentName={studentInfo.full_name}
-                stats={progressData?.stats || []}
-                history={progressData?.history || []}
+                stats={progressRes?.data?.stats || []}
+                history={progressRes?.data?.history || []}
+                feedbackList={feedbackRes?.data || []}
+                competencyData={competencyRes?.data || null}
             />
         </div>
     );
 }
+

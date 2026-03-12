@@ -4,12 +4,13 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
 import ParentAvatarSection from "./ParentAvatarSection";
-import { ChevronLeft, ChevronRight, LayoutDashboard, Link2, TrendingUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, LayoutDashboard, Link2, TrendingUp, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const navItems = [
     { href: "/parent", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/parent/notifications", label: "Thông báo", icon: Bell },
     { href: "/parent/progress", label: "Điểm số & Tiến độ", icon: TrendingUp },
     { href: "/parent/link-student", label: "Liên kết con em", icon: Link2 },
 ];
@@ -17,9 +18,10 @@ const navItems = [
 interface ParentSidebarProps {
     userName: string;
     userEmail: string;
+    userId?: string;
 }
 
-export default function ParentSidebar({ userName, userEmail }: ParentSidebarProps) {
+export default function ParentSidebar({ userName, userEmail, userId }: ParentSidebarProps) {
     const pathname = usePathname();
     const [isCollapsed, setIsCollapsed] = useState(false);
 
@@ -97,6 +99,7 @@ export default function ParentSidebar({ userName, userEmail }: ParentSidebarProp
                     fullName={userName}
                     email={userEmail}
                     compact={isCollapsed}
+                    userId={userId}
                 />
             </div>
         </aside>

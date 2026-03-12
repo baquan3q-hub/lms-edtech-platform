@@ -2,6 +2,166 @@ import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGeminiModel } from "@/lib/gemini";
 
+// ============================================================
+// Prompt cho học sinh điểm cao (≥85%): Khen ngợi + bài tập thử thách
+// ============================================================
+function buildHighPerformerPrompt(
+    student: any, exam: any, score: number, totalPoints: number, wrongQuestions: any[]
+): string {
+    return `
+Bạn là gia sư giáo dục chuyên nghiệp, thân thiện.
+Học sinh đạt điểm CAO. Hãy KHEN NGỢI thành tích, tạo bài ÔN TẬP + MỞ RỘNG kiến thức, và ĐỀ XUẤT học lên phần cao hơn.
+Trả về JSON THUẦN TÚY (KHÔNG dùng markdown code block, KHÔNG backtick).
+
+HỌC SINH: ${student?.full_name || "Học sinh"}
+BÀI KIỂM TRA: ${exam.title}
+ĐIỂM: ${score}/${totalPoints} (${((score / totalPoints) * 100).toFixed(0)}% — Xuất sắc!)
+
+${wrongQuestions.length > 0 ? `CÂU LÀM SAI (${wrongQuestions.length} câu):\n${JSON.stringify(wrongQuestions, null, 2)}` : "Không có câu sai — hoàn hảo!"}
+
+Trả về JSON thuần túy theo cấu trúc:
+{
+  "knowledge_gaps": [],
+  "ai_feedback": "Lời khen ngợi nhiệt tình (3-4 câu). Nhấn mạnh thành tích xuất sắc. Nếu có 1-2 câu sai nhẹ, nhắc nhẹ nhàng. KẾT THÚC bằng đề xuất cụ thể: Em nên tìm hiểu thêm về [chủ đề nâng cao liên quan] để phát triển hơn nữa.",
+  "advancement_suggestion": "Gợi ý cụ thể 2-3 chủ đề/phần kiến thức nâng cao mà học sinh nên học tiếp theo, dựa trên nội dung bài kiểm tra. Ví dụ: Nếu bài kiểm tra về phương trình bậc 1, đề xuất học phương trình bậc 2. Viết dạng đoạn văn ngắn, thân thiện.",
+  "improvement_tasks": [
+    {
+      "title": "📚 Ôn tập & Củng cố kiến thức cốt lõi",
+      "type": "review",
+      "knowledge_topic": "Kiến thức cốt lõi từ bài kiểm tra",
+      "estimated_time": "15 phút",
+      "theory": {
+        "explanation": "Tóm tắt ngắn gọn các kiến thức QUAN TRỌNG NHẤT trong bài kiểm tra, giúp học sinh hệ thống hóa lại",
+        "formula": "Công thức/quy tắc chính (nếu có)",
+        "examples": ["Ví dụ ôn tập 1 kèm giải thích", "Ví dụ ôn tập 2 kèm giải thích"],
+        "tip": "Mẹo ghi nhớ nhanh"
+      },
+      "mini_quiz": [
+        {"id": "q1", "question": "Câu ôn tập kiến thức cốt lõi 1", "options": [{"id":"a","text":"A"},{"id":"b","text":"B"},{"id":"c","text":"C"},{"id":"d","text":"D"}], "correct": "b", "explanation": "Giải thích"},
+        {"id": "q2", "question": "Câu ôn tập 2", "options": [...], "correct": "...", "explanation": "..."},
+        {"id": "q3", "question": "Câu ôn tập 3", "options": [...], "correct": "...", "explanation": "..."},
+        {"id": "q4", "question": "Câu ôn tập 4", "options": [...], "correct": "...", "explanation": "..."},
+        {"id": "q5", "question": "Câu ôn tập 5", "options": [...], "correct": "...", "explanation": "..."}
+      ]
+    },
+    {
+      "title": "🚀 Mở rộng & Nâng cao kiến thức",
+      "type": "extension",
+      "knowledge_topic": "Kiến thức nâng cao liên quan",
+      "estimated_time": "20 phút",
+      "theory": {
+        "explanation": "Giới thiệu kiến thức MỚI, NÂNG CAO hơn bài kiểm tra. Mở rộng từ nội dung đã học sang phần tiếp theo. Giải thích dễ hiểu cho học sinh giỏi.",
+        "formula": "Công thức/quy tắc nâng cao (nếu có)",
+        "examples": ["Ví dụ nâng cao 1 kèm giải thích chi tiết", "Ví dụ nâng cao 2 kèm giải thích chi tiết"],
+        "tip": "Mẹo cho bài tập khó + hướng dẫn tư duy"
+      },
+      "mini_quiz": [
+        {"id": "q1", "question": "Câu nâng cao 1 — MỨC ĐỘ KHÓ", "options": [{"id":"a","text":"A"},{"id":"b","text":"B"},{"id":"c","text":"C"},{"id":"d","text":"D"}], "correct": "b", "explanation": "Giải thích chi tiết"},
+        {"id": "q2", "question": "Câu nâng cao 2", "options": [...], "correct": "...", "explanation": "..."},
+        {"id": "q3", "question": "Câu nâng cao 3", "options": [...], "correct": "...", "explanation": "..."},
+        {"id": "q4", "question": "Câu nâng cao 4", "options": [...], "correct": "...", "explanation": "..."},
+        {"id": "q5", "question": "Câu nâng cao 5", "options": [...], "correct": "...", "explanation": "..."}
+      ]
+    }
+  ]
+}
+
+YÊU CẦU BẮT BUỘC:
+- PHẢI TẠO ĐÚNG 2 improvement_tasks:
+  + Task 1 (type: "review"): Ôn tập kiến thức cốt lõi — câu hỏi mức TRUNG BÌNH, giúp củng cố lại
+  + Task 2 (type: "extension"): Mở rộng kiến thức — câu hỏi mức KHÓ, kiến thức CHUYÊN SÂU hơn bài kiểm tra
+- Mỗi task PHẢI CÓ ĐÚNG 5 câu hỏi mini_quiz (id: q1-q5)
+- advancement_suggestion PHẢI ĐỀ XUẤT CỤ THỂ chủ đề học tiếp theo (không chung chung)
+- ai_feedback PHẢI kết thúc bằng đề xuất phát triển cụ thể
+- Tiếng Việt, khen ngợi nhiệt tình, truyền cảm hứng học tập
+`;
+}
+
+// ============================================================
+// Prompt cho học sinh cần cải thiện (<85%): Động viên + bài ôn tập
+// ============================================================
+function buildImprovementPrompt(
+    student: any, exam: any, score: number, totalPoints: number, wrongQuestions: any[]
+): string {
+    return `
+Bạn là gia sư giáo dục chuyên nghiệp, thân thiện và KIÊN NHẪN.
+Học sinh cần được hỗ trợ cải thiện. ĐỘNG VIÊN trước, rồi hướng dẫn ôn tập.
+Trả về JSON THUẦN TÚY (KHÔNG dùng markdown code block, KHÔNG backtick).
+
+HỌC SINH: ${student?.full_name || "Học sinh"}
+BÀI KIỂM TRA: ${exam.title}
+ĐIỂM: ${score}/${totalPoints} (${((score / totalPoints) * 100).toFixed(0)}%)
+
+CÂU LÀM SAI (${wrongQuestions.length} câu):
+${JSON.stringify(wrongQuestions, null, 2)}
+
+Trả về JSON thuần túy theo cấu trúc:
+{
+  "knowledge_gaps": ["Kiến thức hổng 1", "Kiến thức hổng 2"],
+  "ai_feedback": "Nhận xét thân thiện: LUÔN khen điểm tốt trước (dù ít). Không dùng 'yếu', 'kém'. Dùng 'cần luyện thêm', 'sẽ tiến bộ'. 3-4 câu. Kết bằng lời động viên.",
+  "improvement_tasks": [
+    {
+      "title": "Tên kiến thức cần ôn",
+      "knowledge_topic": "Tên chính xác",
+      "estimated_time": "15 phút",
+      "theory": {
+        "explanation": "Giải thích ngắn gọn 2-3 câu, dễ hiểu, có ví dụ thực tế",
+        "formula": "Công thức/quy tắc chính",
+        "examples": ["Ví dụ minh họa 1 kèm giải thích", "Ví dụ minh họa 2 kèm giải thích"],
+        "tip": "Mẹo ghi nhớ nhanh"
+      },
+      "mini_quiz": [
+        {"id": "q1", "question": "Câu 1 liên quan trực tiếp đến câu sai", "options": [{"id":"a","text":"A"},{"id":"b","text":"B"},{"id":"c","text":"C"},{"id":"d","text":"D"}], "correct": "b", "explanation": "Giải thích chi tiết"},
+        {"id": "q2", "question": "...", "options": [...], "correct": "...", "explanation": "..."},
+        {"id": "q3", "question": "...", "options": [...], "correct": "...", "explanation": "..."},
+        {"id": "q4", "question": "...", "options": [...], "correct": "...", "explanation": "..."},
+        {"id": "q5", "question": "...", "options": [...], "correct": "...", "explanation": "..."}
+      ]
+    }
+  ]
+}
+
+YÊU CẦU BẮT BUỘC:
+- Tạo 2-3 improvement_tasks, mỗi task cho 1 nhóm kiến thức hổng
+- Mỗi task PHẢI CÓ ĐÚNG 5 câu hỏi mini_quiz (id: q1-q5), mức trung bình-dễ
+- Câu hỏi mini_quiz phải liên quan TRỰC TIẾP đến câu sai
+- Theory phải giải thích RÕ RÀNG, có VÍ DỤ CỤ THỂ
+- Tiếng Việt, động viên, tích cực
+`;
+}
+
+// ============================================================
+// Validate mini_quiz có đúng 5 câu cho mỗi task
+// ============================================================
+function validateAndFixQuizCount(aiResult: any): any {
+    if (!aiResult?.improvement_tasks) return aiResult;
+
+    aiResult.improvement_tasks = aiResult.improvement_tasks.map((task: any) => {
+        const quiz = task.mini_quiz || [];
+        if (quiz.length === 5) return task;
+
+        // Pad nếu thiếu, trim nếu thừa
+        while (quiz.length < 5) {
+            quiz.push({
+                id: `q${quiz.length + 1}`,
+                question: `Câu hỏi bổ sung ${quiz.length + 1} về ${task.knowledge_topic || task.title}`,
+                options: [
+                    { id: "a", text: "Đáp án A" },
+                    { id: "b", text: "Đáp án B" },
+                    { id: "c", text: "Đáp án C" },
+                    { id: "d", text: "Đáp án D" },
+                ],
+                correct: "a",
+                explanation: "Đáp án sẽ được giáo viên cập nhật.",
+            });
+        }
+        task.mini_quiz = quiz.slice(0, 5);
+        return task;
+    });
+
+    return aiResult;
+}
+
 async function analyzeOneStudent(
     adminSupabase: any,
     submission: any,
@@ -33,63 +193,13 @@ async function analyzeOneStudent(
     // Nếu không có câu sai, vẫn tạo feedback
     const score = Number(submission.score) || 0;
     const totalPoints = exam.total_points || 10;
+    const percentage = totalPoints > 0 ? (score / totalPoints) * 100 : 0;
+    const isHighPerformer = percentage >= 85;
 
-    const prompt = `
-Bạn là gia sư giáo dục chuyên nghiệp, thân thiện và tận tình.
-Phân tích bài làm của học sinh và tạo bài học cải thiện cá nhân hóa.
-Trả về JSON THUẦN TÚY (KHÔNG dùng markdown code block, KHÔNG backtick).
-
-HỌC SINH: ${studentObj?.full_name || "Học sinh"}
-BÀI KIỂM TRA: ${exam.title}
-ĐIỂM: ${score}/${totalPoints}
-
-CÂU LÀM SAI (${wrongQuestions.length} câu):
-${wrongQuestions.length > 0 ? JSON.stringify(wrongQuestions, null, 2) : "Không có câu sai — học sinh làm rất tốt!"}
-
-Trả về JSON thuần túy:
-{
-  "knowledge_gaps": ["Tên kiến thức hổng 1", "Tên kiến thức hổng 2"],
-  "ai_feedback": "Nhận xét thân thiện, cụ thể, bằng tiếng Việt, 3-4 câu. LUÔN khen điểm tốt trước, góp ý sau. Kết thúc bằng câu động viên. Không dùng ngôn ngữ tiêu cực.",
-  "improvement_tasks": [
-    {
-      "title": "Tên ngắn gọn của kiến thức cần ôn",
-      "knowledge_topic": "Tên kiến thức chính xác",
-      "estimated_time": "15 phút",
-      "theory": {
-        "explanation": "Giải thích ngắn gọn 2-3 câu khi nào dùng, dùng như thế nào",
-        "formula": "Công thức hoặc quy tắc chính (nếu có)",
-        "examples": [
-          "Ví dụ 1: câu ví dụ cụ thể kèm giải thích",
-          "Ví dụ 2: câu ví dụ cụ thể kèm giải thích"
-        ],
-        "tip": "Mẹo ghi nhớ nhanh (nếu có)"
-      },
-      "mini_quiz": [
-        {
-          "id": "q1",
-          "question": "Câu hỏi trắc nghiệm liên quan trực tiếp đến kiến thức",
-          "options": [
-            {"id": "a", "text": "Đáp án A"},
-            {"id": "b", "text": "Đáp án B"},
-            {"id": "c", "text": "Đáp án C"},
-            {"id": "d", "text": "Đáp án D"}
-          ],
-          "correct": "b",
-          "explanation": "Giải thích tại sao đáp án này đúng, bằng tiếng Việt"
-        }
-      ]
-    }
-  ]
-}
-
-YÊU CẦU:
-- Tạo 2-3 improvement_tasks tương ứng với kiến thức hổng
-- Mỗi task PHẢI CÓ phần theory (lý thuyết ngắn gọn) và mini_quiz (3-5 câu trắc nghiệm)
-- Câu hỏi mini_quiz phải liên quan trực tiếp đến câu sai của học sinh
-- Lý thuyết ngắn gọn, dễ hiểu, luôn có ví dụ thực tế
-- Ngôn ngữ: Tiếng Việt
-- Nếu không có câu sai, hãy đề xuất bài tập nâng cao
-`;
+    // Xây dựng prompt theo mức độ
+    const prompt = isHighPerformer
+        ? buildHighPerformerPrompt(studentObj, exam, score, totalPoints, wrongQuestions)
+        : buildImprovementPrompt(studentObj, exam, score, totalPoints, wrongQuestions);
 
     const model = getGeminiModel("gemini-2.5-flash");
     let aiResult: any = null;
@@ -99,6 +209,7 @@ YÊU CẦU:
             const result = await model.generateContent(prompt);
             const text = result.response.text().replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
             aiResult = JSON.parse(text);
+            aiResult = validateAndFixQuizCount(aiResult); // Đảm bảo 5 câu/task
             break;
         } catch (parseErr) {
             if (attempt === 1) {
@@ -126,6 +237,7 @@ YÊU CẦU:
             wrong_questions: wrongQuestions,
             ai_feedback: aiResult.ai_feedback || "",
             improvement_tasks: aiResult.improvement_tasks || [],
+            advancement_suggestion: aiResult.advancement_suggestion || null,
             status: 'ai_draft',
             deadline: deadline.toISOString(),
             created_at: new Date().toISOString()

@@ -10,7 +10,9 @@ import {
     Trash2, FileQuestion, PenLine, CheckCircle2, ChevronDown, ChevronUp
 } from "lucide-react";
 import { editAnalysis, saveSupplementaryQuizDraft, sendSupplementaryQuiz } from "@/lib/actions/quiz-analysis";
+import { sendNotificationToStudentAndParents } from "@/lib/notifications/send-notification";
 import { toast } from "sonner";
+import { formatKnowledgeGap } from "@/lib/utils";
 
 interface StudentFeedbackDrawerProps {
     open: boolean;
@@ -79,6 +81,20 @@ export default function StudentFeedbackDrawer({ open, onOpenChange, analysis, ex
             // Nếu có bài bổ trợ draft, gửi luôn
             if (supQuizId && supQuestions.length > 0) {
                 await sendSupplementaryQuiz(supQuizId);
+            }
+
+            // Gửi notification đến học sinh + phụ huynh
+            try {
+                await sendNotificationToStudentAndParents({
+                    studentId: analysis.student_id,
+                    title: "📝 Giáo viên đã gửi nhận xét bài kiểm tra",
+                    message: `Giáo viên đã nhận xét bài "${exam?.title || 'Kiểm tra'}". Hãy xem và hoàn thành bài tập cải thiện!`,
+                    type: "feedback",
+                    link: `/student/classes/${analysis.class_id || ''}/exams/${analysis.exam_id}/feedback`,
+                    metadata: { analysisId: analysis.id, examTitle: exam?.title },
+                });
+            } catch (notifErr) {
+                console.error("Notification error (non-critical):", notifErr);
             }
 
             toast.success("Đã gửi nhận xét" + (supQuizId ? " + bài bổ trợ" : "") + " cho học sinh!");
@@ -253,13 +269,28 @@ export default function StudentFeedbackDrawer({ open, onOpenChange, analysis, ex
                 {/* Header */}
                 <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-5 border-b border-indigo-100 shrink-0">
                     <DialogHeader>
-                        <DialogTitle className="text-lg font-bold text-indigo-900">
+                        <DialogTitle className="text-lg font-bold text-indigo-900 flex items-center gap-2">
                             👤 {studentObj?.full_name || "Học sinh"}
+                            {analysis.status === 'sent' && (
+                                <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]" variant="outline">
+                                    <CheckCircle2 className="w-3 h-3 mr-0.5" /> Đã gửi
+                                </Badge>
+                            )}
+                            {analysis.status === 'edited' && (
+                                <Badge className="bg-blue-50 text-blue-700 border-blue-200 text-[10px]" variant="outline">
+                                    <PenLine className="w-3 h-3 mr-0.5" /> Đã chỉnh sửa
+                                </Badge>
+                            )}
+                            {analysis.status === 'ai_draft' && (
+                                <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px]" variant="outline">
+                                    <Brain className="w-3 h-3 mr-0.5" /> AI Draft
+                                </Badge>
+                            )}
                         </DialogTitle>
                     </DialogHeader>
                     <div className="flex flex-wrap gap-1 mt-2">
                         {(analysis.knowledge_gaps || []).map((gap: string, i: number) => (
-                            <Badge key={i} className="bg-red-50 text-red-700 border-none text-[10px]">🔴 {gap}</Badge>
+                            <Badge key={i} className="bg-red-50 text-red-700 border-none text-[10px]">🔴 {formatKnowledgeGap(gap)}</Badge>
                         ))}
                     </div>
                 </div>
@@ -310,19 +341,40 @@ export default function StudentFeedbackDrawer({ open, onOpenChange, analysis, ex
                     {/* ===== TAB 2: BÀI TẬP CẢI THIỆN ===== */}
                     {activeTab === "tasks" && (
                         <div className="space-y-4">
-                            <p className="text-xs text-slate-500">Bài tập AI đã tạo (kèm lý thuyết + mini quiz). Sửa tiêu đề/nội dung nếu cần.</p>
+                            <div className="flex items-center justify-between">
+                                <p className="text-xs text-slate-500">Bài tập AI đã tạo (kèm lý thuyết + mini quiz). Có thể thêm/sửa/xóa.</p>
+                                <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="text-xs font-semibold h-7 text-indigo-700 bg-indigo-50 border-indigo-200 hover:bg-indigo-100"
+                                    onClick={() => setTasks(prev => [...prev, { title: "Bài tập mới", content: "", type: "review", estimated_time: "15 phút" }])}
+                                >
+                                    <Plus className="w-3 h-3 mr-1" /> Thêm bài tập
+                                </Button>
+                            </div>
+                            
                             {tasks.map((task: any, idx: number) => (
                                 <div key={idx} className="border border-slate-200 rounded-xl p-4 bg-slate-50">
-                                    <div className="flex items-center gap-2 mb-3">
-                                        <Badge className="bg-indigo-100 text-indigo-700 border-none text-[10px]">
-                                            <BookOpen className="w-3 h-3 mr-1" /> Bài tập {idx + 1}
-                                        </Badge>
-                                        <span className="text-[10px] text-slate-400">⏱️ {task.estimated_time || '15 phút'}</span>
-                                        {task.mini_quiz?.length > 0 && (
-                                            <Badge className="bg-purple-50 text-purple-700 border-none text-[9px]">
-                                                <FileQuestion className="w-2.5 h-2.5 mr-0.5" /> {task.mini_quiz.length} câu quiz
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-2">
+                                            <Badge className="bg-indigo-100 text-indigo-700 border-none text-[10px]">
+                                                <BookOpen className="w-3 h-3 mr-1" /> Bài tập {idx + 1}
                                             </Badge>
-                                        )}
+                                            <span className="text-[10px] text-slate-400">⏱️ {task.estimated_time || '15 phút'}</span>
+                                            {task.mini_quiz?.length > 0 && (
+                                                <Badge className="bg-purple-50 text-purple-700 border-none text-[9px]">
+                                                    <FileQuestion className="w-2.5 h-2.5 mr-0.5" /> {task.mini_quiz.length} câu quiz
+                                                </Badge>
+                                            )}
+                                        </div>
+                                        <Button 
+                                            size="sm" 
+                                            variant="ghost" 
+                                            className="h-6 w-6 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
+                                            onClick={() => setTasks(prev => prev.filter((_, i) => i !== idx))}
+                                        >
+                                            <Trash2 className="w-3.5 h-3.5" />
+                                        </Button>
                                     </div>
                                     <input
                                         value={task.title || ""}

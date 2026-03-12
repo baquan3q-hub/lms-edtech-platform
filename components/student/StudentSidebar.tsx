@@ -22,9 +22,10 @@ const navigation = [
 interface StudentSidebarProps {
     userName?: string;
     userEmail?: string;
+    userId?: string;
 }
 
-export default function StudentSidebar({ userName = "Học sinh", userEmail = "" }: StudentSidebarProps) {
+export default function StudentSidebar({ userName = "Học sinh", userEmail = "", userId }: StudentSidebarProps) {
     const pathname = usePathname();
 
     return (
@@ -76,6 +77,8 @@ export default function StudentSidebar({ userName = "Học sinh", userEmail = ""
                     profileHref="/student/profile"
                     avatarGradient="from-indigo-500 to-purple-600"
                     variant="dark"
+                    role="student"
+                    userId={userId}
                 />
             </div>
         </aside>

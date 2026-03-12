@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import ParentProgressClient from "./ParentProgressClient";
-import { getStudentProgressStats } from "@/lib/actions/parent-progress";
+import { getStudentProgressStats, getStudentFeedbackList, getStudentCompetencyData } from "@/lib/actions/parent-progress";
 
 export const dynamic = "force-dynamic";
 
@@ -60,15 +60,20 @@ export default async function ParentChildProgressPage({
     });
 
     // 3. Determine active student parameter
-    let activeStudentId = searchParams.studentId;
-    if (!activeStudentId || !students.find(s => s.id === activeStudentId)) {
-        activeStudentId = students[0].id;
-    }
+    const activeStudentId = searchParams.studentId && students.find(s => s.id === searchParams.studentId)
+        ? searchParams.studentId
+        : students[0].id;
 
     const activeStudent = students.find(s => s.id === activeStudentId)!;
 
     // 4. Fetch progress stats for active student
-    const { data: progressData } = await getStudentProgressStats(activeStudentId);
+    const [progressRes, feedbackRes, competencyRes] = await Promise.all([
+        getStudentProgressStats(activeStudentId),
+        getStudentFeedbackList(activeStudentId),
+        getStudentCompetencyData(activeStudentId),
+    ]);
+
+    const progressData = progressRes?.data;
 
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -87,6 +92,8 @@ export default async function ParentChildProgressPage({
                 activeStudentName={activeStudent.name}
                 stats={progressData?.stats || []}
                 history={progressData?.history || []}
+                feedbackList={feedbackRes?.data || []}
+                competencyData={competencyRes?.data || null}
             />
         </div>
     );

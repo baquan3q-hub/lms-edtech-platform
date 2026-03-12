@@ -15,7 +15,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
     return (
         <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
             {/* Sidebar */}
-            <StudentSidebar userName={userData?.full_name || "Học sinh"} userEmail={userData?.email || ""} />
+            <StudentSidebar userName={userData?.full_name || "Học sinh"} userEmail={userData?.email || ""} userId={user.id} />
 
             {/* Main content area */}
             <div className="flex-1 flex flex-col overflow-hidden relative">

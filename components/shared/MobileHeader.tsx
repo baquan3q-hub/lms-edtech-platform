@@ -45,7 +45,7 @@ export function MobileHeader() {
             <div className="flex items-center gap-3">
                 <Sheet>
                     <SheetTrigger asChild>
-                        <Button variant="ghost" size="icon" className="shrink-0 min-h-[44px] min-w-[44px]">
+                        <Button suppressHydrationWarning variant="ghost" size="icon" className="shrink-0 min-h-[44px] min-w-[44px]">
                             <Menu className="h-5 w-5" />
                             <span className="sr-only">Toggle navigation menu</span>
                         </Button>

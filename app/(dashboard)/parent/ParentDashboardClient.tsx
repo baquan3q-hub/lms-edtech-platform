@@ -16,6 +16,11 @@ import { Progress } from "@/components/ui/progress";
 import UpcomingSessionsWidget from "@/components/shared/UpcomingSessionsWidget";
 import AbsenceRequestModal from "@/components/shared/AbsenceRequestModal";
 import { createClient } from "@/lib/supabase/client";
+import { formatKnowledgeGap } from "@/lib/utils";
+import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 
 type StudentInfo = {
     id: string;
@@ -242,7 +247,9 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                                             <p className="text-xs text-purple-700 font-semibold mb-1 flex items-center gap-1">
                                                 <MessageSquare className="w-3 h-3" /> Nhận xét của giáo viên:
                                             </p>
-                                            <p className="text-xs text-slate-600 leading-relaxed">{feedbackText}</p>
+                                            <div className="text-xs text-slate-600 leading-relaxed prose prose-sm max-w-none prose-p:mb-2 prose-pre:bg-slate-100">
+                                                <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{feedbackText}</ReactMarkdown>
+                                            </div>
                                         </div>
                                     )}
 
@@ -253,7 +260,7 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                                                 <AlertTriangle className="w-3 h-3" /> Kiến thức cần cải thiện:
                                             </span>
                                             {analysis.knowledge_gaps.map((gap: string, i: number) => (
-                                                <Badge key={i} className="bg-red-50 text-red-700 border-none text-[9px]">🔴 {gap}</Badge>
+                                                <Badge key={i} className="bg-red-50 text-red-700 border-none text-[9px]">🔴 {formatKnowledgeGap(gap)}</Badge>
                                             ))}
                                         </div>
                                     )}
@@ -400,22 +407,45 @@ export default function ParentDashboardClient({ students }: { students: StudentI
 
                     {/* Section D: Thông báo */}
                     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden col-span-full">
-                        <div className="p-5 border-b border-slate-100 bg-blue-50/50">
+                        <div className="p-5 border-b border-slate-100 bg-blue-50/50 flex items-center justify-between">
                             <h3 className="font-bold text-blue-800 flex items-center gap-2">
                                 <Bell className="w-5 h-5" /> Thông báo từ giáo viên
                             </h3>
+                            {selectedStudentId && (
+                                <Link href={`/parent/children/${selectedStudentId}/announcements`}>
+                                    <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 text-xs font-semibold">
+                                        Xem tất cả <ArrowRight className="w-3 h-3 ml-1" />
+                                    </Button>
+                                </Link>
+                            )}
                         </div>
                         <div className="p-4">
                             {dashboardData.announcements.length === 0 ? (
                                 <p className="text-sm text-slate-400 text-center py-8">Chưa có thông báo nào.</p>
                             ) : (
                                 <div className="space-y-3">
-                                    {dashboardData.announcements.map((ann: any) => (
+                                    {dashboardData.announcements.slice(0, 3).map((ann: any) => (
                                         <div key={ann.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 transition-colors">
                                             <div className="flex items-start justify-between">
                                                 <div className="flex-1">
                                                     <p className="font-semibold text-slate-800 text-sm">{ann.title}</p>
                                                     <p className="text-xs text-slate-500 mt-1 line-clamp-2">{ann.content}</p>
+                                                    <div className="flex flex-wrap gap-1.5 mt-2">
+                                                        {(ann.file_url || (ann.attachments && ann.attachments.length > 0)) && (
+                                                            <Badge className="bg-blue-50 text-blue-600 border-blue-200 text-[9px]" variant="outline">
+                                                                📎 {ann.attachments?.length ? `${ann.attachments.length} File` : 'File'}
+                                                            </Badge>
+                                                        )}
+                                                        {ann.video_url && (
+                                                            <Badge className="bg-rose-50 text-rose-600 border-rose-200 text-[9px]" variant="outline">🎥 Video</Badge>
+                                                        )}
+                                                        {ann.link_url && (
+                                                            <Badge className="bg-violet-50 text-violet-600 border-violet-200 text-[9px]" variant="outline">🔗 Link</Badge>
+                                                        )}
+                                                        {(ann.quiz_data || ann.quiz_id) && (
+                                                            <Badge className="bg-indigo-50 text-indigo-600 border-indigo-200 text-[9px]" variant="outline">📝 Quiz</Badge>
+                                                        )}
+                                                    </div>
                                                 </div>
                                                 <span className="text-[10px] text-slate-400 shrink-0 ml-4">
                                                     {ann.created_at ? new Date(ann.created_at).toLocaleDateString("vi-VN") : ""}
@@ -423,6 +453,13 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                                             </div>
                                         </div>
                                     ))}
+                                    {dashboardData.announcements.length > 3 && selectedStudentId && (
+                                        <Link href={`/parent/children/${selectedStudentId}/announcements`} className="block">
+                                            <p className="text-xs text-center text-blue-500 font-semibold hover:text-blue-700 py-2">
+                                                Xem thêm {dashboardData.announcements.length - 3} thông báo khác →
+                                            </p>
+                                        </Link>
+                                    )}
                                 </div>
                             )}
                         </div>

@@ -122,6 +122,21 @@ export function useRealtimeSync(userId: string, role: string) {
                 }
             )
 
+            // ── 7. announcements ─────────────────────────────────
+            // Thông báo mới từ lớp → Parent notifications page cập nhật
+            .on(
+                "postgres_changes",
+                {
+                    event: "INSERT",
+                    schema: "public",
+                    table: "announcements",
+                },
+                () => {
+                    queryClient.invalidateQueries({ queryKey: ["parent-notifications"] });
+                    queryClient.invalidateQueries({ queryKey: ["class-announcements"] });
+                }
+            )
+
             .subscribe();
 
         channelRef.current = channel;

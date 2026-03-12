@@ -123,7 +123,7 @@ export default function NotificationBell() {
                 {notifications.length > 0 && (
                     <div className="p-2 pt-0">
                         <DropdownMenuSeparator className="bg-slate-100 mb-2" />
-                        <Button variant="ghost" className="w-full text-xs text-slate-500 hover:text-slate-900 justify-center h-9">
+                        <Button variant="ghost" className="w-full text-xs text-slate-500 hover:text-slate-900 justify-center h-9" onClick={() => router.push("/parent/notifications")}>
                             Xem tất cả thông báo
                         </Button>
                     </div>
