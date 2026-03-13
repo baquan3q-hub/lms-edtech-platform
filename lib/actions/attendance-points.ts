@@ -5,29 +5,22 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
 // =========================================================
-// Lấy điểm chuyên cần của tất cả học sinh trong lớp
+// Lấy điểm tích lũy (student_points) của tất cả học sinh trong lớp
 // =========================================================
 export async function getClassAttendancePoints(classId: string) {
     try {
         const adminSupabase = createAdminClient();
 
-        // Lấy tất cả điểm trong lớp
+        // Lấy tất cả điểm trong lớp từ student_points (teacher-managed)
         const { data: points, error } = await adminSupabase
-            .from("attendance_points")
+            .from("student_points")
             .select(`
-                id, student_id, points_earned, reason, created_at,
-                student:users!student_id(full_name, avatar_url)
+                id, student_id, points, type, reason, created_at
             `)
             .eq("class_id", classId)
             .order("created_at", { ascending: false });
 
         if (error) throw error;
-
-        // Lấy achievements
-        const { data: achievements } = await adminSupabase
-            .from("student_achievements")
-            .select("student_id, achievement_type, earned_at")
-            .eq("class_id", classId);
 
         // Lấy enrolled students
         const { data: enrollments } = await adminSupabase
@@ -65,20 +58,14 @@ export async function getClassAttendancePoints(classId: string) {
         for (const p of (points || [])) {
             const sid = p.student_id;
             if (studentMap[sid]) {
-                studentMap[sid].totalPoints += p.points_earned;
+                studentMap[sid].totalPoints += p.points;
                 studentMap[sid].history.push({
                     id: p.id,
-                    points: p.points_earned,
+                    points: p.points,
                     reason: p.reason,
+                    type: p.type,
                     date: p.created_at,
                 });
-            }
-        }
-
-        // Map achievements
-        for (const a of (achievements || [])) {
-            if (studentMap[a.student_id]) {
-                studentMap[a.student_id].achievements.push(a.achievement_type);
             }
         }
 
@@ -93,7 +80,7 @@ export async function getClassAttendancePoints(classId: string) {
 }
 
 // =========================================================
-// GV thêm/cộng/trừ điểm chuyên cần cho 1 học sinh
+// GV thêm/cộng/trừ điểm tích lũy cho 1 học sinh
 // =========================================================
 export async function adjustAttendancePoints(data: {
     studentId: string;
@@ -108,14 +95,21 @@ export async function adjustAttendancePoints(data: {
 
         const adminSupabase = createAdminClient();
 
-        // Insert record (points có thể âm)
+        // Determine type from reason prefix
+        let type = "other";
+        if (data.reason.startsWith("bonus:")) type = "participation";
+        else if (data.reason.startsWith("penalty:")) type = "behavior";
+
+        // Insert record into student_points
         const { error } = await adminSupabase
-            .from("attendance_points")
+            .from("student_points")
             .insert({
                 student_id: data.studentId,
                 class_id: data.classId,
-                points_earned: data.points,
+                teacher_id: user.id,
+                points: data.points,
                 reason: data.reason,
+                type,
             });
 
         if (error) throw error;
@@ -129,7 +123,7 @@ export async function adjustAttendancePoints(data: {
 }
 
 // =========================================================
-// GV xoá 1 bản ghi điểm chuyên cần
+// GV xoá 1 bản ghi điểm tích lũy
 // =========================================================
 export async function deleteAttendancePoint(pointId: string, classId: string) {
     try {
@@ -139,7 +133,7 @@ export async function deleteAttendancePoint(pointId: string, classId: string) {
 
         const adminSupabase = createAdminClient();
         const { error } = await adminSupabase
-            .from("attendance_points")
+            .from("student_points")
             .delete()
             .eq("id", pointId);
 

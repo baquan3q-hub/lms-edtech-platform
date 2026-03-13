@@ -1,0 +1,1 @@
+﻿app/(dashboard)/teacher/classes/[id]/points/[studentId]/page.tsx(3,29): error TS2305: Module '"../../actions"' has no exported member 'fetchStudentDetails'.

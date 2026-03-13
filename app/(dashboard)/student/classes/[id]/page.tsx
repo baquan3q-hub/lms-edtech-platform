@@ -6,13 +6,15 @@ import {
     ArrowLeft, BookOpen, PlayCircle, FileText, Video, ChevronDown, CheckSquare,
     Monitor, FolderPlus, Folder, CheckCircle2, Circle, Music, ClipboardList,
     MessageSquare, Calendar, Bell, BarChart3, Clock, MapPin, Users, Trophy, Home,
-    ExternalLink, Download, Link as LinkIcon, Medal, Target, Star, TrendingUp
+    ExternalLink, Download, Link as LinkIcon, Medal, Target, Star, TrendingUp,
+    PlusCircle, MinusCircle
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fetchStudentExams } from "@/lib/actions/exam";
 import { fetchStudentHomework } from "@/lib/actions/homework";
+import { getStudentPointHistory } from "@/lib/actions/point";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +29,7 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
     const adminSupabase = createAdminClient();
 
     // === DATA FETCHING (song song) ===
-    const [classRes, itemsRes, progressRes, schedulesRes, examsRes, homeworkRes, announcementsRes] = await Promise.all([
+    const [classRes, itemsRes, progressRes, schedulesRes, examsRes, homeworkRes, announcementsRes, pointsRes] = await Promise.all([
         // 1. Thông tin lớp
         adminSupabase
             .from('classes')
@@ -63,6 +65,8 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
             .eq("class_id", id)
             .order("created_at", { ascending: false })
             .limit(20),
+        // 8. Điểm tích lũy
+        getStudentPointHistory(user.id, id),
     ]);
 
     const classInfo = classRes.data as any;
@@ -71,6 +75,8 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
     const exams = examsRes.data || [];
     const homeworkList = homeworkRes.data || [];
     const announcements = announcementsRes.data || [];
+    const pointHistory = pointsRes.data || [];
+    const totalAccumulatedPoints = pointHistory.reduce((acc: number, p: any) => acc + p.points, 0);
 
     // Progress set
     const completedSet = new Set(
@@ -538,13 +544,13 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
                 {/* ===== TAB: KẾT QUẢ HỌC TẬP (PERFORMANCE) ===== */}
                 <TabsContent value="performance">
                     <div className="space-y-6">
-                        {/* 4 Cards Overview */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {/* 5 Cards Overview */}
+                        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                             <div className="bg-white border border-indigo-100 rounded-xl p-5 shadow-sm shadow-indigo-100/50 flex flex-col items-center justify-center text-center">
                                 <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-500 flex items-center justify-center mb-3">
                                     <Target className="w-6 h-6" />
                                 </div>
-                                <p className="text-sm font-semibold text-slate-500 mb-1">Điểm Trung Bình (Hệ 10)</p>
+                                <p className="text-sm font-semibold text-slate-500 mb-1">ĐTB (Hệ 10)</p>
                                 <p className="text-3xl font-extrabold text-indigo-700">{gpa10.toFixed(1)}</p>
                             </div>
 
@@ -552,7 +558,7 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
                                 <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mb-3">
                                     <Medal className="w-6 h-6" />
                                 </div>
-                                <p className="text-sm font-semibold text-slate-500 mb-1">Thứ hạng trong lớp</p>
+                                <p className="text-sm font-semibold text-slate-500 mb-1">Thứ hạng</p>
                                 <p className="text-3xl font-extrabold text-emerald-600">
                                     {myRank !== null ? `${myRank}/${Math.max(totalRankedStudents, myRank)}` : '--'}
                                 </p>
@@ -562,7 +568,7 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
                                 <div className="w-12 h-12 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mb-3">
                                     <CheckCircle2 className="w-6 h-6" />
                                 </div>
-                                <p className="text-sm font-semibold text-slate-500 mb-1">Số bài đã nộp/nhận điểm</p>
+                                <p className="text-sm font-semibold text-slate-500 mb-1">Bài đã nộp</p>
                                 <p className="text-3xl font-extrabold text-amber-600">{completedExamsCount + completedHomeworkCount}</p>
                             </div>
 
@@ -570,8 +576,19 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
                                 <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-500 flex items-center justify-center mb-3">
                                     <TrendingUp className="w-6 h-6" />
                                 </div>
-                                <p className="text-sm font-semibold text-slate-500 mb-1">Tổng số lượt làm</p>
+                                <p className="text-sm font-semibold text-slate-500 mb-1">Lượt làm</p>
                                 <p className="text-3xl font-extrabold text-blue-600">{totalAttempts}</p>
+                            </div>
+
+                            {/* Card Điểm Tích Lũy */}
+                            <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-5 shadow-sm flex flex-col items-center justify-center text-center">
+                                <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center mb-3">
+                                    <Trophy className="w-6 h-6" />
+                                </div>
+                                <p className="text-sm font-semibold text-amber-700 mb-1">Điểm Tích Lũy</p>
+                                <p className={`text-3xl font-extrabold ${totalAccumulatedPoints > 0 ? 'text-emerald-600' : totalAccumulatedPoints < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                                    {totalAccumulatedPoints > 0 ? `+${totalAccumulatedPoints}` : totalAccumulatedPoints}
+                                </p>
                             </div>
                         </div>
 
@@ -615,6 +632,46 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
                                     <BarChart3 className="w-12 h-12 text-slate-200 mx-auto mb-3" />
                                     <p className="text-slate-500 font-medium">Bạn chưa hoàn thành bài tập hay kiểm tra nào.</p>
                                     <p className="text-sm text-slate-400 mt-1">Hãy tích cực học tập để theo dõi điểm số tại đây.</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Lịch sử Điểm tích lũy */}
+                        <div className="bg-gradient-to-br from-amber-50/50 to-orange-50/30 border border-amber-200 rounded-xl shadow-sm overflow-hidden">
+                            <div className="px-5 py-4 border-b border-amber-100 bg-gradient-to-r from-amber-50 to-orange-50">
+                                <h2 className="text-lg font-bold text-amber-900 flex items-center gap-2">
+                                    <Trophy className="w-5 h-5 text-amber-600" /> Điểm Tích Lũy — Thái độ & Đạo đức
+                                </h2>
+                                <p className="text-sm text-amber-600 mt-1">Giáo viên đánh giá dựa trên chuyên cần, phát biểu, thái độ học tập</p>
+                            </div>
+
+                            {pointHistory.length > 0 ? (
+                                <div className="divide-y divide-amber-100/50">
+                                    {pointHistory.slice(0, 10).map((item: any) => {
+                                        const isPositive = item.points > 0;
+                                        return (
+                                            <div key={item.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-white/50 transition-colors">
+                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isPositive ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-500'}`}>
+                                                    {isPositive ? <PlusCircle className="w-4 h-4" /> : <MinusCircle className="w-4 h-4" />}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-semibold text-slate-800 truncate">{item.reason}</p>
+                                                    <span className="text-[11px] text-slate-400">
+                                                        GV: {item.teacher?.full_name || 'Giáo viên'} • {new Date(item.created_at).toLocaleDateString('vi-VN')}
+                                                    </span>
+                                                </div>
+                                                <span className={`font-black text-base shrink-0 ${isPositive ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                    {isPositive ? `+${item.points}` : item.points}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="text-center py-10 px-6">
+                                    <Trophy className="w-10 h-10 text-amber-200 mx-auto mb-2" />
+                                    <p className="text-sm text-amber-700 font-medium">Chưa có điểm tích lũy trong lớp này.</p>
+                                    <p className="text-xs text-amber-500 mt-1">Giáo viên sẽ cộng/trừ điểm dựa trên thái độ học tập.</p>
                                 </div>
                             )}
                         </div>

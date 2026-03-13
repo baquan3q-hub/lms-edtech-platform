@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { calcAttendanceRate } from "@/lib/utils/attendance-rate";
+import { getGeminiModel } from "@/lib/gemini";
 
 export async function getStudentProgressStats(studentId: string) {
     try {
@@ -288,17 +289,22 @@ export async function getStudentCompetencyData(studentId: string) {
             strengthsScore = Math.round((highScores / validSubs.length) * 100);
         }
 
-        // ---------- 6. TƯƠNG TÁC (Engagement) — % bài bổ trợ hoàn thành ----------
-        const { data: supQuizzes } = await adminSupabase
-            .from("supplementary_quizzes")
-            .select("status")
-            .eq("student_id", studentId)
-            .neq("status", "draft");
+        // ---------- 6. TƯƠNG TÁC (Engagement) — Dựa vào Điểm tích lũy ----------
+        const { data: pointRecords } = await adminSupabase
+            .from("student_points")
+            .select("points, type")
+            .eq("student_id", studentId);
 
-        let engagementScore = 0;
-        if (supQuizzes && supQuizzes.length > 0) {
-            const completed = supQuizzes.filter((q: any) => q.status === "completed").length;
-            engagementScore = Math.round((completed / supQuizzes.length) * 100);
+        let engagementScore = 50; // baseline
+        if (pointRecords && pointRecords.length > 0) {
+            const totalPoints = pointRecords.reduce((sum: number, r: any) => sum + r.points, 0);
+            const maxExpected = pointRecords.length * 5; // hypothetical max: each transaction could be +5
+            // Normalize: 0 points = 50, positive = 50-100, negative = 0-50
+            if (totalPoints >= 0) {
+                engagementScore = Math.min(100, 50 + Math.round((totalPoints / Math.max(maxExpected, 1)) * 50));
+            } else {
+                engagementScore = Math.max(0, 50 + Math.round((totalPoints / Math.max(Math.abs(totalPoints) + 10, 1)) * 50));
+            }
         }
 
         // ===== Tổng hợp điểm mạnh / yếu =====
@@ -308,7 +314,7 @@ export async function getStudentCompetencyData(studentId: string) {
             { key: "improvement", label: "Cải thiện", value: improvementScore, icon: "📈" },
             { key: "effort", label: "Nỗ lực", value: effortScore, icon: "💪" },
             { key: "strengths", label: "Điểm mạnh", value: strengthsScore, icon: "⭐" },
-            { key: "engagement", label: "Tương tác", value: engagementScore, icon: "🤝" },
+            { key: "engagement", label: "Tương tác", value: engagementScore, icon: "🤝", description: "Điểm tích lũy (thái độ, đạo đức)" },
         ];
 
         const sorted = [...axes].sort((a, b) => b.value - a.value);
@@ -329,3 +335,88 @@ export async function getStudentCompetencyData(studentId: string) {
         return { data: null, error: error.message };
     }
 }
+
+// ============================================================
+// AI: Phân tích điểm mạnh/yếu và đưa ra giải pháp bằng Gemini
+// ============================================================
+export async function generateParentAIInsight(
+    studentName: string,
+    competencyData: {
+        axes: { key: string; label: string; value: number; icon: string }[];
+        strengths: any[];
+        weaknesses: any[];
+        overallScore: number;
+    },
+    pointsData: {
+        totalPoints: number;
+        byClass: { class_name: string; total_points: number }[];
+    } | null,
+    statsData: {
+        class_name: string;
+        avg_score: number;
+        attendance_rate: number;
+    }[]
+) {
+    try {
+        const model = getGeminiModel("gemini-2.5-flash");
+
+        const axesSummary = competencyData.axes
+            .map(a => `- ${a.icon} ${a.label}: ${a.value}/100`)
+            .join("\n");
+
+        const strengthsList = competencyData.strengths.length > 0
+            ? competencyData.strengths.map(s => `${s.icon} ${s.label} (${s.value}/100)`).join(", ")
+            : "Chưa xác định rõ";
+
+        const weaknessesList = competencyData.weaknesses.length > 0
+            ? competencyData.weaknesses.map(w => `${w.icon} ${w.label} (${w.value}/100)`).join(", ")
+            : "Không có điểm yếu đáng lo";
+
+        const pointsSummary = pointsData
+            ? `Tổng điểm tích lũy: ${pointsData.totalPoints} điểm\n${pointsData.byClass.map(c => `- ${c.class_name}: ${c.total_points > 0 ? '+' : ''}${c.total_points}`).join("\n")}`
+            : "Chưa có dữ liệu điểm tích lũy.";
+
+        const classSummary = statsData.length > 0
+            ? statsData.map(s => `- ${s.class_name}: ĐTB ${s.avg_score}/10, Chuyên cần ${s.attendance_rate}%`).join("\n")
+            : "Chưa có dữ liệu lớp học.";
+
+        const prompt = `
+Bạn là một chuyên gia tư vấn giáo dục AI, đang phân tích năng lực học tập của một học sinh để cung cấp nhận xét cho phụ huynh.
+
+📊 THÔNG TIN HỌC SINH: ${studentName}
+Điểm tổng hợp năng lực: ${competencyData.overallScore}/100
+
+📈 6 TRỤC NĂNG LỰC (Bloom's Taxonomy):
+${axesSummary}
+
+🏆 Điểm mạnh nổi bật: ${strengthsList}
+⚠️ Điểm yếu cần cải thiện: ${weaknessesList}
+
+⭐ ĐIỂM TÍCH LŨY (Thái độ & Đạo đức):
+${pointsSummary}
+
+📚 KẾT QUẢ THEO LỚP:
+${classSummary}
+
+YÊU CẦU PHÂN TÍCH (viết bằng tiếng Việt, ngắn gọn, phong cách thân thiện, dưới 300 chữ):
+
+1. **🌟 Tổng quan**: Đánh giá chung về năng lực học sinh (2-3 câu).
+2. **💪 Điểm mạnh**: Phân tích chi tiết 2-3 điểm mạnh nổi bật, khen ngợi cụ thể.
+3. **📝 Điểm cần cải thiện**: Phân tích 2-3 điểm yếu, giải thích tại sao cần cải thiện.
+4. **🎯 Giải pháp cụ thể**: Đưa ra 3-4 lời khuyên HÀNH ĐỘNG CỤ THỂ mà phụ huynh có thể áp dụng ngay để hỗ trợ con em (ví dụ: lập thời gian biểu ôn tập, khuyến khích phát biểu...).
+5. **💡 Lời nhắn**: Một câu động viên tích cực dành cho phụ huynh.
+
+QUAN TRỌNG: Không dùng heading Markdown (##, ###). Dùng **in đậm** cho tiêu đề mục. Phân tích phải dựa trên dữ liệu thực tế ở trên.
+`;
+
+        const result = await model.generateContent(prompt);
+        const response = result.response;
+        const text = response.text();
+
+        return { data: text, error: null };
+    } catch (error: any) {
+        console.error("Error generating parent AI insight:", error);
+        return { data: null, error: error.message };
+    }
+}
+

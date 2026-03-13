@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import ParentProgressClient from "./ParentProgressClient";
 import { getStudentProgressStats, getStudentFeedbackList, getStudentCompetencyData } from "@/lib/actions/parent-progress";
+import { getStudentPointsForParent } from "@/lib/actions/point";
 
 export const dynamic = "force-dynamic";
 
@@ -66,11 +67,12 @@ export default async function ParentChildProgressPage({
 
     const activeStudent = students.find(s => s.id === activeStudentId)!;
 
-    // 4. Fetch progress stats for active student
-    const [progressRes, feedbackRes, competencyRes] = await Promise.all([
+    // 4. Fetch progress stats + points for active student
+    const [progressRes, feedbackRes, competencyRes, pointsRes] = await Promise.all([
         getStudentProgressStats(activeStudentId),
         getStudentFeedbackList(activeStudentId),
         getStudentCompetencyData(activeStudentId),
+        getStudentPointsForParent(activeStudentId),
     ]);
 
     const progressData = progressRes?.data;
@@ -81,7 +83,7 @@ export default async function ParentChildProgressPage({
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">Điểm số & Tiến độ</h1>
                     <p className="text-sm text-slate-500 mt-1">
-                        Theo dõi kết quả học tập và chuyên cần của con tại các lớp học
+                        Theo dõi kết quả học tập, chuyên cần và điểm tích lũy của con tại các lớp học
                     </p>
                 </div>
             </div>
@@ -94,7 +96,9 @@ export default async function ParentChildProgressPage({
                 history={progressData?.history || []}
                 feedbackList={feedbackRes?.data || []}
                 competencyData={competencyRes?.data || null}
+                pointsData={pointsRes?.data || null}
             />
         </div>
     );
 }
+

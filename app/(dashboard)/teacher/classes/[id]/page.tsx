@@ -166,7 +166,7 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                         <p className="text-slate-300 font-medium text-sm">{classInfo.course?.description}</p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-2 bg-white/10 p-4 rounded-xl border border-white/10 text-sm text-slate-200 shrink-0">
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-3 bg-white/10 p-4 rounded-xl border border-white/10 text-sm text-slate-200 shrink-0">
                         <div className="flex items-center gap-2">
                             <Calendar className="w-4 h-4 text-indigo-300" />
                             <span className="font-medium">{classInfo.schedule ? (typeof classInfo.schedule === 'string' ? classInfo.schedule : JSON.stringify(classInfo.schedule)) : "Chưa có lịch"}</span>
@@ -185,7 +185,15 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                         </div>
                         <div className="flex items-center gap-2">
                             <BookOpen className="w-4 h-4 text-emerald-300" />
-                            <span className="font-medium">Bài giảng: {lessonCount} ({publishedCount} đã xuất bản)</span>
+                            <span className="font-medium">Bài: {lessonCount} ({publishedCount} public)</span>
+                        </div>
+                        <div className="col-span-2 pt-2 border-t border-white/10">
+                            <Link href={`/teacher/classes/${id}/points`}>
+                                <Button size="sm" variant="secondary" className="w-full bg-indigo-500/20 text-indigo-100 hover:bg-indigo-500/40 hover:text-white border-0 py-0 h-8">
+                                    <Trophy className="w-4 h-4 mr-2 text-amber-300" /> 
+                                    Quản lý Điểm & Xếp hạng
+                                </Button>
+                            </Link>
                         </div>
                     </div>
                 </div>
@@ -270,7 +278,7 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                             </h3>
                             <Link href={`/teacher/classes/${id}/students`}>
                                 <Button className="bg-blue-600 hover:bg-blue-700 text-white shrink-0">
-                                    Quản lý Học viên Chuyên sâu <ExternalLink className="w-4 h-4 ml-2" />
+                                    Quản lý Điểm số <ExternalLink className="w-4 h-4 ml-2" />
                                 </Button>
                             </Link>
                         </div>

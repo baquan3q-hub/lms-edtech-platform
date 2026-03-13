@@ -344,74 +344,82 @@ export async function fetchStudentGrades() {
 
         const adminSupabase = createAdminClient();
 
-        // 1. Lấy tất cả quiz_attempts của user
-        const { data: attempts, error: attemptsError } = await adminSupabase
-            .from("quiz_attempts")
-            .select(`
-                id, item_id, score, passed, submitted_at,
-                item:course_items(
-                    title, class_id,
-                    class:classes(name, course:courses(name))
-                )
-            `)
-            .eq("student_id", user.id)
-            .order("submitted_at", { ascending: false });
+        // 1. Lấy quiz_attempts (có thể bảng chưa tồn tại → bỏ qua)
+        let formattedAttempts: any[] = [];
+        try {
+            const { data: attempts, error: attemptsError } = await adminSupabase
+                .from("quiz_attempts")
+                .select(`
+                    id, item_id, score, passed, submitted_at,
+                    item:course_items(
+                        title, class_id,
+                        class:classes(name, course:courses(name))
+                    )
+                `)
+                .eq("student_id", user.id)
+                .order("submitted_at", { ascending: false });
 
-        if (attemptsError) throw attemptsError;
+            if (!attemptsError && attempts) {
+                formattedAttempts = attempts.map(record => {
+                    const clsInfo = Array.isArray(record.item) ? record.item[0]?.class : (record.item as any)?.class;
+                    const itemInfo = Array.isArray(record.item) ? record.item[0] : record.item;
+                    return {
+                        id: record.id,
+                        itemId: record.item_id,
+                        title: itemInfo?.title || "Bài tập trắc nghiệm",
+                        type: "quiz",
+                        className: clsInfo?.name || "Lớp học chưa rõ",
+                        courseName: clsInfo?.course?.name || "Khóa học",
+                        score: record.score,
+                        passed: record.passed,
+                        submittedAt: record.submitted_at
+                    };
+                });
+            }
+        } catch (e) {
+            console.warn("quiz_attempts query skipped:", e);
+        }
 
         // 2. Lấy exam_submissions
-        const { data: examSubmissions, error: examsError } = await adminSupabase
-            .from("exam_submissions")
-            .select(`
-                id, exam_id, score, total_points, time_taken_seconds, created_at,
-                exam:exams(
-                    title, class_id,
-                    class:classes(name, course:courses(name))
-                )
-            `)
-            .eq("student_id", user.id)
-            .order("created_at", { ascending: false });
+        let formattedExams: any[] = [];
+        try {
+            const { data: examSubmissions, error: examsError } = await adminSupabase
+                .from("exam_submissions")
+                .select(`
+                    id, exam_id, score, total_points, time_taken_seconds, created_at,
+                    exam:exams(
+                        title, class_id,
+                        class:classes(name, course:courses(name))
+                    )
+                `)
+                .eq("student_id", user.id)
+                .order("created_at", { ascending: false });
 
-        if (examsError) throw examsError;
+            if (!examsError && examSubmissions) {
+                formattedExams = examSubmissions.map(record => {
+                    const examInfo = Array.isArray(record.exam) ? record.exam[0] : record.exam;
+                    const clsInfo = Array.isArray(examInfo?.class) ? examInfo?.class[0] : examInfo?.class;
+                    const courseInfo = Array.isArray(clsInfo?.course) ? clsInfo?.course[0] : clsInfo?.course;
 
-        // Format data để frontend dễ dùng
-        const formattedAttempts = attempts?.map(record => {
-            const clsInfo = Array.isArray(record.item) ? record.item[0]?.class : (record.item as any)?.class;
-            const itemInfo = Array.isArray(record.item) ? record.item[0] : record.item;
-            return {
-                id: record.id,
-                itemId: record.item_id,
-                title: itemInfo?.title || "Bài tập trắc nghiệm",
-                type: "quiz",
-                className: clsInfo?.name || "Lớp học chưa rõ",
-                courseName: clsInfo?.course?.name || "Khóa học",
-                score: record.score,
-                passed: record.passed,
-                submittedAt: record.submitted_at
-            };
-        }) || [];
+                    const percent = Number(record.total_points) > 0 ? (Number(record.score) / Number(record.total_points)) * 100 : 0;
+                    const passed = percent >= 50;
 
-        const formattedExams = examSubmissions?.map(record => {
-            const examInfo = Array.isArray(record.exam) ? record.exam[0] : record.exam;
-            const clsInfo = Array.isArray(examInfo?.class) ? examInfo?.class[0] : examInfo?.class;
-            const courseInfo = Array.isArray(clsInfo?.course) ? clsInfo?.course[0] : clsInfo?.course;
-
-            // Assume pass if >= 50%
-            const percent = Number(record.total_points) > 0 ? (Number(record.score) / Number(record.total_points)) * 100 : 0;
-            const passed = percent >= 50;
-
-            return {
-                id: record.id,
-                itemId: record.exam_id,
-                title: examInfo?.title || "Bài kiểm tra độc lập",
-                type: "exam",
-                className: clsInfo?.name || "Lớp học chưa rõ",
-                courseName: courseInfo?.name || "Khóa học",
-                score: record.score,
-                passed: passed,
-                submittedAt: record.created_at
-            };
-        }) || [];
+                    return {
+                        id: record.id,
+                        itemId: record.exam_id,
+                        title: examInfo?.title || "Bài kiểm tra độc lập",
+                        type: "exam",
+                        className: clsInfo?.name || "Lớp học chưa rõ",
+                        courseName: courseInfo?.name || "Khóa học",
+                        score: record.score,
+                        passed: passed,
+                        submittedAt: record.created_at
+                    };
+                });
+            }
+        } catch (e) {
+            console.warn("exam_submissions query skipped:", e);
+        }
 
         const formattedGrades = [...formattedAttempts, ...formattedExams].sort(
             (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()

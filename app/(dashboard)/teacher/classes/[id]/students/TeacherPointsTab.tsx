@@ -27,16 +27,19 @@ interface TeacherPointsTabProps {
 }
 
 const REASON_LABELS: Record<string, string> = {
-    present: "Có mặt",
-    late: "Đi trễ",
-    excused: "Có phép",
-    absent: "Vắng mặt",
-    streak_3: "🥉 Streak 3",
-    streak_5: "🥈 Streak 5",
-    streak_10: "🥇 Streak 10",
-    bonus: "Thưởng GV",
-    penalty: "Trừ GV",
-    manual: "Điều chỉnh",
+    attendance: "Chuyên cần",
+    participation: "Tham gia",
+    behavior: "Hạnh kiểm",
+    homework: "Bài tập",
+    other: "Khác",
+};
+
+const TYPE_COLORS: Record<string, string> = {
+    attendance: "bg-blue-50 text-blue-700 border-blue-200",
+    participation: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    behavior: "bg-amber-50 text-amber-700 border-amber-200",
+    homework: "bg-indigo-50 text-indigo-700 border-indigo-200",
+    other: "bg-slate-50 text-slate-700 border-slate-200",
 };
 
 export default function TeacherPointsTab({ classId }: TeacherPointsTabProps) {
@@ -161,9 +164,9 @@ export default function TeacherPointsTab({ classId }: TeacherPointsTabProps) {
                 <Card className="shadow-sm">
                     <CardContent className="p-4 text-center">
                         <p className="text-3xl font-black text-purple-600">
-                            {data.reduce((sum, s) => sum + s.achievements.length, 0)}
+                            {data.filter(s => s.totalPoints > 0).length}
                         </p>
-                        <p className="text-xs text-slate-500 mt-1">Thành tựu</p>
+                        <p className="text-xs text-slate-500 mt-1">HS có điểm</p>
                     </CardContent>
                 </Card>
             </div>
@@ -190,7 +193,6 @@ export default function TeacherPointsTab({ classId }: TeacherPointsTabProps) {
                                 <th className="px-4 py-3 font-medium w-12 text-center">Hạng</th>
                                 <th className="px-4 py-3 font-medium">Học sinh</th>
                                 <th className="px-4 py-3 font-medium text-center">Tổng điểm</th>
-                                <th className="px-4 py-3 font-medium text-center">Thành tựu</th>
                                 <th className="px-4 py-3 font-medium text-right">Thao tác</th>
                             </tr>
                         </thead>
@@ -226,16 +228,6 @@ export default function TeacherPointsTab({ classId }: TeacherPointsTabProps) {
                                             }`}>
                                             {student.totalPoints}
                                         </span>
-                                    </td>
-                                    <td className="px-4 py-3 text-center">
-                                        <div className="flex justify-center gap-1">
-                                            {student.achievements.includes("streak_3") && <span title="Streak 3">🥉</span>}
-                                            {student.achievements.includes("streak_5") && <span title="Streak 5">🥈</span>}
-                                            {student.achievements.includes("streak_10") && <span title="Streak 10">🥇</span>}
-                                            {student.achievements.length === 0 && (
-                                                <span className="text-xs text-slate-300">—</span>
-                                            )}
-                                        </div>
                                     </td>
                                     <td className="px-4 py-3 text-right">
                                         <div className="flex justify-end gap-1">
@@ -285,9 +277,9 @@ export default function TeacherPointsTab({ classId }: TeacherPointsTabProps) {
                             ))}
                             {filteredData.length === 0 && (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-12 text-center text-slate-400">
+                                    <td colSpan={4} className="px-6 py-12 text-center text-slate-400">
                                         {data.length === 0
-                                            ? "Chưa có dữ liệu điểm chuyên cần. Điểm danh lần đầu để bắt đầu."
+                                            ? "Chưa có dữ liệu điểm tích lũy. Cộng/trừ điểm để bắt đầu."
                                             : "Không tìm thấy học sinh phù hợp."}
                                     </td>
                                 </tr>
@@ -382,7 +374,8 @@ export default function TeacherPointsTab({ classId }: TeacherPointsTabProps) {
                             <p className="text-sm text-slate-400 text-center py-8">Chưa có bản ghi điểm.</p>
                         ) : (
                             (historyDialog.student?.history || []).map((item: any) => {
-                                const reasonLabel = REASON_LABELS[item.reason] || item.reason;
+                                const typeLabel = REASON_LABELS[item.type] || item.type || "Khác";
+                                const reasonLabel = item.reason || typeLabel;
                                 const isNegative = item.points < 0;
                                 return (
                                     <div

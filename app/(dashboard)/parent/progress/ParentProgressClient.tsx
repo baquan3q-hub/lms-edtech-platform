@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { generateParentAIInsight } from "@/lib/actions/parent-progress";
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -23,7 +24,8 @@ import {
 } from "recharts";
 import { 
     TrendingUp, Users, BookOpen, Clock, Target, Award, Star, SearchX,
-    MessageSquare, AlertTriangle, ChevronDown, ChevronUp, CheckCircle2, Circle
+    MessageSquare, AlertTriangle, ChevronDown, ChevronUp, CheckCircle2, Circle,
+    Trophy, PlusCircle, MinusCircle, Sparkles, Loader2
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -76,6 +78,12 @@ interface CompetencyData {
     overallScore: number;
 }
 
+interface PointsData {
+    byClass: { class_id: string; class_name: string; course_name: string; total_points: number }[];
+    recentHistory: any[];
+    totalPoints: number;
+}
+
 interface ParentProgressClientProps {
     students: { id: string; name: string; avatar_url?: string }[];
     activeStudentId: string;
@@ -84,14 +92,17 @@ interface ParentProgressClientProps {
     history: ScoreHistory[];
     feedbackList: any[];
     competencyData: CompetencyData | null;
+    pointsData: PointsData | null;
 }
 
-export default function ParentProgressClient({ students, activeStudentId, activeStudentName, stats, history, feedbackList, competencyData }: ParentProgressClientProps) {
+export default function ParentProgressClient({ students, activeStudentId, activeStudentName, stats, history, feedbackList, competencyData, pointsData }: ParentProgressClientProps) {
     const router = useRouter();
     const searchParams = useSearchParams();
     const [selectedFeedback, setSelectedFeedback] = useState<any>(null);
     const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
     const [showAllFeedback, setShowAllFeedback] = useState(false);
+    const [aiInsight, setAiInsight] = useState<string | null>(null);
+    const [loadingInsight, setLoadingInsight] = useState(false);
 
     const handleStudentChange = (newStudentId: string) => {
         const params = new URLSearchParams(searchParams.toString());
@@ -248,6 +259,76 @@ export default function ParentProgressClient({ students, activeStudentId, active
                 </Card>
             </div>
 
+            {/* ===================== ĐIỂM TÍCH LŨY ===================== */}
+            {pointsData && (
+                <Card className="shadow-sm overflow-hidden border-amber-200 bg-gradient-to-br from-amber-50/50 to-orange-50/30">
+                    <CardHeader className="bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-100">
+                        <div className="flex items-center justify-between">
+                            <CardTitle className="flex items-center gap-2">
+                                <Trophy className="w-5 h-5 text-amber-600" /> Điểm Tích Lũy (Thái độ & Đạo đức)
+                            </CardTitle>
+                            <div className={`text-2xl font-black ${pointsData.totalPoints > 0 ? 'text-emerald-600' : pointsData.totalPoints < 0 ? 'text-red-500' : 'text-slate-500'}`}>
+                                {pointsData.totalPoints > 0 ? `+${pointsData.totalPoints}` : pointsData.totalPoints} điểm
+                            </div>
+                        </div>
+                        <CardDescription>Giáo viên đánh giá dựa trên chuyên cần, phát biểu, thái độ học tập</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-5">
+                        {pointsData.byClass.length > 0 ? (
+                            <div className="space-y-5">
+                                {/* Điểm theo lớp */}
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                    {pointsData.byClass.map((cls) => (
+                                        <div key={cls.class_id} className="bg-white rounded-xl p-4 border border-amber-100 shadow-sm">
+                                            <p className="text-sm font-bold text-slate-800 truncate">{cls.class_name}</p>
+                                            <p className="text-xs text-slate-500 truncate">{cls.course_name}</p>
+                                            <p className={`text-2xl font-black mt-2 ${cls.total_points > 0 ? 'text-emerald-600' : cls.total_points < 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                                                {cls.total_points > 0 ? `+${cls.total_points}` : cls.total_points}
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Lịch sử gần đây */}
+                                {pointsData.recentHistory.length > 0 && (
+                                    <div>
+                                        <h4 className="text-sm font-bold text-amber-800 mb-3 flex items-center gap-2">
+                                            <Clock className="w-4 h-4" /> Lịch sử cộng/trừ điểm gần đây
+                                        </h4>
+                                        <div className="space-y-2 max-h-[260px] overflow-y-auto">
+                                            {pointsData.recentHistory.slice(0, 10).map((item: any) => {
+                                                const isPositive = item.points > 0;
+                                                return (
+                                                    <div key={item.id} className="flex items-center gap-3 bg-white rounded-xl px-4 py-3 border border-slate-100">
+                                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isPositive ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-500'}`}>
+                                                            {isPositive ? <PlusCircle className="w-4 h-4" /> : <MinusCircle className="w-4 h-4" />}
+                                                        </div>
+                                                        <div className="flex-1 min-w-0">
+                                                            <p className="text-sm font-semibold text-slate-800 truncate">{item.reason}</p>
+                                                            <span className="text-[11px] text-slate-400">
+                                                                {item.class?.name || 'Lớp học'} • GV: {item.teacher?.full_name || 'Giáo viên'} • {new Date(item.created_at).toLocaleDateString('vi-VN')}
+                                                            </span>
+                                                        </div>
+                                                        <span className={`font-black text-base shrink-0 ${isPositive ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                            {isPositive ? `+${item.points}` : item.points}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-center py-6">
+                                <Star className="w-10 h-10 text-amber-200 mx-auto mb-2" />
+                                <p className="text-sm text-amber-700 font-medium">Chưa có điểm tích lũy nào.</p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
             {/* ===================== BIỂU ĐỒ NĂNG LỰC (RADAR CHART) ===================== */}
             {competencyData && (
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
@@ -367,6 +448,74 @@ export default function ParentProgressClient({ students, activeStudentId, active
                 </div>
             )}
 
+            {/* ===================== AI PHÂN TÍCH NĂNG LỰC ===================== */}
+            {competencyData && (
+                <Card className="shadow-sm overflow-hidden border-violet-200 bg-gradient-to-br from-violet-50/30 to-indigo-50/20">
+                    <CardHeader className="bg-gradient-to-r from-violet-50 to-indigo-50 border-b border-violet-100">
+                        <div className="flex items-center justify-between">
+                            <CardTitle className="flex items-center gap-2">
+                                <Sparkles className="w-5 h-5 text-violet-600" /> AI Phân tích Năng lực
+                            </CardTitle>
+                            <Button
+                                size="sm"
+                                className="bg-violet-600 hover:bg-violet-700 text-white font-bold px-4 h-9 rounded-lg"
+                                disabled={loadingInsight}
+                                onClick={async () => {
+                                    setLoadingInsight(true);
+                                    try {
+                                        const statsForAI = stats.map((s: any) => {
+                                            const cls = Array.isArray(s.classes) ? s.classes[0] : s.classes;
+                                            return {
+                                                class_name: cls?.name || "Lớp học",
+                                                avg_score: s.avg_score,
+                                                attendance_rate: s.attendance_rate,
+                                            };
+                                        });
+                                        const result = await generateParentAIInsight(
+                                            activeStudentName,
+                                            competencyData,
+                                            pointsData,
+                                            statsForAI
+                                        );
+                                        if (result.data) {
+                                            setAiInsight(result.data);
+                                        } else {
+                                            setAiInsight("Không thể tạo phân tích lúc này. Vui lòng thử lại sau.");
+                                        }
+                                    } catch (e) {
+                                        setAiInsight("Đã xảy ra lỗi khi phân tích. Vui lòng thử lại.");
+                                    } finally {
+                                        setLoadingInsight(false);
+                                    }
+                                }}
+                            >
+                                {loadingInsight ? (
+                                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Đang phân tích...</>
+                                ) : (
+                                    <><Sparkles className="w-4 h-4 mr-2" /> {aiInsight ? 'Phân tích lại' : 'Tạo phân tích AI'}</>
+                                )}
+                            </Button>
+                        </div>
+                        <CardDescription>AI đánh giá toàn diện dựa trên dữ liệu năng lực, điểm tích lũy, và kết quả học tập</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-5">
+                        {aiInsight ? (
+                            <div className="prose prose-sm max-w-none">
+                                <div className="bg-white rounded-xl p-5 border border-violet-100 text-slate-700 leading-relaxed whitespace-pre-wrap text-sm">
+                                    {aiInsight}
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="text-center py-8">
+                                <Sparkles className="w-12 h-12 text-violet-200 mx-auto mb-3" />
+                                <p className="text-sm text-violet-700 font-medium">Nhấn &quot;Tạo phân tích AI&quot; để nhận đánh giá tổng hợp</p>
+                                <p className="text-xs text-violet-500 mt-1">AI sẽ phân tích điểm mạnh, điểm yếu và đưa ra giải pháp cụ thể cho phụ huynh</p>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
             {/* ===================== NHẬN XÉT TỪ GIÁO VIÊN ===================== */}
             {feedbackList.length > 0 && (
                 <Card className="shadow-sm overflow-hidden">
@@ -449,6 +598,75 @@ export default function ParentProgressClient({ students, activeStudentId, active
                                 </Button>
                             </div>
                         )}
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* ===================== ĐIỂM CHUYÊN CẦN ===================== */}
+            {stats.length > 0 && (
+                <Card className="shadow-sm overflow-hidden border-cyan-200 bg-gradient-to-br from-cyan-50/30 to-sky-50/20">
+                    <CardHeader className="bg-gradient-to-r from-cyan-50 to-sky-50 border-b border-cyan-100">
+                        <CardTitle className="flex items-center gap-2">
+                            <Clock className="w-5 h-5 text-cyan-600" /> Điểm Chuyên Cần theo Lớp
+                        </CardTitle>
+                        <CardDescription>Thống kê chi tiết tình trạng đi học của con tại từng lớp</CardDescription>
+                    </CardHeader>
+                    <CardContent className="p-5">
+                        <div className="space-y-4">
+                            {stats.map((stat: any) => {
+                                const cls = Array.isArray(stat.classes) ? stat.classes[0] : stat.classes;
+                                const className = cls?.name || "Lớp học";
+                                const courseObj = Array.isArray(cls?.courses) ? cls?.courses[0] : cls?.courses;
+                                const courseName = courseObj?.name || "Khóa học";
+                                const rate = stat.attendance_rate ?? 0;
+                                const rateColor = rate >= 90 ? 'text-emerald-600' : rate >= 75 ? 'text-amber-600' : 'text-red-500';
+                                const barColor = rate >= 90 ? 'bg-emerald-500' : rate >= 75 ? 'bg-amber-500' : 'bg-red-500';
+
+                                return (
+                                    <div key={stat.class_id} className="bg-white rounded-xl p-4 border border-cyan-100 shadow-sm">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div>
+                                                <p className="text-sm font-bold text-slate-800">{className}</p>
+                                                <p className="text-xs text-slate-500">{courseName}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className={`text-2xl font-black ${rateColor}`}>{rate}%</p>
+                                                <p className="text-[10px] text-slate-400 font-medium">Tỉ lệ chuyên cần</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Progress bar */}
+                                        <div className="w-full bg-slate-100 rounded-full h-2 mb-3 overflow-hidden">
+                                            <div className={`h-2 rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${rate}%` }} />
+                                        </div>
+
+                                        {/* Detail stats */}
+                                        <div className="grid grid-cols-4 gap-2 text-center">
+                                            <div className="bg-emerald-50 rounded-lg p-2">
+                                                <p className="text-lg font-black text-emerald-600">{stat.present_count}</p>
+                                                <p className="text-[10px] text-emerald-700 font-medium">Có mặt</p>
+                                            </div>
+                                            <div className="bg-amber-50 rounded-lg p-2">
+                                                <p className="text-lg font-black text-amber-600">{stat.late_count}</p>
+                                                <p className="text-[10px] text-amber-700 font-medium">Đi muộn</p>
+                                            </div>
+                                            <div className="bg-blue-50 rounded-lg p-2">
+                                                <p className="text-lg font-black text-blue-600">{stat.excused_count}</p>
+                                                <p className="text-[10px] text-blue-700 font-medium">Có phép</p>
+                                            </div>
+                                            <div className="bg-red-50 rounded-lg p-2">
+                                                <p className="text-lg font-black text-red-500">{stat.absent_count}</p>
+                                                <p className="text-[10px] text-red-700 font-medium">Vắng</p>
+                                            </div>
+                                        </div>
+
+                                        <p className="text-[11px] text-slate-400 mt-2 text-center font-medium">
+                                            Tổng: {stat.total_sessions} buổi điểm danh
+                                        </p>
+                                    </div>
+                                );
+                            })}
+                        </div>
                     </CardContent>
                 </Card>
             )}

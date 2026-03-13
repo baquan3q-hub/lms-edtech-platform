@@ -232,6 +232,17 @@ export interface GradeReport {
     sent_at: string | null;
 }
 
+export interface StudentPoint {
+    id: string;
+    student_id: string;
+    class_id: string;
+    teacher_id: string;
+    points: number;
+    reason: string;
+    type: 'attendance' | 'participation' | 'behavior' | 'homework' | 'other';
+    created_at: string;
+}
+
 // ============================================================
 // 8. AI QUIZ ANALYSIS
 // ============================================================
@@ -328,6 +339,7 @@ export interface Database {
             invoices: { Row: Invoice; Insert: Omit<Invoice, "id" | "issued_at">; Update: Partial<Omit<Invoice, "id">> };
             ai_analyses: { Row: AIAnalysis; Insert: Omit<AIAnalysis, "id" | "created_at">; Update: Partial<Omit<AIAnalysis, "id">> };
             grade_reports: { Row: GradeReport; Insert: Omit<GradeReport, "id">; Update: Partial<Omit<GradeReport, "id">> };
+            student_points: { Row: StudentPoint; Insert: Omit<StudentPoint, "id" | "created_at">; Update: Partial<Omit<StudentPoint, "id">> };
         };
     };
 }
