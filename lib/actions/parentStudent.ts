@@ -502,27 +502,48 @@ export async function fetchParentDashboardData(studentId: string) {
         lastWeek.setDate(now.getDate() - 7);
         const lastWeekStr = formatLocalDate(lastWeek);
 
+        // Tạo bản đồ room_name từ schedules theo class_id
+        const classRoomMap: Record<string, string> = {};
+        for (const sch of upcomingSchedules) {
+            if (sch.room?.name) {
+                classRoomMap[`${sch.class_id}-${sch.day_of_week}`] = sch.room.name;
+            }
+        }
+
         if (classIds.length > 0) {
-            // 1. Lấy các sessions đã được Admin tạo thực tế
+            // 1. Lấy các sessions đã được Admin tạo thực tế (kèm room info)
             const { data: realSessions } = await supabase
                 .from("class_sessions")
-                .select("id, class_id, session_number, session_date, start_time, end_time, topic, homework, status, class:classes!class_id(name, course:courses(name), teacher:users!classes_teacher_id_fkey(full_name))")
+                .select("id, class_id, session_number, session_date, start_time, end_time, topic, homework, status, room_id, class:classes!class_id(name, course:courses(name), teacher:users!classes_teacher_id_fkey(full_name))")
                 .in("class_id", classIds)
                 .gte("session_date", lastWeekStr)
                 .order("session_date", { ascending: true });
 
-            let mergedSessions: any[] = realSessions ? [...realSessions] : [];
+            let mergedSessions: any[] = (realSessions || []).map((s: any) => {
+                // Lấy room_name từ schedule map nếu session không có room riêng
+                const dayOfWeek = new Date(s.session_date + 'T00:00:00').getDay();
+                const roomKey = `${s.class_id}-${dayOfWeek}`;
+                return {
+                    ...s,
+                    room_name: classRoomMap[roomKey] || null
+                };
+            });
             const realSessionKeys = new Set(mergedSessions.map(s => `${s.class_id}-${s.session_date}`));
 
             // 2. Dự phóng lịch từ class_schedules (cho 4 tuần tới)
+            // Sử dụng ngày hôm nay làm mốc, lùi lại đủ để lấy buổi gần nhất đã qua
             for (const schedule of upcomingSchedules) {
+                // Bắt đầu từ 1 tuần trước hôm nay
                 let d = new Date(lastWeek);
                 d.setHours(0, 0, 0, 0);
 
-                // Tìm ngày gần nhất khớp với day_of_week
+                // Tìm ngày gần nhất khớp với day_of_week (0=CN, 1=T2, ..., 6=T7)
                 while (d.getDay() !== schedule.day_of_week) {
                     d.setDate(d.getDate() + 1);
                 }
+
+                // Room name từ schedule
+                const roomName = schedule.room?.name || null;
 
                 // Dự phóng cho 5 tuần (1 tuần trước + 4 tuần sau)
                 for (let w = 0; w < 5; w++) {
@@ -545,9 +566,10 @@ export async function fetchParentDashboardData(studentId: string) {
                             homework: null,
                             status: sessionDateStr < todayStr ? "completed" : "scheduled",
                             class: schedule.class,
+                            room_name: roomName,
                             isVirtual: true
                         });
-                        realSessionKeys.add(key); // Tránh trùng lặp nếu schedule bị trùng
+                        realSessionKeys.add(key);
                     }
                 }
             }
@@ -582,7 +604,7 @@ export async function fetchParentDashboardData(studentId: string) {
                         }
                     );
 
-                    // Nếu ngày đã qua mà không có điểm danh (và đây là session do hệ thống tự gen) => "unrecorded"
+                    // Nếu ngày đã qua mà không có điểm danh => "unrecorded"
                     const isPast = s.session_date < todayStr;
 
                     return {

@@ -10,12 +10,11 @@ import {
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
-import {
-    FileText, PlusCircle, Loader2, Clock, CheckCircle2, XCircle,
-    Eye, Calendar,
+import { FileText, PlusCircle, Loader2, Clock, CheckCircle2, XCircle,
+    Eye, Calendar, Undo2,
 } from "lucide-react";
 import Link from "next/link";
-import { getAbsenceRequests } from "@/lib/actions/attendance";
+import { getAbsenceRequests, withdrawAbsenceRequest } from "@/lib/actions/attendance";
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; icon: React.ElementType }> = {
     pending: { label: "Chờ duyệt", color: "bg-amber-100 text-amber-800 border-amber-200", icon: Clock },
@@ -37,6 +36,20 @@ export default function AbsenceRequestListClient({ parentId }: { parentId: strin
         const { data } = await getAbsenceRequests({ parent_id: parentId });
         setRequests(data);
         setLoading(false);
+    };
+
+    const handleWithdraw = async (requestId: string) => {
+        const confirmed = window.confirm("Bạn có chắc muốn thu hồi đơn xin nghỉ này?");
+        if (!confirmed) return;
+
+        const { success, error } = await withdrawAbsenceRequest(requestId);
+        if (success) {
+            toast.success("Đã thu hồi đơn xin nghỉ thành công");
+            setSelectedRequest(null);
+            loadRequests();
+        } else {
+            toast.error(error || "Có lỗi xảy ra khi thu hồi đơn");
+        }
     };
 
     if (loading) {
@@ -113,12 +126,23 @@ export default function AbsenceRequestListClient({ parentId }: { parentId: strin
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
-                                            <Button
-                                                variant="ghost" size="sm"
-                                                onClick={() => setSelectedRequest(req)}
-                                            >
-                                                <Eye className="w-4 h-4" />
-                                            </Button>
+                                            <div className="flex items-center gap-1">
+                                                <Button
+                                                    variant="ghost" size="sm"
+                                                    onClick={() => setSelectedRequest(req)}
+                                                >
+                                                    <Eye className="w-4 h-4" />
+                                                </Button>
+                                                {req.status === "pending" && (
+                                                    <Button
+                                                        variant="ghost" size="sm"
+                                                        className="text-amber-600 hover:text-amber-700 hover:bg-amber-50"
+                                                        onClick={() => handleWithdraw(req.id)}
+                                                    >
+                                                        <Undo2 className="w-4 h-4" />
+                                                    </Button>
+                                                )}
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 );
@@ -164,6 +188,16 @@ export default function AbsenceRequestListClient({ parentId }: { parentId: strin
                                         <span className="text-xs text-red-600 font-medium">Lý do từ chối:</span>
                                         <p className="text-sm text-red-800 mt-1">{selectedRequest.reject_reason}</p>
                                     </div>
+                                )}
+                                {selectedRequest.status === "pending" && (
+                                    <Button
+                                        variant="outline"
+                                        className="w-full text-amber-700 border-amber-300 hover:bg-amber-50"
+                                        onClick={() => handleWithdraw(selectedRequest.id)}
+                                    >
+                                        <Undo2 className="w-4 h-4 mr-2" />
+                                        Thu hồi đơn xin nghỉ
+                                    </Button>
                                 )}
                             </div>
                         );

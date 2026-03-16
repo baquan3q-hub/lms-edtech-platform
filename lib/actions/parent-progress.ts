@@ -98,26 +98,59 @@ export async function getStudentProgressStats(studentId: string) {
             .from("exam_submissions")
             .select("score, submitted_at, exams(title, total_points)")
             .eq("student_id", studentId)
-            .order("submitted_at", { ascending: true }); // Chronological order
+            .not("score", "is", null);
 
         if (submissionsError) {
             console.error("Lỗi lấy lịch sử bài test:", submissionsError);
         }
 
-        const history = (submissions || []).map((sub: any) => {
-            const dateStr = sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString("vi-VN", { day: '2-digit', month: '2-digit' }) : "";
-            
-            // Normalize score to a 10-point scale if total_points is available
-            let displayScore = 0;
+        // 4. Fetch homework history
+        const { data: hwSubmissions } = await adminSupabase
+            .from("homework_submissions")
+            .select("score, submitted_at, homeworks(title)")
+            .eq("student_id", studentId)
+            .not("score", "is", null);
+
+        const allSubs: any[] = [];
+
+        // Build Exams
+        (submissions || []).forEach((sub: any) => {
             const totalPoints = sub.exams?.total_points || 0;
+            let displayScore = 0;
             if (totalPoints > 0 && sub.score !== null) {
                 displayScore = (sub.score / totalPoints) * 10;
             }
+            allSubs.push({
+                title: sub.exams?.title || "Bài kiểm tra",
+                score: Number(displayScore.toFixed(1)),
+                submitted_at: sub.submitted_at,
+                type: "exam"
+            });
+        });
 
+        // Build Homeworks
+        (hwSubmissions || []).forEach((sub: any) => {
+            let displayScore = Number(sub.score || 0);
+            if (displayScore > 10) displayScore = displayScore / 10; // Normalize 100-point scale to 10
+            
+            allSubs.push({
+                title: sub.homeworks?.title || "Bài tập",
+                score: Number(displayScore.toFixed(1)),
+                submitted_at: sub.submitted_at,
+                type: "homework"
+            });
+        });
+
+        // Sort chronologically
+        allSubs.sort((a, b) => new Date(a.submitted_at || 0).getTime() - new Date(b.submitted_at || 0).getTime());
+
+        const history = allSubs.map((sub: any) => {
+            const dateStr = sub.submitted_at ? new Date(sub.submitted_at).toLocaleDateString("vi-VN", { day: '2-digit', month: '2-digit' }) : "";
             return {
                 date: dateStr,
-                score: Number(displayScore.toFixed(1)),
-                exam: sub.exams?.title || "Bài kiểm tra"
+                score: sub.score,
+                exam: sub.title,
+                type: sub.type
             };
         });
 
@@ -191,7 +224,7 @@ export async function getStudentFeedbackList(studentId: string) {
 }
 
 // ============================================================
-// PARENT: Tính toán 6 trục năng lực dựa trên Bloom's Taxonomy
+// PARENT: Đánh giá theo kỹ năng / môn học thực tế
 // ============================================================
 export async function getStudentCompetencyData(studentId: string) {
     try {
@@ -208,7 +241,6 @@ export async function getStudentCompetencyData(studentId: string) {
             .single();
 
         if (userData?.role !== "admin") {
-            // Verify parent access
             const { data: link } = await adminSupabase
                 .from("parent_students")
                 .select("id")
@@ -219,114 +251,120 @@ export async function getStudentCompetencyData(studentId: string) {
             if (!link) return { data: null, error: "Access denied" };
         }
 
-        // ---------- 1. KIẾN THỨC (Knowledge) — Điểm TB bài kiểm tra ----------
-        const { data: submissions } = await adminSupabase
+        // ---------- 1. Get knowledge_gaps for weaknesses ----------
+        const { data: analyses } = await adminSupabase
+            .from("quiz_individual_analysis")
+            .select("knowledge_gaps")
+            .eq("student_id", studentId)
+            .eq("status", "sent");
+
+        const gapCounts: Record<string, number> = {};
+        if (analyses) {
+            analyses.forEach(a => {
+                if (a.knowledge_gaps && Array.isArray(a.knowledge_gaps)) {
+                    a.knowledge_gaps.forEach((g: string) => {
+                        gapCounts[g] = (gapCounts[g] || 0) + 1;
+                    });
+                }
+            });
+        }
+        
+        // Helper inline
+        const formatGap = (gap: any) => gap?.toString().replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) || "";
+
+        const weaknesses = Object.entries(gapCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 4)
+            .map(([gap, count]) => ({
+                key: gap,
+                label: formatGap(gap),
+                value: count, // times identified
+                icon: "🎯"
+            }));
+
+        // ---------- 2. Get high scores to extract strengths ----------
+        const { data: highExams } = await adminSupabase
             .from("exam_submissions")
-            .select("score, exams!inner(total_points)")
-            .eq("student_id", studentId);
+            .select("score, exams(title, total_points)")
+            .eq("student_id", studentId)
+            .not("score", "is", null);
 
-        let knowledgeScore = 0;
-        const validSubs = (submissions || []).filter((s: any) => s.score !== null && s.exams?.total_points > 0);
-        if (validSubs.length > 0) {
-            const totalNorm = validSubs.reduce((acc: number, s: any) => acc + (s.score / s.exams.total_points) * 100, 0);
-            knowledgeScore = Math.round(totalNorm / validSubs.length);
+        const strengthCounts: Record<string, number> = {};
+        if (highExams) {
+            highExams.forEach((sub: any) => {
+                const total = sub.exams?.total_points || 0;
+                if (total > 0 && sub.score !== null) {
+                    const normScore = (sub.score / total) * 10;
+                    if (normScore >= 8.0) {
+                        const title = sub.exams?.title || "Bài kiểm tra";
+                        strengthCounts[title] = (strengthCounts[title] || 0) + 1;
+                    }
+                }
+            });
         }
+        
+        const strengths = Object.entries(strengthCounts)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 4)
+            .map(([title, count]) => ({
+                key: title,
+                label: title,
+                value: count, // times scored high
+                icon: "🌟"
+            }));
 
-        // ---------- 2. CHUYÊN CẦN (Discipline) — Tỉ lệ có mặt ----------
-        const { data: attRecords } = await adminSupabase
-            .from("attendance_records")
-            .select("status")
-            .eq("student_id", studentId);
-
-        let disciplineScore = 0;
-        if (attRecords && attRecords.length > 0) {
-            const present = attRecords.filter((r: any) => r.status === "present").length;
-            const late = attRecords.filter((r: any) => r.status === "late").length;
-            disciplineScore = Math.round(((present + late * 0.7) / attRecords.length) * 100);
-        }
-
-        // ---------- 3. CẢI THIỆN (Improvement) — % bài tập cải thiện hoàn thành ----------
-        const { data: progRecords } = await adminSupabase
-            .from("improvement_progress")
-            .select("status")
-            .eq("student_id", studentId);
-
-        let improvementScore = 0;
-        if (progRecords && progRecords.length > 0) {
-            const completed = progRecords.filter((r: any) => r.status === "completed").length;
-            improvementScore = Math.round((completed / progRecords.length) * 100);
-        }
-
-        // ---------- 4. NỖ LỰC (Effort) — Tỉ lệ nộp bài / tổng bài kiểm tra có thể nộp ----------
+        // ---------- 3. Skill Mastery (Performance by Class/Subject) ----------
         const { data: enrollments } = await adminSupabase
             .from("enrollments")
-            .select("class_id")
+            .select("class_id, classes(name)")
             .eq("student_id", studentId)
             .eq("status", "active");
 
-        const classIds = (enrollments || []).map((e: any) => e.class_id);
-        let effortScore = 0;
-        if (classIds.length > 0) {
-            const { count: totalExams } = await adminSupabase
-                .from("exams")
-                .select("id", { count: "exact", head: true })
-                .in("class_id", classIds);
+        const skills: any[] = [];
+        let totalNormalized = 0;
+        let classCount = 0;
 
-            const { count: submittedExams } = await adminSupabase
-                .from("exam_submissions")
-                .select("id", { count: "exact", head: true })
-                .eq("student_id", studentId);
+        if (enrollments) {
+            for (const enroll of enrollments) {
+                const cId = enroll.class_id;
+                const classObj = Array.isArray(enroll.classes) ? enroll.classes[0] : enroll.classes;
+                const cName = classObj?.name || "Lớp học";
 
-            if (totalExams && totalExams > 0) {
-                effortScore = Math.min(100, Math.round(((submittedExams || 0) / totalExams) * 100));
+                const { data: cExams } = await adminSupabase
+                    .from("exam_submissions")
+                    .select("score, exams!inner(class_id, total_points)")
+                    .eq("student_id", studentId)
+                    .eq("exams.class_id", cId)
+                    .not("score", "is", null);
+
+                let avgClassScore = 0;
+                if (cExams && cExams.length > 0) {
+                    const validCExams = cExams.filter((e: any) => e.exams?.total_points > 0);
+                    if (validCExams.length > 0) {
+                        const totalScore = validCExams.reduce((acc: number, curr: any) => acc + ((curr.score / curr.exams.total_points) * 100), 0);
+                        avgClassScore = Number((totalScore / validCExams.length).toFixed(0));
+                        
+                        skills.push({
+                            key: cId,
+                            label: cName,
+                            value: avgClassScore,
+                            icon: "📚"
+                        });
+                        totalNormalized += avgClassScore;
+                        classCount++;
+                    }
+                }
             }
         }
 
-        // ---------- 5. ĐIỂM MẠNH (Strengths) — Số bài >= 8.0/10 / tổng bài ----------
-        let strengthsScore = 0;
-        if (validSubs.length > 0) {
-            const highScores = validSubs.filter((s: any) => (s.score / s.exams.total_points) * 10 >= 8.0).length;
-            strengthsScore = Math.round((highScores / validSubs.length) * 100);
-        }
-
-        // ---------- 6. TƯƠNG TÁC (Engagement) — Dựa vào Điểm tích lũy ----------
-        const { data: pointRecords } = await adminSupabase
-            .from("student_points")
-            .select("points, type")
-            .eq("student_id", studentId);
-
-        let engagementScore = 50; // baseline
-        if (pointRecords && pointRecords.length > 0) {
-            const totalPoints = pointRecords.reduce((sum: number, r: any) => sum + r.points, 0);
-            const maxExpected = pointRecords.length * 5; // hypothetical max: each transaction could be +5
-            // Normalize: 0 points = 50, positive = 50-100, negative = 0-50
-            if (totalPoints >= 0) {
-                engagementScore = Math.min(100, 50 + Math.round((totalPoints / Math.max(maxExpected, 1)) * 50));
-            } else {
-                engagementScore = Math.max(0, 50 + Math.round((totalPoints / Math.max(Math.abs(totalPoints) + 10, 1)) * 50));
-            }
-        }
-
-        // ===== Tổng hợp điểm mạnh / yếu =====
-        const axes = [
-            { key: "knowledge", label: "Kiến thức", value: knowledgeScore, icon: "📚" },
-            { key: "discipline", label: "Chuyên cần", value: disciplineScore, icon: "📅" },
-            { key: "improvement", label: "Cải thiện", value: improvementScore, icon: "📈" },
-            { key: "effort", label: "Nỗ lực", value: effortScore, icon: "💪" },
-            { key: "strengths", label: "Điểm mạnh", value: strengthsScore, icon: "⭐" },
-            { key: "engagement", label: "Tương tác", value: engagementScore, icon: "🤝", description: "Điểm tích lũy (thái độ, đạo đức)" },
-        ];
-
-        const sorted = [...axes].sort((a, b) => b.value - a.value);
-        const topStrengths = sorted.filter(a => a.value >= 70).slice(0, 3);
-        const topWeaknesses = sorted.filter(a => a.value < 60).sort((a, b) => a.value - b.value).slice(0, 3);
+        const overallScore = classCount > 0 ? Math.round(totalNormalized / classCount) : 0;
 
         return {
             data: {
-                axes,
-                strengths: topStrengths,
-                weaknesses: topWeaknesses,
-                overallScore: Math.round(axes.reduce((s, a) => s + a.value, 0) / axes.length),
+                skills,
+                strengths,
+                weaknesses,
+                overallScore
             },
             error: null
         };
@@ -337,12 +375,12 @@ export async function getStudentCompetencyData(studentId: string) {
 }
 
 // ============================================================
-// AI: Phân tích điểm mạnh/yếu và đưa ra giải pháp bằng Gemini
+// AI: Phân tích điểm mạnh/yếu theo format mới
 // ============================================================
 export async function generateParentAIInsight(
     studentName: string,
     competencyData: {
-        axes: { key: string; label: string; value: number; icon: string }[];
+        skills: { key: string; label: string; value: number; icon: string }[];
         strengths: any[];
         weaknesses: any[];
         overallScore: number;
@@ -360,16 +398,16 @@ export async function generateParentAIInsight(
     try {
         const model = getGeminiModel("gemini-2.5-flash");
 
-        const axesSummary = competencyData.axes
-            .map(a => `- ${a.icon} ${a.label}: ${a.value}/100`)
-            .join("\n");
+        const skillsSummary = competencyData.skills.length > 0
+            ? competencyData.skills.map(s => `- ${s.icon} ${s.label}: ${s.value}%`).join("\n")
+            : "Chưa có dữ liệu môn học cụ thể.";
 
         const strengthsList = competencyData.strengths.length > 0
-            ? competencyData.strengths.map(s => `${s.icon} ${s.label} (${s.value}/100)`).join(", ")
+            ? competencyData.strengths.map(s => `${s.icon} ${s.label}`).join(", ")
             : "Chưa xác định rõ";
 
         const weaknessesList = competencyData.weaknesses.length > 0
-            ? competencyData.weaknesses.map(w => `${w.icon} ${w.label} (${w.value}/100)`).join(", ")
+            ? competencyData.weaknesses.map(w => `${w.icon} ${w.label}`).join(", ")
             : "Không có điểm yếu đáng lo";
 
         const pointsSummary = pointsData
@@ -381,39 +419,37 @@ export async function generateParentAIInsight(
             : "Chưa có dữ liệu lớp học.";
 
         const prompt = `
-Bạn là một chuyên gia tư vấn giáo dục AI, đang phân tích năng lực học tập của một học sinh để cung cấp nhận xét cho phụ huynh.
+Bạn là một chuyên gia tư vấn giáo dục AI, đang phân tích kết quả học tập của một học sinh để cung cấp nhận xét cho phụ huynh.
 
 📊 THÔNG TIN HỌC SINH: ${studentName}
-Điểm tổng hợp năng lực: ${competencyData.overallScore}/100
+Đánh giá tổng quan: ${competencyData.overallScore}/100
 
-📈 6 TRỤC NĂNG LỰC (Bloom's Taxonomy):
-${axesSummary}
+📚 MỨC ĐỘ THÀNH THẠO THEO MÔN/LỚP:
+${skillsSummary}
 
-🏆 Điểm mạnh nổi bật: ${strengthsList}
-⚠️ Điểm yếu cần cải thiện: ${weaknessesList}
+🏆 ĐIỂM MẠNH (Các bài/kỹ năng làm tốt): ${strengthsList}
+⚠️ CẦN CẢI THIỆN (Các lỗ hổng kiến thức): ${weaknessesList}
 
-⭐ ĐIỂM TÍCH LŨY (Thái độ & Đạo đức):
+⭐ ĐIỂM TÍCH LŨY (Theo dõi hành vi):
 ${pointsSummary}
 
-📚 KẾT QUẢ THEO LỚP:
+📝 HIỆU SUẤT TRÊN LỚP (Chuyên cần & Điểm số):
 ${classSummary}
 
-YÊU CẦU PHÂN TÍCH (viết bằng tiếng Việt, ngắn gọn, phong cách thân thiện, dưới 300 chữ):
+YÊU CẦU PHÂN TÍCH (viết bằng tiếng Việt, ngắn gọn, phong phú, dưới 300 chữ):
 
-1. **🌟 Tổng quan**: Đánh giá chung về năng lực học sinh (2-3 câu).
-2. **💪 Điểm mạnh**: Phân tích chi tiết 2-3 điểm mạnh nổi bật, khen ngợi cụ thể.
-3. **📝 Điểm cần cải thiện**: Phân tích 2-3 điểm yếu, giải thích tại sao cần cải thiện.
-4. **🎯 Giải pháp cụ thể**: Đưa ra 3-4 lời khuyên HÀNH ĐỘNG CỤ THỂ mà phụ huynh có thể áp dụng ngay để hỗ trợ con em (ví dụ: lập thời gian biểu ôn tập, khuyến khích phát biểu...).
-5. **💡 Lời nhắn**: Một câu động viên tích cực dành cho phụ huynh.
+1. **🌟 Hiện trạng học tập**: Nhận xét ngắn gọn dựa vào mức độ thành thạo và chuyên cần (2-3 câu).
+2. **💪 Kỹ năng tốt**: Nhấn mạnh các môn hoặc chủ đề con đang làm tốt (khen ngợi).
+3. **📝 Vùng cần khắc phục**: Nhắc nhở về các điểm yếu/lỗ hổng kiến thức cụ thể.
+4. **🎯 Hành động cụ thể**: Khuyên phụ huynh 3-4 cách thực tế để đồng hành cùng con (VD: hỏi bài con sau giờ học đối với những vùng yếu, duy trì động lực ở môn con giỏi...).
+5. **💡 Lời nhắn kết**: Câu kết tích cực, khích lệ.
 
-QUAN TRỌNG: Không dùng heading Markdown (##, ###). Dùng **in đậm** cho tiêu đề mục. Phân tích phải dựa trên dữ liệu thực tế ở trên.
+QUAN TRỌNG: Không dùng heading Markdown (##, ###). Dùng **in đậm** cho tiêu đề mục.
 `;
 
         const result = await model.generateContent(prompt);
         const response = result.response;
-        const text = response.text();
-
-        return { data: text, error: null };
+        return { data: response.text(), error: null };
     } catch (error: any) {
         console.error("Error generating parent AI insight:", error);
         return { data: null, error: error.message };

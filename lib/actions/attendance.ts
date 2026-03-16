@@ -820,3 +820,89 @@ export async function getStudentClasses(studentId: string) {
         return { data: [], error: error.message };
     }
 }
+
+/** Phụ huynh thu hồi đơn xin nghỉ (chỉ khi đang ở trạng thái pending) */
+export async function withdrawAbsenceRequest(requestId: string) {
+    try {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { success: false, error: "Unauthorized" };
+
+        const adminSupabase = createAdminClient();
+
+        // Kiểm tra đơn tồn tại và thuộc về parent hiện tại
+        const { data: request, error: fetchErr } = await adminSupabase
+            .from("absence_requests")
+            .select("*, class:classes!class_id(id, name, teacher_id)")
+            .eq("id", requestId)
+            .eq("parent_id", user.id)
+            .single();
+
+        if (fetchErr || !request) {
+            return { success: false, error: "Không tìm thấy đơn xin nghỉ." };
+        }
+
+        // Chỉ cho phép thu hồi khi đang ở trạng thái pending
+        if (request.status !== "pending") {
+            return { success: false, error: "Chỉ có thể thu hồi đơn đang chờ duyệt." };
+        }
+
+        // Xóa đơn xin nghỉ
+        const { error: deleteErr } = await adminSupabase
+            .from("absence_requests")
+            .delete()
+            .eq("id", requestId);
+
+        if (deleteErr) throw deleteErr;
+
+        // Gửi thông báo cho giáo viên
+        const classObj = Array.isArray(request.class) ? request.class[0] : request.class;
+        if (classObj?.teacher_id) {
+            await adminSupabase.from("notifications").insert({
+                user_id: classObj.teacher_id,
+                title: "Đơn xin nghỉ đã bị thu hồi",
+                message: `Phụ huynh đã thu hồi đơn xin nghỉ ngày ${request.absence_date} của lớp ${classObj.name}.`,
+                type: "absence_request",
+                link: "/teacher/absence-requests"
+            });
+        }
+
+        revalidatePath("/parent/absence-request");
+        revalidatePath("/parent");
+        return { success: true, error: null };
+    } catch (error: any) {
+        console.error("Lỗi withdrawAbsenceRequest:", error);
+        return { success: false, error: error.message };
+    }
+}
+
+/** Phụ huynh thu hồi đơn xin nghỉ theo thông tin buổi học (class_id + absence_date + student_id) */
+export async function withdrawAbsenceRequestBySession(classId: string, absenceDate: string, studentId: string) {
+    try {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { success: false, error: "Unauthorized" };
+
+        const adminSupabase = createAdminClient();
+
+        // Tìm đơn xin nghỉ phù hợp
+        const { data: request, error: fetchErr } = await adminSupabase
+            .from("absence_requests")
+            .select("id, status")
+            .eq("parent_id", user.id)
+            .eq("class_id", classId)
+            .eq("absence_date", absenceDate)
+            .eq("student_id", studentId)
+            .eq("status", "pending")
+            .maybeSingle();
+
+        if (fetchErr || !request) {
+            return { success: false, error: "Không tìm thấy đơn xin nghỉ đang chờ duyệt." };
+        }
+
+        return withdrawAbsenceRequest(request.id);
+    } catch (error: any) {
+        console.error("Lỗi withdrawAbsenceRequestBySession:", error);
+        return { success: false, error: error.message };
+    }
+}

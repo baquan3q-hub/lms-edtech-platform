@@ -2,8 +2,9 @@
 
 import { format, parseISO, isBefore, isToday } from "date-fns";
 import { vi } from "date-fns/locale";
-import { CalendarDays, Clock, AlertCircle, CheckCircle2, XCircle, Clock3, CalendarCheck, BookOpen, AlarmClock } from "lucide-react";
+import { CalendarDays, Clock, AlertCircle, CheckCircle2, XCircle, Clock3, CalendarCheck, BookOpen, AlarmClock, MapPin, FileText, Undo2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 interface ClassSession {
     id: string;
@@ -18,12 +19,15 @@ interface ClassSession {
     status?: string;
     attendance_status?: string | null;
     absence_request_status?: string | null;
+    room_name?: string | null;
 }
 
 interface UpcomingSessionsWidgetProps {
     sessions: ClassSession[];
     limit?: number;
     onSessionClick?: (session: ClassSession) => void;
+    onRecallAbsence?: (session: ClassSession) => void;
+    compact?: boolean;
 }
 
 /**
@@ -39,11 +43,7 @@ function AttendanceBadge({ status, sessionDate, absenceRequestStatus }: { status
 
     // Future session with no attendance yet
     if (!isPast && !isCurrentDay && status !== "excused" && status !== "absence_requested") {
-        return (
-            <Badge className="bg-sky-50 text-sky-600 border-sky-200 text-[10px] py-0.5 px-2 font-medium" variant="outline">
-                <BookOpen className="w-3 h-3 mr-1" />Dữ liệu sẽ được cập nhật từ điểm danh
-            </Badge>
-        );
+        return null; // Compact mode: hide "data will be updated" for future
     }
 
     switch (status) {
@@ -78,14 +78,12 @@ function AttendanceBadge({ status, sessionDate, absenceRequestStatus }: { status
                 </Badge>
             );
         case "unrecorded":
-            // Past session not recorded yet by teacher
             return (
                 <Badge className="bg-slate-50 text-slate-500 border-slate-200 text-[10px] py-0.5 px-2 font-medium" variant="outline">
                     <CalendarDays className="w-3 h-3 mr-1" />Chưa điểm danh
                 </Badge>
             );
         default:
-            // Past session where teacher marked attendance but status unknown
             if (isPast || isCurrentDay) {
                 return (
                     <Badge className="bg-slate-50 text-slate-500 border-slate-200 text-[10px] py-0.5 px-2 font-medium" variant="outline">
@@ -97,7 +95,14 @@ function AttendanceBadge({ status, sessionDate, absenceRequestStatus }: { status
     }
 }
 
-export default function UpcomingSessionsWidget({ sessions, limit, onSessionClick }: UpcomingSessionsWidgetProps) {
+/** Chuyển day_of_week sang tên tiếng Việt */
+function getDayName(dateStr: string): string {
+    const date = parseISO(dateStr);
+    const dayNames = ["Chủ Nhật", "Thứ Hai", "Thứ Ba", "Thứ Tư", "Thứ Năm", "Thứ Sáu", "Thứ Bảy"];
+    return dayNames[date.getDay()];
+}
+
+export default function UpcomingSessionsWidget({ sessions, limit, onSessionClick, onRecallAbsence, compact = false }: UpcomingSessionsWidgetProps) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -114,12 +119,10 @@ export default function UpcomingSessionsWidget({ sessions, limit, onSessionClick
     // Mặc định: 1 buổi gần nhất đã qua + 2 buổi sắp tới
     let displaySessions: ClassSession[];
     if (limit !== undefined) {
-        // Nếu có limit từ bên ngoài (parent dùng "xem thêm"), lấy 1 past + (limit-1) sessions từ future
-        const pastToShow = past.slice(-1); // Luôn lấy 1 buổi đã qua gần nhất
+        const pastToShow = past.slice(-1);
         const futureToShow = futureAndToday.slice(0, Math.max(1, limit - 1));
         displaySessions = [...pastToShow, ...futureToShow];
     } else {
-        // Default: 1 past + 2 upcoming
         const pastToShow = past.slice(-1);
         const futureToShow = futureAndToday.slice(0, 2);
         displaySessions = [...pastToShow, ...futureToShow];
@@ -134,6 +137,123 @@ export default function UpcomingSessionsWidget({ sessions, limit, onSessionClick
         );
     }
 
+    // Compact mode: giống ảnh mẫu (gọn nhẹ, hiển thị thứ/giờ/phòng/nội dung)
+    if (compact) {
+        return (
+            <div className="space-y-4">
+                {displaySessions.map((session, idx) => {
+                    const date = parseISO(session.session_date);
+                    const isCurrentDay = isToday(date);
+                    const isPastSession = isBefore(date, today);
+                    const dayName = getDayName(session.session_date);
+                    const dateFormatted = format(date, 'dd/MM', { locale: vi });
+                    const hasAbsenceRequest = session.attendance_status === "absence_requested";
+
+                    return (
+                        <div
+                            key={session.id || idx}
+                            className={`relative rounded-xl border bg-white transition-all
+                                ${isPastSession ? "border-slate-200 opacity-70" : "border-slate-200"}
+                                ${isCurrentDay ? "border-emerald-300 shadow-sm shadow-emerald-100/50 ring-1 ring-emerald-200" : ""}
+                                ${onSessionClick && !hasAbsenceRequest ? "cursor-pointer hover:border-indigo-300 hover:shadow-sm" : ""}
+                            `}
+                            onClick={() => onSessionClick && !hasAbsenceRequest && onSessionClick(session)}
+                        >
+                            {/* Divider line at top */}
+                            <div className={`h-1 rounded-t-xl ${
+                                isPastSession ? "bg-slate-200"
+                                    : isCurrentDay ? "bg-emerald-400"
+                                    : "bg-amber-400"
+                            }`} />
+
+                            <div className="px-4 py-3">
+                                {/* Header: Day name + date */}
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-base font-bold text-slate-800 flex items-center gap-1.5">
+                                            <CalendarDays className="w-4 h-4 text-amber-500" />
+                                            {dayName}
+                                        </span>
+                                        {isCurrentDay && (
+                                            <Badge className="bg-emerald-100 text-emerald-700 text-[9px] px-1.5 py-0 h-4 border-none font-semibold">
+                                                Hôm nay
+                                            </Badge>
+                                        )}
+                                        <span className="text-xs text-slate-400">({dateFormatted})</span>
+                                    </div>
+                                    {/* Attendance Status */}
+                                    <AttendanceBadge
+                                        status={session.attendance_status}
+                                        sessionDate={session.session_date}
+                                        absenceRequestStatus={session.absence_request_status}
+                                    />
+                                </div>
+
+                                {/* Time + Room */}
+                                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600 mb-2">
+                                    <span className="flex items-center gap-1">
+                                        <Clock className="w-3.5 h-3.5 text-emerald-500" />
+                                        <span className="font-semibold">{session.start_time?.substring(0, 5)} – {session.end_time?.substring(0, 5)}</span>
+                                    </span>
+                                    {session.room_name && (
+                                        <span className="flex items-center gap-1">
+                                            <MapPin className="w-3.5 h-3.5 text-rose-500" />
+                                            <span className="font-medium">Phòng: {session.room_name}</span>
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* Topic / Nội dung */}
+                                {session.topic && (
+                                    <div className="bg-amber-50/80 border border-amber-200/60 rounded-lg px-3 py-2 flex items-start gap-2">
+                                        <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                        <div>
+                                            <span className="text-xs font-bold text-amber-700">Nội dung / Lưu ý: </span>
+                                            <span className="text-xs text-amber-900/80">{session.topic}</span>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Homework alert */}
+                                {session.homework && session.homework.trim().length > 0 && !isPastSession && (
+                                    <div className="bg-rose-50 rounded-lg px-3 py-2 border border-rose-200/60 flex items-start gap-2 mt-2">
+                                        <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
+                                        <div>
+                                            <span className="text-[10px] font-bold text-rose-800 block mb-0.5">BÀI TẬP VỀ NHÀ</span>
+                                            <p className="text-xs text-rose-900/80 leading-relaxed whitespace-pre-wrap">
+                                                {session.homework}
+                                            </p>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Thu hồi đơn xin nghỉ */}
+                                {hasAbsenceRequest && onRecallAbsence && (
+                                    <div className="mt-2 flex items-center justify-between bg-amber-50 rounded-lg px-3 py-1.5 border border-amber-200">
+                                        <span className="text-xs text-amber-700 font-medium">Đã gửi đơn xin nghỉ</span>
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-xs text-amber-700 hover:text-amber-900 hover:bg-amber-100 h-7 px-2"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onRecallAbsence(session);
+                                            }}
+                                        >
+                                            <Undo2 className="w-3 h-3 mr-1" />
+                                            Thu hồi
+                                        </Button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
+        );
+    }
+
+    // Default mode (for student dashboard - original layout)
     return (
         <div className="space-y-3">
             {displaySessions.map((session, idx) => {
