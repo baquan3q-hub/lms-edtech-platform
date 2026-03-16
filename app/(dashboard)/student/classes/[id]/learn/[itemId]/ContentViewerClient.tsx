@@ -324,11 +324,17 @@ export default function ContentViewerClient({
                             onClick={async () => {
                                 if (!isCompleted) {
                                     setIsSubmitting(true);
-                                    await markItemCompleted(classId, item.id);
+                                    const result = await markItemCompleted(classId, item.id);
+                                    if (result?.success) {
+                                        // Optional: Add toast here if a toast library is available in the project, e.g., toast.success("Đã hoàn thành bài học")
+                                    }
                                     setIsSubmitting(false);
                                 }
                                 if (nextItemId) {
                                     router.push(`/student/classes/${classId}/learn/${nextItemId}`);
+                                } else {
+                                    // Navigate back to the course overview if it's the last item
+                                    router.push(`/student/classes/${classId}`);
                                 }
                             }}
                         >
@@ -342,6 +348,14 @@ export default function ContentViewerClient({
                             onClick={() => router.push(`/student/classes/${classId}/learn/${nextItemId}`)}
                         >
                             Bỏ qua & Bài tiếp theo
+                        </Button>
+                    )}
+                    {item.type === 'quiz' && !nextItemId && (
+                        <Button
+                            variant="secondary"
+                            onClick={() => router.push(`/student/classes/${classId}`)}
+                        >
+                            Đóng
                         </Button>
                     )}
                 </div>

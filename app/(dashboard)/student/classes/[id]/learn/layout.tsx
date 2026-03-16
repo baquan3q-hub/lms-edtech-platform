@@ -64,22 +64,7 @@ export default async function StudentLearnLayout({
     return (
         <div className="flex h-[calc(100vh-4rem)] -mt-6 -mx-4 sm:-mx-6 lg:-mx-8 overflow-hidden bg-slate-50">
             {/* SIDEBAR TREE */}
-            <div className="w-80 border-r border-slate-200 bg-white flex flex-col shrink-0">
-                <div className="p-4 border-b border-slate-100 bg-slate-50">
-                    <Link
-                        href={`/student/classes/${classId}`}
-                        className="flex items-center text-sm font-medium text-slate-500 hover:text-indigo-600 mb-2 transition-colors"
-                    >
-                        <ArrowLeft className="w-4 h-4 mr-1" /> Thoát Bài học
-                    </Link>
-                    <h2 className="font-bold text-slate-900 line-clamp-2">{classInfo?.name}</h2>
-                    <p className="text-xs text-slate-500 mt-1 line-clamp-1">Khóa: {classInfo?.course?.name}</p>
-                </div>
-
-                <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
-                    <CourseTreeClient items={items || []} classId={classId} progressData={progressMap} />
-                </div>
-            </div>
+            <CourseTreeClient items={items || []} classId={classId} progressData={progressMap} className={classInfo?.name} courseName={classInfo?.course?.name} />
 
             {/* MAIN CONTENT AREA */}
             <div className="flex-1 overflow-y-auto relative">

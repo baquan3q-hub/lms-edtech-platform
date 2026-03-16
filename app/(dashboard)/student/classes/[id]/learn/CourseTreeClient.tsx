@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
     Folder, FolderOpen, Video, FileText, CheckSquare, Music, ClipboardList, MessageSquare, VideoIcon,
-    ChevronDown, ChevronRight, CheckCircle2, Circle
+    ChevronDown, ChevronRight, CheckCircle2, Circle, X, ArrowLeft, Menu
 } from "lucide-react";
 
 const typeIcons: Record<string, any> = {
@@ -50,9 +50,24 @@ const typeLabels: Record<string, string> = {
     zoom: "Trực tuyến"
 };
 
-export default function CourseTreeClient({ items, classId, progressData = {} }: { items: any[], classId: string, progressData?: Record<string, any> }) {
+export default function CourseTreeClient({ items, classId, progressData = {}, className, courseName }: { items: any[], classId: string, progressData?: Record<string, any>, className?: string, courseName?: string }) {
     const params = useParams();
     const currentItemId = params.itemId as string;
+
+    const [isCollapsed, setIsCollapsed] = useState(false);
+    const [isMounted, setIsMounted] = useState(false);
+
+    useEffect(() => {
+        setIsMounted(true);
+        const saved = localStorage.getItem("lessonSidebarCollapsed");
+        if (saved) setIsCollapsed(saved === "true");
+    }, []);
+
+    const toggleCollapse = () => {
+        const newState = !isCollapsed;
+        setIsCollapsed(newState);
+        localStorage.setItem("lessonSidebarCollapsed", String(newState));
+    };
 
     // Mặc định mở hết các folder
     const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>(() => {
@@ -97,12 +112,23 @@ export default function CourseTreeClient({ items, classId, progressData = {} }: 
         return { total, done };
     };
 
+    // Calculate total progress
+    const flatLeafItems = items.filter(i => i.type !== 'folder').sort((a, b) => a.order_index - b.order_index);
+    const totalItems = flatLeafItems.length;
+    const completedItems = flatLeafItems.filter(i => progressData[i.id]?.status === 'completed').length;
+    const progressPercent = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
+
+    // Find the next item to learn (first uncompleted leaf item)
+    const nextUpItem = flatLeafItems.find(i => progressData[i.id]?.status !== 'completed');
+    const nextUpItemId = nextUpItem?.id;
+
     // Render recursive nodes
     const renderNode = (node: any, level: number = 0) => {
         const isFolder = node.type === 'folder';
         const isExpanded = expandedFolders[node.id];
         const isActive = currentItemId === node.id;
         const isCompleted = progressData[node.id]?.status === 'completed';
+        const isNextUp = node.id === nextUpItemId;
         const FolderIcon = isExpanded ? FolderOpen : Folder;
 
         if (isFolder) {
@@ -163,13 +189,13 @@ export default function CourseTreeClient({ items, classId, progressData = {} }: 
         const Icon = typeIcons[node.type] || FileText;
 
         return (
-            <div key={node.id} className="mb-0.5">
+            <div key={node.id} className="mb-0.5 relative group">
                 <Link href={`/student/classes/${classId}/learn/${node.id}`}>
                     <div
                         className={`flex items-center gap-2.5 px-3 py-2 rounded-lg transition-all cursor-pointer
                             ${isActive
                                 ? 'bg-indigo-50 ring-1 ring-indigo-200 shadow-sm'
-                                : 'hover:bg-slate-50'
+                                : isNextUp ? 'bg-emerald-50/50 hover:bg-emerald-50' : 'hover:bg-slate-50'
                             }
                         `}
                         style={{ paddingLeft: `${(level * 16) + 12}px` }}
@@ -177,52 +203,115 @@ export default function CourseTreeClient({ items, classId, progressData = {} }: 
                         {/* Completion status */}
                         <div className="w-5 flex justify-center shrink-0">
                             {isCompleted ? (
-                                <CheckCircle2 className="w-4.5 h-4.5 text-emerald-500" />
+                                <CheckCircle2 className="w-5 h-5 text-emerald-500" />
                             ) : isActive ? (
                                 <div className="w-3 h-3 rounded-full bg-indigo-500 animate-pulse" />
+                            ) : isNextUp ? (
+                                <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse" />
                             ) : (
-                                <Circle className="w-3.5 h-3.5 text-slate-300" />
+                                <Circle className="w-4 h-4 text-slate-300 group-hover:text-slate-400 transition-colors" />
                             )}
                         </div>
 
                         {/* Type icon */}
-                        <div className={`w-7 h-7 rounded-lg ${isActive ? 'bg-indigo-100' : typeBg[node.type] || 'bg-slate-50'} flex items-center justify-center shrink-0`}>
-                            <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-600' : typeColors[node.type] || 'text-slate-400'}`} />
+                        <div className={`w-7 h-7 rounded-lg ${isActive ? 'bg-indigo-100' : isNextUp ? 'bg-emerald-100/70' : typeBg[node.type] || 'bg-slate-50'} flex items-center justify-center shrink-0 transition-colors`}>
+                            <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-indigo-600' : isNextUp ? 'text-emerald-600' : typeColors[node.type] || 'text-slate-400'}`} />
                         </div>
 
                         {/* Title */}
                         <span className={`text-sm flex-1 truncate ${isActive ? 'text-indigo-700 font-semibold' :
-                                isCompleted ? 'text-slate-400 line-through' :
-                                    'text-slate-600'
+                                isNextUp ? 'text-emerald-700 font-semibold' :
+                                    isCompleted ? 'text-slate-500' :
+                                        'text-slate-600'
                             }`}>
                             {node.title}
                         </span>
 
-                        {/* Type label */}
-                        <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded ${isActive ? 'bg-indigo-100 text-indigo-600' :
-                                `${typeBg[node.type] || 'bg-slate-50'} ${typeColors[node.type] || 'text-slate-400'}`
-                            }`}>
-                            {typeLabels[node.type] || node.type}
-                        </span>
+                        {/* Tags (Type or Up Next) */}
+                        {isNextUp && !isActive ? (
+                            <span className="text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 flex items-center gap-0.5 shrink-0 shadow-sm animate-pulse">
+                                Tiếp theo
+                            </span>
+                        ) : (
+                            <span className={`text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded shrink-0 ${isActive ? 'bg-indigo-100 text-indigo-600' :
+                                    `${typeBg[node.type] || 'bg-slate-50'} ${typeColors[node.type] || 'text-slate-400'}`
+                                }`}>
+                                {typeLabels[node.type] || node.type}
+                            </span>
+                        )}
                     </div>
                 </Link>
             </div>
         );
     };
 
-    if (items.length === 0) {
-        return (
-            <div className="text-center p-6 text-slate-500 text-sm">
-                <Folder className="w-10 h-10 text-slate-200 mx-auto mb-3" />
-                <p className="font-medium">Chưa có nội dung</p>
-                <p className="text-xs text-slate-400 mt-1">Giáo viên chưa đăng tải bài học nào.</p>
-            </div>
-        );
-    }
+    const collapsed = isMounted ? isCollapsed : false;
 
     return (
-        <div className="pb-8 space-y-1">
-            {tree.map(node => renderNode(node, 0))}
-        </div>
+        <>
+            {/* The Sidebar Itself */}
+            <div className={`relative border-r border-slate-200 bg-white flex flex-col shrink-0 transition-all duration-300 ${collapsed ? 'w-0 border-r-0' : 'w-80'}`}>
+                <div className={`w-80 flex flex-col h-full bg-white transition-opacity duration-300 ${collapsed ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}>
+                    <div className="p-4 border-b border-slate-100 bg-slate-50 relative pb-5">
+                        <button
+                            onClick={toggleCollapse}
+                            className="absolute right-3 top-3 p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-200/50 rounded-lg transition-colors z-10"
+                            title="Thu gọn danh sách"
+                        >
+                            <X className="w-5 h-5" />
+                        </button>
+
+                        <Link
+                            href={`/student/classes/${classId}`}
+                            className="flex items-center text-sm font-medium text-slate-500 hover:text-indigo-600 mb-3 transition-colors w-fit"
+                        >
+                            <ArrowLeft className="w-4 h-4 mr-1" /> Thoát Bài học
+                        </Link>
+
+                        <div className="pr-8">
+                            <h2 className="font-bold text-slate-900 line-clamp-2 leading-tight">{className}</h2>
+                            <p className="text-xs text-slate-500 mt-1 line-clamp-1">Khóa: {courseName}</p>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="mt-4 bg-white p-3 shadow-sm border border-slate-100 rounded-xl">
+                            <div className="flex justify-between items-center text-xs font-bold mb-2">
+                                <span className="text-slate-700">Tiến độ học tập</span>
+                                <span className="text-emerald-600">{progressPercent}%</span>
+                            </div>
+                            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-emerald-500 rounded-full transition-all duration-500 ease-out" style={{ width: `${progressPercent}%` }}></div>
+                            </div>
+                            <p className="text-[10px] text-slate-400 mt-2 font-medium">{completedItems}/{totalItems} bài học hoàn thành</p>
+                        </div>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
+                        {items.length === 0 ? (
+                            <div className="text-center p-6 text-slate-500 text-sm">
+                                <Folder className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+                                <p className="font-medium">Chưa có nội dung</p>
+                                <p className="text-xs text-slate-400 mt-1">Giáo viên chưa đăng tải bài học nào.</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-1">
+                                {tree.map(node => renderNode(node, 0))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Floating button when collapsed - Place Outside Wrapper to avoid hidden overflow! */}
+            {isMounted && collapsed && (
+                <button
+                    onClick={toggleCollapse}
+                    className="absolute top-4 left-4 z-[60] bg-white border border-slate-200 shadow-md p-2 flex items-center justify-center rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-slate-50 transition-all duration-300"
+                    title="Hiển thị danh sách bài học"
+                >
+                    <Menu className="w-5 h-5" />
+                </button>
+            )}
+        </>
     );
 }

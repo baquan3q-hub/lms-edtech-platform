@@ -69,18 +69,14 @@ export default async function StudentContentViewerPage({
     let prevItemId = null;
 
     if (allItems && allItems.length > 0) {
-        // Build flat DFS list
-        const buildDFS = (parentId: string | null): any[] => {
-            const children = allItems.filter(i => i.parent_id === parentId).sort((a, b) => a.order_index - b.order_index);
-            let result: any[] = [];
-            for (const child of children) {
-                if (child.type !== 'folder') result.push(child);
-                result = result.concat(buildDFS(child.id));
-            }
-            return result;
-        };
+        // Build flat Leaf list by sorting order_index globally or by parent.
+        // For simple Prev/Next navigation: sort all items by parent then order_index.
+        // If a parent folder isn't published but children are, strict DFS fails. 
+        // We fallback to sorting all non-folder items.
+        const flatLeafItems = allItems
+             .filter(i => i.type !== 'folder')
+             .sort((a, b) => a.order_index - b.order_index);
 
-        const flatLeafItems = buildDFS(null);
         const currentIndex = flatLeafItems.findIndex(i => i.id === itemId);
 
         if (currentIndex > -1) {
