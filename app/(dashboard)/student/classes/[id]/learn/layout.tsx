@@ -30,11 +30,12 @@ export default async function StudentLearnLayout({
 
     // 2. Lấy toàn bộ cây học liệu (chỉ lấy các item được publish, hoặc lấy hết và filter trên client)
     // Tạm thời lấy hết (có is_published = true)
+    // Lấy items đã publish + LUÔN LUÔN lấy folder (dù chưa publish) để giữ cấu trúc cây
     const { data: items, error } = await supabase
         .from("course_items")
         .select("*")
         .eq("class_id", classId)
-        .eq("is_published", true)
+        .or("is_published.eq.true,type.eq.folder")
         .order("order_index", { ascending: true });
 
     // 3. Lấy tiến trình học (Student Progress) của user hiện tại
