@@ -2,7 +2,7 @@ import Stripe from 'stripe'
 
 // Stripe server-side client (KHÔNG expose ra browser)
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: '2025-03-31.basil',
+  apiVersion: '2026-02-25.clover',
   typescript: true,
 })
 
