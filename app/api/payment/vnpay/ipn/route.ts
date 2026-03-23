@@ -2,6 +2,8 @@ import { verifyVNPayReturn } from '@/lib/vnpay'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { NextRequest } from 'next/server'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * GET /api/payment/vnpay/ipn
  * VNPay gọi IPN (Instant Payment Notification) để xác nhận thanh toán

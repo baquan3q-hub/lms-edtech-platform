@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
+export const dynamic = 'force-dynamic'
+
 // Schema validate request body
 const schema = z.object({
   invoiceId: z.string().uuid(),

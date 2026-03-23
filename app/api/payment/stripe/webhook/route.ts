@@ -2,6 +2,8 @@ import { stripe } from '@/lib/stripe'
 import { createAdminClient } from '@/lib/supabase/admin'
 import { headers } from 'next/headers'
 
+export const dynamic = 'force-dynamic'
+
 /**
  * POST /api/payment/stripe/webhook
  * Stripe gọi webhook khi payment events xảy ra
