@@ -107,7 +107,7 @@ export async function getStudentProgressStats(studentId: string) {
         // 4. Fetch homework history
         const { data: hwSubmissions } = await adminSupabase
             .from("homework_submissions")
-            .select("score, submitted_at, homeworks(title)")
+            .select("score, submitted_at, homework(title, total_points)")
             .eq("student_id", studentId)
             .not("score", "is", null);
 
@@ -130,11 +130,17 @@ export async function getStudentProgressStats(studentId: string) {
 
         // Build Homeworks
         (hwSubmissions || []).forEach((sub: any) => {
-            let displayScore = Number(sub.score || 0);
-            if (displayScore > 10) displayScore = displayScore / 10; // Normalize 100-point scale to 10
+            const totalPoints = sub.homework?.total_points || 0;
+            let displayScore = 0;
+            if (totalPoints > 0 && sub.score !== null) {
+                displayScore = (Number(sub.score) / totalPoints) * 10;
+            } else {
+                displayScore = Number(sub.score || 0);
+                if (displayScore > 10) displayScore = displayScore / 10;
+            }
             
             allSubs.push({
-                title: sub.homeworks?.title || "Bài tập",
+                title: sub.homework?.title || "Bài tập",
                 score: Number(displayScore.toFixed(1)),
                 submitted_at: sub.submitted_at,
                 type: "homework"
@@ -262,15 +268,32 @@ export async function getStudentCompetencyData(studentId: string) {
         if (analyses) {
             analyses.forEach(a => {
                 if (a.knowledge_gaps && Array.isArray(a.knowledge_gaps)) {
-                    a.knowledge_gaps.forEach((g: string) => {
-                        gapCounts[g] = (gapCounts[g] || 0) + 1;
+                    a.knowledge_gaps.forEach((g: any) => {
+                        let gapLabel = '';
+                        if (typeof g === 'string') {
+                            // Có thể là JSON string: '{"QuestionIndex":8,"Topic":"..."}'
+                            if (g.startsWith('{')) {
+                                try {
+                                    const parsed = JSON.parse(g);
+                                    gapLabel = parsed?.topic || parsed?.Topic || parsed?.name || '';
+                                } catch { gapLabel = g; }
+                            } else {
+                                gapLabel = g;
+                            }
+                        } else if (typeof g === 'object' && g !== null) {
+                            // Object trực tiếp: {topic: "...", severity: "..."}
+                            gapLabel = g?.topic || g?.Topic || g?.name || '';
+                        }
+                        if (gapLabel) {
+                            gapCounts[gapLabel] = (gapCounts[gapLabel] || 0) + 1;
+                        }
                     });
                 }
             });
         }
         
         // Helper inline
-        const formatGap = (gap: any) => gap?.toString().replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) || "";
+        const formatGap = (gap: string) => gap.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
 
         const weaknesses = Object.entries(gapCounts)
             .sort((a, b) => b[1] - a[1])

@@ -135,9 +135,13 @@ export default function ParentProgressClient({ students, activeStudentId, active
     // Tooltip custom cho Recharts
     const CustomTooltip = ({ active, payload, label }: any) => {
         if (active && payload && payload.length) {
+            const isHomework = payload[0].payload.type === 'homework';
             return (
                 <div className="bg-white border rounded-lg shadow-lg p-3">
-                    <p className="text-slate-500 text-xs mb-1 font-medium">{payload[0].payload.exam}</p>
+                    <p className="text-slate-500 text-xs mb-1 font-medium">
+                        {isHomework ? '📝 Bài tập' : '📋 Bài kiểm tra'}
+                    </p>
+                    <p className="text-slate-800 font-semibold text-sm">{payload[0].payload.exam}</p>
                     <p className="text-slate-800 font-bold">Ngày: {label}</p>
                     <p className="text-indigo-600 font-bold text-lg">
                         Điểm: {payload[0].value}

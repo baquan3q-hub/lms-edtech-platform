@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import ContentViewerClient from "./ContentViewerClient";
+import RealtimeDiscussion from "@/components/shared/RealtimeDiscussion";
 
 export const dynamic = "force-dynamic";
 
@@ -45,8 +46,8 @@ export default async function StudentContentViewerPage({
     const { data: { user } } = await supabaseClient.auth.getUser();
 
     // 2. Tạm thời: Ghi nhận đã xem (progress tracking) - server side tracking logic
-    // (Lý tưởng nên xử lý ở Client qua Server Action để ko block render)
     let currentProgress = null;
+    let userProfile = null;
     if (user) {
         const { data: progress } = await supabase
             .from('student_progress')
@@ -55,6 +56,14 @@ export default async function StudentContentViewerPage({
             .eq('item_id', itemId)
             .single();
         if (progress) currentProgress = progress;
+
+        // Lấy profile user cho phần thảo luận
+        const { data: profile } = await supabase
+            .from('users')
+            .select('id, full_name, avatar_url, role')
+            .eq('id', user.id)
+            .single();
+        if (profile) userProfile = profile;
     }
 
     // 3. Tìm item tiếp theo (next item) để chuyển hướng sau khi hoàn thành
@@ -69,10 +78,6 @@ export default async function StudentContentViewerPage({
     let prevItemId = null;
 
     if (allItems && allItems.length > 0) {
-        // Build flat Leaf list by sorting order_index globally or by parent.
-        // For simple Prev/Next navigation: sort all items by parent then order_index.
-        // If a parent folder isn't published but children are, strict DFS fails. 
-        // We fallback to sorting all non-folder items.
         const flatLeafItems = allItems
              .filter(i => i.type !== 'folder')
              .sort((a, b) => a.order_index - b.order_index);
@@ -86,7 +91,7 @@ export default async function StudentContentViewerPage({
     }
 
     return (
-        <div className="h-full bg-white relative">
+        <div className="h-full bg-white relative overflow-y-auto">
             <ContentViewerClient
                 item={item}
                 contentData={itemContent}
@@ -95,6 +100,23 @@ export default async function StudentContentViewerPage({
                 nextItemId={nextItemId}
                 prevItemId={prevItemId}
             />
+
+            {/* Phần thảo luận bài học */}
+            {userProfile && (
+                <div className="max-w-4xl mx-auto px-6 pb-8 mt-6">
+                    <RealtimeDiscussion
+                        itemId={itemId}
+                        classId={classId}
+                        currentUser={{
+                            id: userProfile.id,
+                            role: userProfile.role,
+                            full_name: userProfile.full_name,
+                            avatar_url: userProfile.avatar_url || undefined,
+                        }}
+                    />
+                </div>
+            )}
         </div>
     );
 }
+

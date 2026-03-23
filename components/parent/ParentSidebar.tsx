@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useState } from "react";
 import ParentAvatarSection from "./ParentAvatarSection";
-import { ChevronLeft, ChevronRight, LayoutDashboard, Link2, TrendingUp, Bell, CalendarDays } from "lucide-react";
+import { ChevronLeft, ChevronRight, LayoutDashboard, Link2, TrendingUp, Bell, CalendarDays, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -13,6 +13,7 @@ const navItems = [
     { href: "/parent/schedule", label: "Lịch học", icon: CalendarDays },
     { href: "/parent/notifications", label: "Thông báo", icon: Bell },
     { href: "/parent/progress", label: "Điểm số & Tiến độ", icon: TrendingUp },
+    { href: "/parent/payments", label: "Thanh toán", icon: CreditCard },
     { href: "/parent/link-student", label: "Liên kết con em", icon: Link2 },
 ];
 

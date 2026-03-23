@@ -42,6 +42,12 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
+        {/* Strip browser extension attributes before React hydrates */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `document.querySelectorAll('[bis_skin_checked]').forEach(function(el){el.removeAttribute('bis_skin_checked')});`,
+          }}
+        />
         {children}
         <Toaster
           position="top-right"

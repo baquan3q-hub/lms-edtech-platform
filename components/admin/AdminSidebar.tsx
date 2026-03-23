@@ -21,14 +21,14 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
 export const sidebarItems = [
-    { title: "Dashboard", href: "/admin", icon: LayoutDashboard },
+    { title: "Tổng quan", href: "/admin", icon: LayoutDashboard },
     { title: "Quản lý Người dùng", href: "/admin/users", icon: Users },
     { title: "Quản lý Khóa học", href: "/admin/courses", icon: BookOpen },
     { title: "Quản lý Lớp học", href: "/admin/classes", icon: School },
     { title: "Quản lý Phòng học", href: "/admin/rooms", icon: MapPin },
     { title: "Liên kết PH-HS", href: "/admin/students/link-parent", icon: Link2 },
     { title: "Phản hồi & Hỗ trợ", href: "/admin/feedback", icon: MessageSquare }, // Added missing route
-    { title: "Tài chính", href: "/admin/finance", icon: DollarSign },
+    { title: "Học phí", href: "/admin/finance", icon: DollarSign },
 ];
 
 export default function AdminSidebar() {
