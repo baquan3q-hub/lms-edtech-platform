@@ -14,6 +14,7 @@ import {
     MapPin,
     Link2,
     MessageSquare,
+    ClipboardCheck,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ export const sidebarItems = [
     { title: "Quản lý Khóa học", href: "/admin/courses", icon: BookOpen },
     { title: "Quản lý Lớp học", href: "/admin/classes", icon: School },
     { title: "Quản lý Phòng học", href: "/admin/rooms", icon: MapPin },
+    { title: "Quản lý Điểm danh", href: "/admin/attendance", icon: ClipboardCheck },
     { title: "Liên kết PH-HS", href: "/admin/students/link-parent", icon: Link2 },
     { title: "Phản hồi & Hỗ trợ", href: "/admin/feedback", icon: MessageSquare }, // Added missing route
     { title: "Học phí", href: "/admin/finance", icon: DollarSign },
