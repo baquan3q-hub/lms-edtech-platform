@@ -91,8 +91,14 @@ export async function deleteAttendanceSession(sessionId: string) {
             return { success: false, error: "Bạn không có quyền xóa buổi điểm danh này" };
         }
 
-        // 2. Xóa session (do DB có on delete cascade nên records cũng thường bị xóa theo, nhưng ta cứ xóa cả 2 cho an toàn)
-        // Lưu ý: nên check foreign key `on delete cascade` trong schema table, nếu đã có thì chỉ cần xoá session.
+        // 2. Lấy thông tin session trước khi xoá (để revert teaching_status)
+        const { data: sessionData } = await adminSupabase
+            .from("attendance_sessions")
+            .select("class_id, session_date")
+            .eq("id", sessionId)
+            .single();
+
+        // 3. Xóa records + session
         const { error: deleteRecordsError } = await adminSupabase
             .from("attendance_records")
             .delete()
@@ -106,6 +112,20 @@ export async function deleteAttendanceSession(sessionId: string) {
             .eq("id", sessionId);
 
         if (deleteSessionError) throw deleteSessionError;
+
+        // 4. Revert teaching_status trên class_sessions
+        if (sessionData) {
+            await adminSupabase
+                .from("class_sessions")
+                .update({
+                    teaching_status: "pending",
+                    actual_teacher_id: null,
+                    taught_at: null,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("class_id", sessionData.class_id)
+                .eq("session_date", sessionData.session_date);
+        }
 
         return { success: true, error: null };
     } catch (error: any) {
@@ -232,7 +252,39 @@ export async function saveAttendanceRecords(
             await adminSupabase.from("notifications").insert(adminNotifications);
         }
 
-        // 3. Tính điểm chuyên cần (Gamification)
+        // 3. Auto-sync teaching_status trên class_sessions
+        // Khi GV xác nhận lưu điểm danh → bổi đó được tính là "đã dạy"
+        const { data: attendanceSession } = await adminSupabase
+            .from("attendance_sessions")
+            .select("session_date")
+            .eq("id", sessionId)
+            .single();
+
+        if (attendanceSession) {
+            const taughtAt = new Date().toISOString();
+            // Tìm class_session khớp ngày + lớp
+            const { data: matchingSession } = await adminSupabase
+                .from("class_sessions")
+                .select("id, substitute_teacher_id")
+                .eq("class_id", classId)
+                .eq("session_date", attendanceSession.session_date)
+                .maybeSingle();
+
+            if (matchingSession) {
+                const isSubstitute = matchingSession.substitute_teacher_id === user.id;
+                await adminSupabase
+                    .from("class_sessions")
+                    .update({
+                        teaching_status: isSubstitute ? "substitute" : "taught",
+                        actual_teacher_id: user.id,
+                        taught_at: taughtAt,
+                        updated_at: taughtAt,
+                    })
+                    .eq("id", matchingSession.id);
+            }
+        }
+
+        // 4. Tính điểm chuyên cần (Gamification)
         const POINTS_RULES: Record<string, number> = {
             present: 10,
             late: 5,
@@ -671,14 +723,20 @@ export async function getAttendanceOverview(month: number, year: number, classId
 
         const allRecords = records || [];
 
-        // Tính thống kê
-        const totalRecords = allRecords.length;
+        // Keep only valid sessions
+        const validSessionIds = new Set(allRecords.map(r => r.session_id));
+        const validSessions = sessions.filter(s => validSessionIds.has(s.id));
+
+        // Tính thống kê — tỷ lệ chỉ dựa trên Đi học vs Vắng (có phép + không phép), không tính đi muộn
         const presentCount = allRecords.filter((r: any) => r.status === "present").length;
-        const avgRate = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
+        const absentCount = allRecords.filter((r: any) => r.status === "absent").length;
+        const excusedCount = allRecords.filter((r: any) => r.status === "excused").length;
+        const relevantTotal = presentCount + absentCount + excusedCount;
+        const avgRate = relevantTotal > 0 ? Math.round((presentCount / relevantTotal) * 100) : 0;
 
         // Tính theo lớp
         const classMap: Record<string, any> = {};
-        for (const sess of sessions) {
+        for (const sess of validSessions) {
             const cid = sess.class_id;
             if (!classMap[cid]) {
                 const classObj = sess.class as any;
@@ -703,8 +761,8 @@ export async function getAttendanceOverview(month: number, year: number, classId
         const classSummaries = Object.values(classMap).map((c: any) => ({
             ...c,
             attendanceRate: (() => {
-                const lateCount = (allRecords as any[]).filter((r: any) => r.session_id && sessions.find((s: any) => s.id === r.session_id && s.class_id === c.classId) && r.status === 'late').length || 0;
-                const excusedCount = (allRecords as any[]).filter((r: any) => r.session_id && sessions.find((s: any) => s.id === r.session_id && s.class_id === c.classId) && r.status === 'excused').length || 0;
+                const lateCount = (allRecords as any[]).filter((r: any) => r.session_id && validSessions.find((s: any) => s.id === r.session_id && s.class_id === c.classId) && r.status === 'late').length || 0;
+                const excusedCount = (allRecords as any[]).filter((r: any) => r.session_id && validSessions.find((s: any) => s.id === r.session_id && s.class_id === c.classId) && r.status === 'excused').length || 0;
                 return calcAttendanceRate(c.totalPresent, lateCount, excusedCount, c.totalAbsent);
             })(),
         }));
@@ -742,7 +800,7 @@ export async function getAttendanceOverview(month: number, year: number, classId
 
         return {
             data: {
-                totalSessions: sessions.length,
+                totalSessions: validSessions.length,
                 avgAttendanceRate: avgRate,
                 studentsHighAbsence,
                 pendingRequests: pendingRequests || 0,
@@ -911,27 +969,51 @@ export async function withdrawAbsenceRequestBySession(classId: string, absenceDa
 // TREND DATA — Biểu đồ xu hướng cho Admin
 // ==========================================
 
-/** Lấy dữ liệu xu hướng điểm danh theo tuần (cho LineChart) */
+/** Lấy dữ liệu xu hướng điểm danh theo thời gian (cho LineChart) */
 export async function getAttendanceTrendData(
-    months: number = 3,
-    classId?: string
+    period: string = "3_months",
+    classId?: string,
+    currentMonth?: number,
+    currentYear?: number
 ) {
     try {
         const adminSupabase = createAdminClient();
 
-        // Tính khoảng thời gian: N tháng gần nhất
+        let startStr: string;
+        let endStr: string;
         const now = new Date();
-        const startDate = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
-        const startStr = startDate.toISOString().split("T")[0];
-        const endStr = now.toISOString().split("T")[0];
+
+        if (period === "this_month" && currentMonth && currentYear) {
+            startStr = `${currentYear}-${String(currentMonth).padStart(2, "0")}-01`;
+            const endMonth = currentMonth === 12 ? 1 : currentMonth + 1;
+            const endYear = currentMonth === 12 ? currentYear + 1 : currentYear;
+            endStr = `${endYear}-${String(endMonth).padStart(2, "0")}-01`;
+        } else {
+            let monthsToLookBack = 3;
+            if (period === "6_months") monthsToLookBack = 6;
+            if (period === "12_months") monthsToLookBack = 12;
+
+            const startDate = new Date(now.getFullYear(), now.getMonth() - monthsToLookBack + 1, 1);
+            startStr = startDate.toISOString().split("T")[0];
+            endStr = now.toISOString().split("T")[0];
+        }
 
         // 1. Lấy sessions trong khoảng thời gian
         let sessQuery = adminSupabase
             .from("attendance_sessions")
             .select("id, class_id, session_date")
             .gte("session_date", startStr)
-            .lte("session_date", endStr)
+            .lt(period === "this_month" ? "session_date" : "session_date", period === "this_month" ? endStr : endStr + "T23:59:59") // If this_month, strictly less than next month. If X_months, lte today.
             .order("session_date", { ascending: true });
+        
+        if (period !== "this_month") {
+            sessQuery = adminSupabase
+                .from("attendance_sessions")
+                .select("id, class_id, session_date")
+                .gte("session_date", startStr)
+                .lte("session_date", endStr)
+                .order("session_date", { ascending: true });
+        }
 
         if (classId) sessQuery = sessQuery.eq("class_id", classId);
 
@@ -950,17 +1032,30 @@ export async function getAttendanceTrendData(
         if (recErr) throw recErr;
         const allRecords = records || [];
 
-        // 3. Group sessions theo tuần
+        // Filter sessions that have at least one record (actually marked)
+        const validSessionIds = new Set(allRecords.map((r: any) => r.session_id));
+        const validSessions = sessions.filter((s: any) => validSessionIds.has(s.id));
+
+        // 3. Group sessions
         const weekMap: Record<string, {
             present: number; absent: number; late: number; excused: number; total: number;
         }> = {};
 
-        for (const sess of sessions) {
+        for (const sess of validSessions) {
             const d = new Date(sess.session_date + "T00:00:00");
             const monthNum = d.getMonth() + 1;
+            
             // Tính tuần trong tháng (1-5)
             const weekInMonth = Math.ceil(d.getDate() / 7);
-            const key = `T${monthNum}/W${weekInMonth}`;
+            
+            let key = "";
+            if (period === "this_month") {
+                key = `Tuần ${weekInMonth}`;
+            } else if (period === "12_months") {
+                key = `Tháng ${monthNum}/${d.getFullYear().toString().slice(2)}`;
+            } else {
+                key = `Tuần ${weekInMonth} (Th 0${monthNum})`.replace("010", "10").replace("011", "11").replace("012", "12");
+            }
 
             if (!weekMap[key]) {
                 weekMap[key] = { present: 0, absent: 0, late: 0, excused: 0, total: 0 };
@@ -977,14 +1072,43 @@ export async function getAttendanceTrendData(
         }
 
         // 4. Chuyển thành mảng sorted cho chart
-        const trendData = Object.entries(weekMap).map(([period, counts]) => ({
-            period,
-            presentRate: counts.total > 0 ? Math.round((counts.present / counts.total) * 100) : 0,
-            absentRate: counts.total > 0 ? Math.round((counts.absent / counts.total) * 100) : 0,
-            lateRate: counts.total > 0 ? Math.round((counts.late / counts.total) * 100) : 0,
-            excusedRate: counts.total > 0 ? Math.round((counts.excused / counts.total) * 100) : 0,
-            total: counts.total,
-        }));
+        const trendData = Object.entries(weekMap).map(([periodKey, counts]) => {
+            const relevantTotal = counts.present + counts.absent + counts.excused;
+            return {
+                period: periodKey,
+                presentRate: relevantTotal > 0 ? Math.round((counts.present / relevantTotal) * 100) : 0,
+                absentRate: relevantTotal > 0 ? Math.round((counts.absent / relevantTotal) * 100) : 0,
+                lateRate: counts.total > 0 ? Math.round((counts.late / counts.total) * 100) : 0,
+                excusedRate: relevantTotal > 0 ? Math.round((counts.excused / relevantTotal) * 100) : 0,
+                total: counts.total,
+                totalPresent: counts.present,
+                totalSessions: new Set(validSessions.filter(s => {
+                    // count unique sessions that fall into this period key
+                    const sd = new Date(s.session_date + "T00:00:00");
+                    const smonthNum = sd.getMonth() + 1;
+                    const sweekInMonth = Math.ceil(sd.getDate() / 7);
+                    
+                    let skey = "";
+                    if (period === "this_month") {
+                        skey = `Tuần ${sweekInMonth}`;
+                    } else if (period === "12_months") {
+                        skey = `Tháng ${smonthNum}/${sd.getFullYear().toString().slice(2)}`;
+                    } else {
+                        skey = `Tuần ${sweekInMonth} (Th 0${smonthNum})`.replace("010", "10").replace("011", "11").replace("012", "12");
+                    }
+                    return skey === periodKey;
+                }).map(s => s.id)).size,
+            };
+        });
+
+        // Ensure consecutive weeks/months sorting isn't scrambled for "this_month"
+        if (period === "this_month") {
+            trendData.sort((a, b) => {
+                const wa = parseInt(a.period.replace("Tuần ", ""));
+                const wb = parseInt(b.period.replace("Tuần ", ""));
+                return wa - wb;
+            });
+        }
 
         return { data: trendData, error: null };
     } catch (error: any) {
@@ -1060,6 +1184,10 @@ export async function getTeacherAttendanceStats(month: number, year: number) {
             allRecords = records || [];
         }
 
+        // Keep only sessions that have records
+        const validSessionIds = new Set(allRecords.map(r => r.session_id));
+        const validSessions = allSessions.filter(s => validSessionIds.has(s.id));
+
         // 4. Lấy sessions hôm nay (để check GV chưa điểm danh)
         const { data: todaySessions } = await adminSupabase
             .from("attendance_sessions")
@@ -1069,15 +1197,22 @@ export async function getTeacherAttendanceStats(month: number, year: number) {
 
         const todaySess = todaySessions || [];
 
-        // 5. Lấy class_sessions (lịch dạy) trong tháng để biết "expected sessions"
+        // 5. Lấy class_sessions (lịch dạy) trong tháng — thêm teaching_status & taught_at
         const { data: scheduledSessions } = await adminSupabase
             .from("class_sessions")
-            .select("id, class_id, session_date, status")
+            .select("id, class_id, session_date, status, teaching_status, taught_at, actual_teacher_id")
             .in("class_id", allClassIds)
             .gte("session_date", startDate)
             .lt("session_date", endDate);
 
         const allScheduled = scheduledSessions || [];
+
+        // 5b. Lấy teacher_leave_requests trong tháng
+        const { data: leaveRequests } = await adminSupabase
+            .from("teacher_leave_requests")
+            .select("id, teacher_id, class_id, leave_date, status, admin_action")
+            .gte("leave_date", startDate)
+            .lt("leave_date", endDate);
 
         // 6. Aggregate theo teacher
         const teacherMap: Record<string, any> = {};
@@ -1101,19 +1236,23 @@ export async function getTeacherAttendanceStats(month: number, year: number) {
                     conductRate: 0,
                     todayPending: false,
                     todayClasses: [] as string[],
+                    leaveCount: 0,
+                    taughtSessions: [] as { date: string; taughtAt: string; className: string }[],
                 };
             }
 
             // Sessions thực tế của lớp này trong tháng
-            const classSessions = allSessions.filter((s: any) => s.class_id === cls.id);
+            const classSessions = validSessions.filter((s: any) => s.class_id === cls.id);
             const classScheduled = allScheduled.filter((s: any) => s.class_id === cls.id);
 
             // Records cho lớp này
             const classSessionIds = classSessions.map((s: any) => s.id);
             const classRecords = allRecords.filter((r: any) => classSessionIds.includes(r.session_id));
             const presentCount = classRecords.filter((r: any) => r.status === "present").length;
-            const totalRecords = classRecords.length;
-            const avgRate = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
+            const absentCount = classRecords.filter((r: any) => r.status === "absent").length;
+            const excusedCount = classRecords.filter((r: any) => r.status === "excused").length;
+            const relevantTotal = presentCount + absentCount + excusedCount;
+            const avgRate = relevantTotal > 0 ? Math.round((presentCount / relevantTotal) * 100) : 0;
 
             teacherMap[tid].classes.push({
                 classId: cls.id,
@@ -1123,11 +1262,30 @@ export async function getTeacherAttendanceStats(month: number, year: number) {
                 expectedSessions: Math.max(classScheduled.length, classSessions.length),
                 avgAttendanceRate: avgRate,
                 presentCount,
-                totalRecords,
+                totalRecords: classRecords.length,
             });
 
             teacherMap[tid].totalSessionsConducted += classSessions.length;
             teacherMap[tid].totalSessionsExpected += Math.max(classScheduled.length, classSessions.length);
+
+            // Lấy leave requests đã approved cho GV này + lớp này
+            const teacherLeaves = (leaveRequests || []).filter((lr: any) =>
+                lr.teacher_id === tid && lr.class_id === cls.id && lr.status === "approved"
+            );
+            teacherMap[tid].leaveCount += teacherLeaves.length;
+
+            // Lấy danh sách buổi đã dạy (có taught_at) để admin xem thời gian
+            const taughtScheduled = classScheduled.filter((s: any) =>
+                s.teaching_status === "taught" || s.teaching_status === "substitute"
+            );
+            for (const ts of taughtScheduled) {
+                teacherMap[tid].taughtSessions.push({
+                    date: ts.session_date,
+                    taughtAt: ts.taught_at,
+                    className: cls.name,
+                    teachingStatus: ts.teaching_status,
+                });
+            }
 
             // Check today
             const todayClassSess = todaySess.filter((s: any) => s.class_id === cls.id);
@@ -1214,6 +1372,10 @@ export async function getStudentCrossClassAttendance(month: number, year: number
 
         const allRecords = records || [];
 
+        // Keep only sessions that have records
+        const validSessionIds = new Set(allRecords.map(r => r.session_id));
+        const validSessions = allSessions.filter(s => validSessionIds.has(s.id));
+
         // 4. Lấy parent link — 1 query
         const allStudentIds = [...new Set(enrollments.map((e: any) => e.student_id))];
         const { data: parentLinks } = await adminSupabase
@@ -1256,7 +1418,7 @@ export async function getStudentCrossClassAttendance(month: number, year: number
             }
 
             // Tìm sessions cho lớp này
-            const classSessions = allSessions.filter((s: any) => s.class_id === enr.class_id);
+            const classSessions = validSessions.filter((s: any) => s.class_id === enr.class_id);
             const classSessionIds = classSessions.map((s: any) => s.id);
 
             // Records cho student trong class
@@ -1269,7 +1431,9 @@ export async function getStudentCrossClassAttendance(month: number, year: number
             const late = studentClassRecords.filter((r: any) => r.status === "late").length;
             const excused = studentClassRecords.filter((r: any) => r.status === "excused").length;
             const total = studentClassRecords.length;
-            const rate = total > 0 ? Math.round((present / total) * 100) : 0;
+            // Tỷ lệ chỉ dựa trên Đi học vs Vắng (có phép + không phép), không tính đi muộn
+            const relevantTotal = present + absent + excused;
+            const rate = relevantTotal > 0 ? Math.round((present / relevantTotal) * 100) : 0;
 
             studentMap[sid].classes.push({
                 classId: enr.class_id,
@@ -1288,7 +1452,9 @@ export async function getStudentCrossClassAttendance(month: number, year: number
         // Tính overall rate + alert level + consecutive absent
         const result = Object.values(studentMap).map((s: any) => {
             const o = s.overall;
-            o.rate = o.total > 0 ? Math.round((o.present / o.total) * 100) : 0;
+            // Tỷ lệ chỉ dựa trên Đi học vs Vắng (có phép + không phép), không tính đi muộn
+            const relevantTotal = o.present + o.absent + o.excused;
+            o.rate = relevantTotal > 0 ? Math.round((o.present / relevantTotal) * 100) : 0;
 
             const absentRate = o.total > 0 ? (o.absent / o.total) * 100 : 0;
             s.alert = absentRate >= 30 ? "danger" : absentRate >= 20 ? "warning" : "normal";
@@ -1370,6 +1536,311 @@ export async function sendAttendanceReportToParent(data: {
         return { success: true, error: null };
     } catch (error: any) {
         console.error("Lỗi sendAttendanceReportToParent:", error);
+        return { success: false, error: error.message };
+    }
+}
+
+// ==========================================
+// DAILY ATTENDANCE OVERVIEW (Theo Ngày)
+// ==========================================
+
+/** Lấy tổng quan điểm danh theo 1 ngày cụ thể */
+export async function getDailyAttendanceOverview(date: string) {
+    try {
+        const adminSupabase = createAdminClient();
+
+        // 1. Xác định ngày trong tuần (0 = CN, 1 = T2, ..., 6 = T7)
+        const dateObj = new Date(date + "T00:00:00");
+        const dayOfWeek = dateObj.getDay(); // JS: 0=Sun, 1=Mon...
+
+        // 2. Lấy tất cả lịch cố định cho ngày trong tuần này
+        const { data: schedules, error: schedErr } = await adminSupabase
+            .from("class_schedules")
+            .select(`
+                id, day_of_week, start_time, end_time,
+                room:rooms(name),
+                class:classes(
+                    id, name, status,
+                    teacher:users!classes_teacher_id_fkey(id, full_name)
+                )
+            `)
+            .eq("day_of_week", dayOfWeek)
+            .order("start_time");
+
+        if (schedErr) throw schedErr;
+
+        // Exclude inactive classes
+        const activeSchedules = (schedules || []).filter((s: any) => {
+            const cls = Array.isArray(s.class) ? s.class[0] : s.class;
+            return cls && cls.status === "active";
+        });
+
+        // 3. Lấy tất cả attendance_sessions trong ngày date
+        const { data: sessions, error: sessErr } = await adminSupabase
+            .from("attendance_sessions")
+            .select(`
+                id, class_id, session_date, status, start_time, end_time,
+                teacher:users!teacher_id(full_name)
+            `)
+            .eq("session_date", date);
+
+        if (sessErr) throw sessErr;
+
+        // 4. Lấy records cho các session trong ngày
+        const sessionIds = (sessions || []).map(s => s.id);
+        let recordsMap: Record<string, { present: number; absent: number; late: number; excused: number; total: number }> = {};
+
+        if (sessionIds.length > 0) {
+            const { data: records } = await adminSupabase
+                .from("attendance_records")
+                .select("session_id, status")
+                .in("session_id", sessionIds);
+
+            // Group by session
+            for (const r of (records || [])) {
+                if (!recordsMap[r.session_id]) {
+                    recordsMap[r.session_id] = { present: 0, absent: 0, late: 0, excused: 0, total: 0 };
+                }
+                recordsMap[r.session_id].total++;
+                if (r.status === "present") recordsMap[r.session_id].present++;
+                else if (r.status === "absent") recordsMap[r.session_id].absent++;
+                else if (r.status === "late") recordsMap[r.session_id].late++;
+                else if (r.status === "excused") recordsMap[r.session_id].excused++;
+            }
+        }
+
+        // 5. Map sessions by class_id để tra cứu nhanh
+        const sessionByClassId: Record<string, any> = {};
+        for (const sess of (sessions || [])) {
+            sessionByClassId[sess.class_id] = sess;
+        }
+
+        // 6. Tạo danh sách kết quả: merge schedule + session
+        const classesForDay: any[] = [];
+        const processedClassIds = new Set<string>();
+
+        // 6a. Từ lịch cố định
+        for (const sched of activeSchedules) {
+            const cls = Array.isArray(sched.class) ? sched.class[0] : sched.class;
+            if (!cls) continue;
+            processedClassIds.add(cls.id);
+
+            const teacher = Array.isArray(cls.teacher) ? cls.teacher[0] : cls.teacher;
+            const room = Array.isArray(sched.room) ? sched.room[0] : sched.room;
+            const session = sessionByClassId[cls.id];
+            const stats = session ? recordsMap[session.id] : null;
+
+            classesForDay.push({
+                classId: cls.id,
+                className: cls.name,
+                teacherName: teacher?.full_name || "—",
+                roomName: room?.name || "—",
+                startTime: sched.start_time?.slice(0, 5) || "—",
+                endTime: sched.end_time?.slice(0, 5) || "—",
+                hasSession: !!session,
+                sessionId: session?.id || null,
+                sessionStatus: session?.status || null,
+                attendanceStats: stats || null,
+                source: "schedule" as const,
+            });
+        }
+
+        // 6b. Sessions ngoài lịch (phụ đạo / bù)
+        for (const sess of (sessions || [])) {
+            if (!processedClassIds.has(sess.class_id)) {
+                const teacherObj = Array.isArray(sess.teacher) ? sess.teacher[0] : sess.teacher;
+                const stats = recordsMap[sess.id] || null;
+
+                // Lấy tên lớp
+                const { data: clsInfo } = await adminSupabase
+                    .from("classes")
+                    .select("name")
+                    .eq("id", sess.class_id)
+                    .single();
+
+                classesForDay.push({
+                    classId: sess.class_id,
+                    className: clsInfo?.name || sess.class_id.slice(0, 8),
+                    teacherName: teacherObj?.full_name || "—",
+                    roomName: "—",
+                    startTime: sess.start_time?.slice(0, 5) || "—",
+                    endTime: sess.end_time?.slice(0, 5) || "—",
+                    hasSession: true,
+                    sessionId: sess.id,
+                    sessionStatus: sess.status,
+                    attendanceStats: stats,
+                    source: "extra" as const,
+                });
+            }
+        }
+
+        // 7. Sort theo giờ bắt đầu
+        classesForDay.sort((a, b) => a.startTime.localeCompare(b.startTime));
+
+        // 8. Tính summary
+        const totalClasses = classesForDay.length;
+        const completedCount = classesForDay.filter(c => c.hasSession && c.attendanceStats).length;
+        const pendingCount = totalClasses - completedCount;
+
+        return {
+            data: {
+                date,
+                dayOfWeek,
+                totalClasses,
+                completedCount,
+                pendingCount,
+                classes: classesForDay,
+            },
+            error: null,
+        };
+    } catch (error: any) {
+        console.error("Lỗi getDailyAttendanceOverview:", error);
+        return { data: null, error: error.message };
+    }
+}
+
+// ==========================================
+// ADMIN RESET ATTENDANCE DATA
+// ==========================================
+
+/** Admin reset toàn bộ ĐD của 1 lớp trong 1 tháng */
+export async function resetClassAttendanceData(classId: string, month: number, year: number) {
+    try {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { success: false, error: "Unauthorized", deletedSessions: 0, deletedRecords: 0 };
+
+        // Kiểm tra quyền admin
+        const adminSupabase = createAdminClient();
+        const { data: userData } = await adminSupabase.from("users").select("role").eq("id", user.id).single();
+        if (userData?.role !== "admin") {
+            return { success: false, error: "Chỉ Admin mới có quyền reset", deletedSessions: 0, deletedRecords: 0 };
+        }
+
+        // Tính khoảng ngày
+        const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+        const endDate = month === 12
+            ? `${year + 1}-01-01`
+            : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+
+        // 1. Lấy attendance_sessions của lớp trong tháng
+        const { data: sessions } = await adminSupabase
+            .from("attendance_sessions")
+            .select("id, session_date")
+            .eq("class_id", classId)
+            .gte("session_date", startDate)
+            .lt("session_date", endDate);
+
+        if (!sessions || sessions.length === 0) {
+            return { success: true, deletedSessions: 0, deletedRecords: 0, error: null };
+        }
+
+        const sessionIds = sessions.map(s => s.id);
+        const sessionDates = sessions.map(s => s.session_date);
+
+        // 2. Xoá attendance_records
+        const { count: recordCount } = await adminSupabase
+            .from("attendance_records")
+            .delete({ count: "exact" })
+            .in("session_id", sessionIds);
+
+        // 3. Xoá attendance_sessions
+        const { count: sessionCount } = await adminSupabase
+            .from("attendance_sessions")
+            .delete({ count: "exact" })
+            .in("id", sessionIds);
+
+        // 4. Revert teaching_status trên class_sessions
+        for (const date of sessionDates) {
+            await adminSupabase
+                .from("class_sessions")
+                .update({
+                    teaching_status: "pending",
+                    actual_teacher_id: null,
+                    taught_at: null,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq("class_id", classId)
+                .eq("session_date", date);
+        }
+
+        // 5. Xoá attendance_points liên quan
+        await adminSupabase
+            .from("attendance_points")
+            .delete()
+            .eq("class_id", classId)
+            .in("session_id", sessionIds);
+
+        revalidatePath("/admin/attendance");
+        return {
+            success: true,
+            deletedSessions: sessionCount || 0,
+            deletedRecords: recordCount || 0,
+            error: null,
+        };
+    } catch (error: any) {
+        console.error("Lỗi resetClassAttendanceData:", error);
+        return { success: false, error: error.message, deletedSessions: 0, deletedRecords: 0 };
+    }
+}
+
+/** Admin reset ĐD của 1 buổi cụ thể */
+export async function resetSessionAttendanceData(sessionId: string) {
+    try {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { success: false, error: "Unauthorized" };
+
+        const adminSupabase = createAdminClient();
+        const { data: userData } = await adminSupabase.from("users").select("role").eq("id", user.id).single();
+        if (userData?.role !== "admin") {
+            return { success: false, error: "Chỉ Admin mới có quyền reset" };
+        }
+
+        // Lấy session info
+        const { data: session } = await adminSupabase
+            .from("attendance_sessions")
+            .select("class_id, session_date")
+            .eq("id", sessionId)
+            .single();
+
+        if (!session) return { success: false, error: "Không tìm thấy buổi điểm danh" };
+
+        // Xoá records
+        await adminSupabase
+            .from("attendance_records")
+            .delete()
+            .eq("session_id", sessionId);
+
+        // Xoá session
+        await adminSupabase
+            .from("attendance_sessions")
+            .delete()
+            .eq("id", sessionId);
+
+        // Revert teaching_status
+        await adminSupabase
+            .from("class_sessions")
+            .update({
+                teaching_status: "pending",
+                actual_teacher_id: null,
+                taught_at: null,
+                updated_at: new Date().toISOString(),
+            })
+            .eq("class_id", session.class_id)
+            .eq("session_date", session.session_date);
+
+        // Xoá attendance_points
+        await adminSupabase
+            .from("attendance_points")
+            .delete()
+            .eq("class_id", session.class_id)
+            .eq("session_id", sessionId);
+
+        revalidatePath("/admin/attendance");
+        return { success: true, error: null };
+    } catch (error: any) {
+        console.error("Lỗi resetSessionAttendanceData:", error);
         return { success: false, error: error.message };
     }
 }

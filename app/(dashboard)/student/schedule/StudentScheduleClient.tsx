@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import AbsenceRequestModal from "@/components/shared/AbsenceRequestModal";
+import UpcomingSessionsWidget from "@/components/shared/UpcomingSessionsWidget";
 import { createClient } from "@/lib/supabase/client";
 
 interface ClassSession {
@@ -22,10 +23,9 @@ interface ClassSession {
     session_date: string;
     start_time: string;
     end_time: string;
-    topic: string | null;
-    description: string | null;
-    materials_url: string[] | null;
-    homework: string | null;
+    lesson_title: string | null;
+    lesson_content: string | null;
+    attachments: any[] | null;
     status: string; // teacher's session status
     attendance_status: string | null; // present, absent, late, excused
     attendance_notes: string | null;
@@ -78,10 +78,9 @@ export default function StudentScheduleClient({ sessions, initialSchedules }: St
                             session_date: dateStr,
                             start_time: s.start_time,
                             end_time: s.end_time,
-                            topic: 'Lịch học dự kiến',
-                            description: 'Giáo viên chưa tạo nội dung chi tiết cho buổi học này. Đây là lịch học cố định hàng tuần.',
-                            materials_url: [],
-                            homework: null,
+                            lesson_title: 'Lịch học dự kiến',
+                            lesson_content: 'Giáo viên chưa tạo giáo án chi tiết cho buổi học này.',
+                            attachments: [],
                             status: 'scheduled',
                             attendance_status: null,
                             attendance_notes: null
@@ -261,7 +260,7 @@ export default function StudentScheduleClient({ sessions, initialSchedules }: St
                                                                     {session.class_name}
                                                                 </span>
                                                                 <h3 className={`font-bold text-lg ${session.session_number === 0 ? 'text-slate-600' : 'text-slate-800'}`}>
-                                                                    {session.session_number === 0 ? session.topic : `Buổi ${session.session_number}: ${session.topic || "Nội dung đang cập nhật"}`}
+                                                                    {session.session_number === 0 ? session.lesson_title : `Buổi ${session.session_number}: ${session.lesson_title || "Nội dung đang cập nhật"}`}
                                                                 </h3>
                                                                 <p className="text-sm text-slate-500 flex items-center mt-1">
                                                                     <Clock className="w-4 h-4 mr-1.5" />
@@ -274,17 +273,24 @@ export default function StudentScheduleClient({ sessions, initialSchedules }: St
                                                                 </Badge>
                                                             </div>
                                                         </div>
-                                                        <div className="text-sm text-slate-600 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100">
-                                                            {session.description || "Chưa có mô tả chi tiết cho buổi học này."}
+                                                        <div className="text-sm text-slate-600 mb-4 bg-slate-50 p-3 rounded-lg border border-slate-100 whitespace-pre-wrap">
+                                                            {session.lesson_content || "Chưa có dặn dò / ghi chú cho buổi học này."}
                                                         </div>
 
-                                                        {session.homework && (
-                                                            <div className="bg-indigo-50 p-3 rounded-lg border border-indigo-100 flex gap-3 text-sm mt-3">
-                                                                <BookOpen className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
-                                                                <div>
-                                                                    <p className="font-semibold text-indigo-900 mb-1">Bài tập về nhà</p>
-                                                                    <p className="text-indigo-800/80 whitespace-pre-wrap">{session.homework}</p>
-                                                                </div>
+                                                        {session.attachments && session.attachments.length > 0 && (
+                                                            <div className="flex flex-wrap gap-2 mt-3">
+                                                                {session.attachments.map((file: any, i: number) => (
+                                                                    <a 
+                                                                        key={i} 
+                                                                        href={file.url} 
+                                                                        target="_blank" 
+                                                                        rel="noopener noreferrer" 
+                                                                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 border border-indigo-100 text-indigo-700 font-medium rounded-lg text-xs hover:bg-indigo-100 transition-colors"
+                                                                    >
+                                                                        <FileText className="w-3.5 h-3.5" />
+                                                                        <span className="max-w-[150px] truncate">{file.name}</span>
+                                                                    </a>
+                                                                ))}
                                                             </div>
                                                         )}
                                                     </div>
@@ -306,87 +312,12 @@ export default function StudentScheduleClient({ sessions, initialSchedules }: St
                             <p className="text-slate-500">Bạn chưa được xếp lịch học chi tiết nào.</p>
                         </div>
                     ) : (
-                        (() => {
-                            const nowStr = format(new Date(), 'yyyy-MM-dd');
-                            const timeStr = format(new Date(), 'HH:mm');
-                            const sorted = [...localSessions].sort((a, b) => {
-                                if (a.session_date !== b.session_date) return a.session_date.localeCompare(b.session_date);
-                                return a.start_time.localeCompare(b.start_time);
-                            });
-                            const past = sorted.filter(s => s.session_date < nowStr || (s.session_date === nowStr && s.end_time < timeStr));
-                            const future = sorted.filter(s => s.session_date > nowStr || (s.session_date === nowStr && s.end_time >= timeStr));
-                            const mostRecentPast = past[past.length - 1];
-                            const nextTwoFuture = future.slice(0, 2);
-                            const nearest3 = [];
-                            if (mostRecentPast) nearest3.push(mostRecentPast);
-                            nearest3.push(...nextTwoFuture);
-
-                            return nearest3.map(session => {
-                                const attConfig = getAttendanceConfig(session.attendance_status, session.status, session.session_number);
-                                const isUpcoming = new Date(session.session_date) >= new Date(new Date().setHours(0, 0, 0, 0));
-
-                                return (
-                                    <Card key={session.id} className="shadow-sm overflow-hidden border-l-4 transition-all hover:shadow-md" style={{ borderLeftColor: attConfig.color.includes('emerald') ? '#10b981' : attConfig.color.includes('red') ? '#ef4444' : attConfig.color.includes('amber') ? '#f59e0b' : attConfig.color.includes('blue') ? '#3b82f6' : '#6366f1' }}>
-                                        <CardContent className="p-0 flex flex-col md:flex-row">
-                                            {/* Cột trái: Ngày tháng */}
-                                            <div className="bg-slate-50/80 md:w-56 p-6 border-b md:border-b-0 md:border-r border-slate-100 flex flex-col justify-center items-center text-center shrink-0">
-                                                <div className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-1.5">
-                                                    {format(parseISO(session.session_date), 'EEEE', { locale: vi })}
-                                                </div>
-                                                <div className="text-4xl font-black text-indigo-700 mb-1">
-                                                    {format(parseISO(session.session_date), 'dd')}
-                                                </div>
-                                                <div className="text-sm font-semibold text-slate-500 mb-4">
-                                                    Tháng {format(parseISO(session.session_date), 'MM, yyyy')}
-                                                </div>
-                                                <Badge variant="outline" className="bg-white px-3.5 py-1.5 text-slate-700 font-semibold border-slate-200 shadow-sm rounded-full">
-                                                    <Clock className="w-3.5 h-3.5 mr-2 text-indigo-500" />
-                                                    {session.start_time.substring(0, 5)} - {session.end_time.substring(0, 5)}
-                                                </Badge>
-                                            </div>
-
-                                            {/* Cột phải: Nội dung bài học */}
-                                            <div className="flex-1 p-6 lg:p-8 flex flex-col relative justify-center">
-                                                <div className="absolute top-6 right-6 flex gap-2">
-                                                    <Badge className={`${attConfig.color} border-0 shadow-sm px-3 py-1 font-medium`}>
-                                                        {attConfig.label}
-                                                    </Badge>
-                                                </div>
-
-                                                <div className="mb-4 pr-24">
-                                                    <Badge className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200 mb-3 px-2.5 py-0.5">
-                                                        Lớp: {session.class_name}
-                                                    </Badge>
-                                                    <h3 className={`font-extrabold text-xl mb-1.5 leading-tight ${session.session_number === 0 ? 'text-slate-600' : 'text-slate-900'}`}>
-                                                        {session.session_number === 0 ? session.topic : `Buổi ${session.session_number}: ${session.topic || "Đang cập nhật chủ đề..."}`}
-                                                    </h3>
-                                                    {session.course_name && <p className="text-sm text-slate-500 font-medium">{session.course_name}</p>}
-                                                </div>
-
-                                                <div className="bg-slate-50/50 rounded-xl p-4 md:p-5 border border-slate-100 text-slate-700 text-sm leading-relaxed mb-2 transition-colors hover:bg-slate-50">
-                                                    <div className="font-bold text-slate-800 mb-2 flex items-center gap-2">
-                                                        <FileText className="w-4 h-4 text-indigo-500" /> Nội dung bài học (Admin giao):
-                                                    </div>
-                                                    <div className="text-slate-600">
-                                                        {session.description || <span className="italic text-slate-400">Chưa có mô tả chi tiết bài học. Nội dung sẽ được cập nhật sau.</span>}
-                                                    </div>
-                                                </div>
-
-                                                {session.homework && (
-                                                    <div className="bg-indigo-50/50 p-4 md:p-5 rounded-xl border border-indigo-100 flex gap-3.5 text-sm mt-3 transition-colors hover:bg-indigo-50">
-                                                        <BookOpen className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
-                                                        <div>
-                                                            <p className="font-bold text-indigo-900 mb-1.5">Bài tập về nhà:</p>
-                                                            <p className="text-indigo-800/80 whitespace-pre-wrap leading-relaxed">{session.homework}</p>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                );
-                        });
-                    })()
+                        <UpcomingSessionsWidget
+                            sessions={localSessions}
+                            limit={10}
+                            compact={true}
+                            onSessionClick={(session: any) => handleOpenAbsenceModal(session)}
+                        />
                     )}
                 </TabsContent>
             </Tabs>

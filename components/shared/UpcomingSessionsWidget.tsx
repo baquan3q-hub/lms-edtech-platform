@@ -14,8 +14,9 @@ interface ClassSession {
     session_date: string;
     start_time: string;
     end_time: string;
-    topic: string | null;
-    homework: string | null;
+    lesson_title: string | null;
+    lesson_content: string | null;
+    attachments?: any[] | null;
     status?: string;
     attendance_status?: string | null;
     absence_request_status?: string | null;
@@ -204,26 +205,44 @@ export default function UpcomingSessionsWidget({ sessions, limit, onSessionClick
                                 </div>
 
                                 {/* Topic / Nội dung */}
-                                {session.topic && (
+                                {session.lesson_title && (
                                     <div className="bg-amber-50/80 border border-amber-200/60 rounded-lg px-3 py-2 flex items-start gap-2">
                                         <FileText className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                                         <div>
-                                            <span className="text-xs font-bold text-amber-700">Nội dung / Lưu ý: </span>
-                                            <span className="text-xs text-amber-900/80">{session.topic}</span>
+                                            <span className="text-xs font-bold text-amber-700">Tên bài học / Chủ đề: </span>
+                                            <span className="text-xs text-amber-900/80">{session.lesson_title}</span>
                                         </div>
                                     </div>
                                 )}
 
                                 {/* Homework alert */}
-                                {session.homework && session.homework.trim().length > 0 && !isPastSession && (
+                                {session.lesson_content && session.lesson_content.trim().length > 0 && (
                                     <div className="bg-rose-50 rounded-lg px-3 py-2 border border-rose-200/60 flex items-start gap-2 mt-2">
                                         <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0 mt-0.5" />
                                         <div>
-                                            <span className="text-[10px] font-bold text-rose-800 block mb-0.5">BÀI TẬP VỀ NHÀ</span>
+                                            <span className="text-[10px] font-bold text-rose-800 block mb-0.5">NỘI DUNG / DẶN DÒ BÀI HỌC</span>
                                             <p className="text-xs text-rose-900/80 leading-relaxed whitespace-pre-wrap">
-                                                {session.homework}
+                                                {session.lesson_content}
                                             </p>
                                         </div>
+                                    </div>
+                                )}
+
+                                {/* Attachments */}
+                                {session.attachments && session.attachments.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mt-2 py-1">
+                                        {session.attachments.map((file: any, i: number) => (
+                                            <a 
+                                                key={i} 
+                                                href={file.url} 
+                                                target="_blank" 
+                                                rel="noopener noreferrer" 
+                                                className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 border border-indigo-100 text-indigo-700 font-medium rounded-md text-[10px] hover:bg-indigo-100 transition-colors"
+                                            >
+                                                <FileText className="w-3 h-3" />
+                                                <span className="max-w-[120px] truncate">{file.name}</span>
+                                            </a>
+                                        ))}
                                     </div>
                                 )}
 
@@ -260,14 +279,14 @@ export default function UpcomingSessionsWidget({ sessions, limit, onSessionClick
                 const date = parseISO(session.session_date);
                 const isCurrentDay = isToday(date);
                 const isPastSession = isBefore(date, today);
-                const hasHomework = session.homework && session.homework.trim().length > 0;
+                const hasContent = session.lesson_content && session.lesson_content.trim().length > 0;
 
                 return (
                     <div
                         key={session.id || idx}
                         className={`relative bg-white rounded-xl border overflow-hidden transition-all
                             ${isPastSession ? "border-slate-200 opacity-80" : "border-slate-200 shadow-sm"}
-                            ${hasHomework && !isPastSession ? "border-amber-300 shadow-md shadow-amber-100/50" : ""}
+                            ${hasContent && !isPastSession ? "border-amber-300 shadow-md shadow-amber-100/50" : ""}
                             ${onSessionClick ? "cursor-pointer hover:border-indigo-300 hover:shadow-md group" : ""}`}
                         onClick={() => onSessionClick && onSessionClick(session)}
                     >
@@ -275,7 +294,7 @@ export default function UpcomingSessionsWidget({ sessions, limit, onSessionClick
                         <div className={`absolute left-0 top-0 bottom-0 w-1 ${
                             isPastSession ? "bg-slate-300"
                                 : isCurrentDay ? "bg-red-500"
-                                : hasHomework ? "bg-amber-400"
+                                : hasContent ? "bg-amber-400"
                                 : "bg-indigo-400"
                         }`} />
 
@@ -305,7 +324,7 @@ export default function UpcomingSessionsWidget({ sessions, limit, onSessionClick
                                             )}
                                         </div>
                                         <h4 className="font-semibold text-slate-800 text-sm truncate">
-                                            {session.topic || `Buổi ${session.session_number || ""}`}
+                                            {session.lesson_title || `Buổi ${session.session_number || ""}`}
                                         </h4>
                                         <p className="text-xs text-slate-500 mt-0.5 flex items-center gap-1">
                                             <Clock className="w-3 h-3" />
@@ -324,24 +343,34 @@ export default function UpcomingSessionsWidget({ sessions, limit, onSessionClick
 
                                 {/* Homework & Admin Content */}
                                 <div className="mt-2 space-y-2">
-                                    {/* Admin Description */}
-                                    {(session as any).description && (
-                                        <div className="bg-slate-50/80 rounded border border-slate-100 p-2 text-xs text-slate-600">
-                                            <span className="font-semibold block mb-0.5 text-slate-700">Nội dung bài học:</span>
-                                            {(session as any).description}
-                                        </div>
-                                    )}
-
                                     {/* Homework Update */}
-                                    {hasHomework && !isPastSession && (
+                                    {hasContent && (
                                         <div className="bg-amber-50 rounded-lg p-2 border border-amber-200/60 flex items-start gap-1.5">
                                             <AlertCircle className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
                                             <div>
-                                                <span className="text-[10px] font-bold text-amber-800 block mb-0.5">BÀI TẬP VỀ NHÀ!</span>
+                                                <span className="text-[10px] font-bold text-amber-800 block mb-0.5">NỘI DUNG / DẶN DÒ BÀI HỌC</span>
                                                 <p className="text-xs text-amber-900/80 leading-relaxed whitespace-pre-wrap">
-                                                    {session.homework}
+                                                    {session.lesson_content}
                                                 </p>
                                             </div>
+                                        </div>
+                                    )}
+
+                                    {/* Attachments */}
+                                    {session.attachments && session.attachments.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mt-1">
+                                            {session.attachments.map((file: any, i: number) => (
+                                                <a 
+                                                    key={i} 
+                                                    href={file.url} 
+                                                    target="_blank" 
+                                                    rel="noopener noreferrer" 
+                                                    className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 border border-indigo-100 text-indigo-700 font-medium rounded-md text-[10px] hover:bg-indigo-100 transition-colors"
+                                                >
+                                                    <FileText className="w-3 h-3" />
+                                                    <span className="max-w-[100px] truncate">{file.name}</span>
+                                                </a>
+                                            ))}
                                         </div>
                                     )}
                                 </div>

@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/tabs";
 import {
     BarChart3, Download, ChevronDown,
-    Users, GraduationCap, School, LayoutGrid,
+    Users, GraduationCap, School, LayoutGrid, CalendarOff,
 } from "lucide-react";
 import { getAttendanceOverview } from "@/lib/actions/attendance";
 import { exportAttendanceExcel } from "./export/exportAttendanceExcel";
@@ -19,6 +19,7 @@ import OverviewTab from "./tabs/OverviewTab";
 import TeacherTab from "./tabs/TeacherTab";
 import StudentTab from "./tabs/StudentTab";
 import ClassDetailTab from "./tabs/ClassDetailTab";
+import TeacherLeaveTab from "./tabs/TeacherLeaveTab";
 
 export default function AdminAttendanceClient() {
     const now = new Date();
@@ -147,6 +148,13 @@ export default function AdminAttendanceClient() {
                         <School className="w-4 h-4" />
                         Chi tiết Lớp
                     </TabsTrigger>
+                    <TabsTrigger
+                        value="teacher-leave"
+                        className="data-[state=active]:bg-rose-50 data-[state=active]:text-rose-700 data-[state=active]:shadow-sm rounded-lg gap-1.5 px-4 py-2"
+                    >
+                        <CalendarOff className="w-4 h-4" />
+                        Đơn GV nghỉ
+                    </TabsTrigger>
                 </TabsList>
 
                 {/* Tab 1: Overview */}
@@ -167,6 +175,11 @@ export default function AdminAttendanceClient() {
                 {/* Tab 4: Class Detail */}
                 <TabsContent value="classes" className="mt-0">
                     <ClassDetailTab month={month} year={year} />
+                </TabsContent>
+
+                {/* Tab 5: Teacher Leave Requests */}
+                <TabsContent value="teacher-leave" className="mt-0">
+                    <TeacherLeaveTab month={month} year={year} />
                 </TabsContent>
             </Tabs>
         </div>

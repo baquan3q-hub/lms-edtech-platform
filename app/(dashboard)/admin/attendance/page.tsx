@@ -2,7 +2,7 @@ import AdminAttendanceClient from "./AdminAttendanceClient";
 
 export default function AdminAttendancePage() {
     return (
-        <div className="p-6 max-w-7xl mx-auto">
+        <div className="max-w-7xl mx-auto pb-8">
             <AdminAttendanceClient />
         </div>
     );

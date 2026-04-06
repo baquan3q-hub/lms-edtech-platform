@@ -6,7 +6,7 @@ import { vi } from 'date-fns/locale'
 import {
   DollarSign, Clock, CheckCircle2, AlertTriangle, Plus,
   Loader2, FileText, Users, CreditCard, Banknote,
-  Send, X, BarChart3
+  Send, X, BarChart3, CalendarDays
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend
@@ -62,6 +62,13 @@ interface ClassOption {
 
 export default function AdminFinancePage() {
   const [activeTab, setActiveTab] = useState<'class' | 'student' | 'transactions'>('student')
+  const [period, setPeriod] = useState<'month' | 'quarter' | 'year' | 'all'>('month')
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
+  const [selectedQuarter, setSelectedQuarter] = useState<string>(() => (Math.floor(new Date().getMonth() / 3) + 1).toString())
+  const [selectedYear, setSelectedYear] = useState<string>(() => new Date().getFullYear().toString())
   const [kpis, setKpis] = useState<KPIs>({ revenue: 0, pendingAmount: 0, pendingCount: 0, overdueCount: 0, paidCount: 0, totalInvoices: 0 })
   const [invoices, setInvoices] = useState<InvoiceRow[]>([])
   const [payments, setPayments] = useState<PaymentRow[]>([])
@@ -91,7 +98,17 @@ export default function AdminFinancePage() {
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/payment/admin/data')
+      const [mYear, mMonth] = selectedMonth.split('-')
+      let url = `/api/payment/admin/data?period=${period}`
+      if (period === 'month') {
+        url += `&month=${mMonth}&year=${mYear}`
+      } else if (period === 'quarter') {
+        url += `&quarter=${selectedQuarter}&year=${selectedYear}`
+      } else if (period === 'year') {
+        url += `&year=${selectedYear}`
+      }
+
+      const res = await fetch(url)
       if (!res.ok) throw new Error('Failed to fetch')
       const data = await res.json()
 
@@ -103,7 +120,7 @@ export default function AdminFinancePage() {
       console.error('Error fetching finance data:', error)
     }
     setLoading(false)
-  }, [])
+  }, [period, selectedMonth, selectedQuarter, selectedYear])
 
   useEffect(() => {
     fetchData()
@@ -152,17 +169,18 @@ export default function AdminFinancePage() {
   }
 
   // ===========================
-  // Ghi thu tiền mặt
+  // Ghi thu tiền mặt / Duyệt CK
   // ===========================
   const handleCashPayment = async () => {
     if (!cashDialog) return
     setCashLoading(true)
+    const isApproveTransfer = cashDialog.status === 'pending'
     try {
       const res = await fetch('/api/payment/admin/actions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          action: 'cash_payment',
+          action: isApproveTransfer ? 'approve_transfer' : 'cash_payment',
           invoiceId: cashDialog.id,
           note: cashNote || undefined,
         }),
@@ -211,7 +229,70 @@ export default function AdminFinancePage() {
           <DollarSign className="w-7 h-7 text-emerald-600" />
           Quản lý Tài chính
         </h1>
-        <div className="flex gap-2">
+        <div className="flex gap-3 items-center flex-wrap">
+          <select
+            value={period}
+            onChange={e => setPeriod(e.target.value as any)}
+            className="text-sm font-medium text-slate-700 bg-white border border-slate-200 px-3 py-2.5 rounded-full shadow-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 transition-all cursor-pointer"
+          >
+            <option value="month">Theo tháng</option>
+            <option value="quarter">Theo quý</option>
+            <option value="year">Theo năm</option>
+            <option value="all">Tất cả</option>
+          </select>
+
+          {period === 'month' && (
+            <div className="relative flex items-center gap-3 text-sm font-medium text-slate-600 bg-white border border-slate-200 px-4 py-2.5 rounded-full shadow-sm hover:border-indigo-300 transition-colors w-[220px] lg:w-[260px]">
+              {(() => {
+                const monthNames = ["Một", "Hai", "Ba", "Tư", "Năm", "Sáu", "Bảy", "Tám", "Chín", "Mười", "Mười Một", "Mười Hai"];
+                const [y, m] = selectedMonth.split('-');
+                const displayMonth = monthNames[parseInt(m) - 1];
+                return (
+                  <div className="flex-1 flex items-center justify-between pointer-events-none">
+                    <span>Tháng<span className="font-bold text-slate-700 ml-1"> {displayMonth} {y}</span></span>
+                    <CalendarDays className="w-4 h-4 text-slate-700" />
+                  </div>
+                );
+              })()}
+              <input
+                type="month"
+                value={selectedMonth}
+                onClick={(e) => {
+                  try {
+                    (e.target as HTMLInputElement).showPicker();
+                  } catch (err) { }
+                }}
+                onChange={(e) => setSelectedMonth(e.target.value)}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none"
+              />
+            </div>
+          )}
+
+          {period === 'quarter' && (
+            <div className="flex gap-2">
+              <select value={selectedQuarter} onChange={e => setSelectedQuarter(e.target.value)} className="text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-full px-4 py-2.5 shadow-sm outline-none cursor-pointer">
+                <option value="1">Quý 1</option>
+                <option value="2">Quý 2</option>
+                <option value="3">Quý 3</option>
+                <option value="4">Quý 4</option>
+              </select>
+              <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-full px-4 py-2.5 shadow-sm outline-none cursor-pointer">
+                {[0, 1, 2, 3].map(i => {
+                  const y = new Date().getFullYear() - i;
+                  return <option key={y} value={y}>Năm {y}</option>
+                })}
+              </select>
+            </div>
+          )}
+
+          {period === 'year' && (
+            <select value={selectedYear} onChange={e => setSelectedYear(e.target.value)} className="text-sm font-medium text-slate-700 bg-white border border-slate-200 rounded-full px-4 py-2.5 shadow-sm outline-none cursor-pointer">
+              {[0, 1, 2, 3, 4].map(i => {
+                const y = new Date().getFullYear() - i;
+                return <option key={y} value={y}>Năm {y}</option>
+              })}
+            </select>
+          )}
           <button
             onClick={() => setShowCreateDialog(true)}
             className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition flex items-center gap-2 text-sm"
@@ -268,11 +349,10 @@ export default function AdminFinancePage() {
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${
-              activeTab === tab.key
+            className={`flex-1 py-2.5 px-4 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2 ${activeTab === tab.key
                 ? 'bg-white shadow text-blue-700'
                 : 'text-gray-500 hover:text-gray-700'
-            }`}
+              }`}
           >
             {tab.label}
           </button>
@@ -293,11 +373,10 @@ export default function AdminFinancePage() {
               <button
                 key={f.value}
                 onClick={() => setStatusFilter(f.value)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
-                  statusFilter === f.value
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${statusFilter === f.value
                     ? 'bg-blue-600 text-white'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
+                  }`}
               >
                 {f.label}
               </button>
@@ -329,15 +408,26 @@ export default function AdminFinancePage() {
                       <td className="px-4 py-3 text-gray-600">{format(new Date(inv.due_date), 'dd/MM/yyyy')}</td>
                       <td className="px-4 py-3 text-center">{statusBadge(inv.status)}</td>
                       <td className="px-4 py-3 text-center">
-                        {(inv.status === 'unpaid' || inv.status === 'overdue') && (
-                          <button
-                            onClick={() => setCashDialog(inv)}
-                            className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition text-xs font-medium inline-flex items-center gap-1"
-                          >
-                            <Banknote className="w-3.5 h-3.5" />
-                            Ghi thu
-                          </button>
-                        )}
+                        <div className="flex justify-center gap-2">
+                          {(inv.status === 'unpaid' || inv.status === 'overdue') && (
+                            <button
+                              onClick={() => setCashDialog(inv)}
+                              className="px-3 py-1.5 bg-emerald-50 text-emerald-700 rounded-lg hover:bg-emerald-100 transition text-xs font-medium inline-flex items-center gap-1"
+                            >
+                              <Banknote className="w-3.5 h-3.5" />
+                              Ghi thu
+                            </button>
+                          )}
+                          {inv.status === 'pending' && (
+                            <button
+                              onClick={() => setCashDialog(inv)}
+                              className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 transition text-xs font-medium inline-flex items-center gap-1"
+                            >
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              Duyệt CK
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -497,13 +587,16 @@ export default function AdminFinancePage() {
         </div>
       )}
 
-      {/* ===== DIALOG GHI THU TIỀN MẶT ===== */}
+      {/* ===== DIALOG GHI THU TIỀN MẶT / DUYỆT CHUYỂN KHOẢN ===== */}
       {cashDialog && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => !cashLoading && setCashDialog(null)}>
           <div className="bg-white rounded-2xl p-6 max-w-md w-full space-y-5" onClick={e => e.stopPropagation()}>
             <h2 className="text-xl font-bold flex items-center gap-2">
-              <Banknote className="w-5 h-5 text-emerald-600" />
-              Ghi thu tiền mặt
+              {cashDialog.status === 'pending' ? (
+                <><CheckCircle2 className="w-5 h-5 text-blue-600" /> Duyệt chuyển khoản</>
+              ) : (
+                <><Banknote className="w-5 h-5 text-emerald-600" /> Ghi thu tiền mặt</>
+              )}
             </h2>
 
             <div className="bg-gray-50 rounded-xl p-4 space-y-2">
@@ -527,8 +620,9 @@ export default function AdminFinancePage() {
                 value={cashNote}
                 onChange={e => setCashNote(e.target.value)}
                 rows={2}
-                placeholder="VD: Phụ huynh đến trực tiếp nộp ngày 23/03"
-                className="w-full px-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-emerald-500 resize-none"
+                placeholder={cashDialog.status === 'pending' ? "VD: Đã nhận tiền qua VCB" : "VD: Phụ huynh đến trực tiếp nộp ngày 23/03"}
+                className={`w-full px-3 py-2.5 border rounded-xl focus:ring-2 resize-none ${cashDialog.status === 'pending' ? 'focus:ring-blue-500' : 'focus:ring-emerald-500'
+                  }`}
               />
             </div>
 
@@ -536,10 +630,11 @@ export default function AdminFinancePage() {
               <button
                 onClick={handleCashPayment}
                 disabled={cashLoading}
-                className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-medium hover:bg-emerald-700 disabled:opacity-50 transition flex items-center justify-center gap-2"
+                className={`flex-1 py-3 text-white rounded-xl font-medium disabled:opacity-50 transition flex items-center justify-center gap-2 ${cashDialog.status === 'pending' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-emerald-600 hover:bg-emerald-700'
+                  }`}
               >
                 {cashLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                {cashLoading ? 'Đang xử lý...' : 'Xác nhận thu tiền'}
+                {cashLoading ? 'Đang xử lý...' : (cashDialog.status === 'pending' ? 'Xác nhận. Đã nhận đủ tiền' : 'Xác nhận thu tiền')}
               </button>
               <button
                 onClick={() => setCashDialog(null)}

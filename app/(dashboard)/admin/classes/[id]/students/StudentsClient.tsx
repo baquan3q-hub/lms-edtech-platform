@@ -21,6 +21,7 @@ interface Student {
     id: string;
     full_name: string;
     email: string;
+    currentClasses?: string[];
 }
 
 interface Enrollment {
@@ -110,12 +111,34 @@ export default function StudentsClient({ classId, enrollments, availableStudents
                     <div className="flex-1">
                         <Select value={selectedStudentId} onValueChange={setSelectedStudentId} disabled={loading || availableStudents.length === 0}>
                             <SelectTrigger className="w-full">
-                                <SelectValue placeholder={availableStudents.length === 0 ? "Tất cả học viên đã được thêm vào lớp" : "Chọn học viên..."} />
+                                <SelectValue placeholder={availableStudents.length === 0 ? "Tất cả học viên đã được thêm vào lớp" : "Chọn học viên..."}>
+                                    {selectedStudentId ? availableStudents.find((s) => s.id === selectedStudentId)?.full_name : ""}
+                                </SelectValue>
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent className="max-h-[300px]">
                                 {availableStudents.map(student => (
                                     <SelectItem key={student.id} value={student.id}>
-                                        {student.full_name} ({student.email})
+                                        <div className="flex flex-col py-1 text-left">
+                                            <span className="font-medium text-slate-800">
+                                                {student.full_name} <span className="text-slate-500 font-normal">({student.email})</span>
+                                            </span>
+                                            {student.currentClasses && student.currentClasses.length > 0 ? (
+                                                <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                                                    <span className="text-[10px] text-slate-500 font-medium whitespace-nowrap">Đang học:</span>
+                                                    {student.currentClasses.map((c, i) => (
+                                                        <Badge key={i} variant="outline" className="text-[10px] py-0 h-[18px] bg-slate-50 text-slate-600 border-slate-200">
+                                                            {c}
+                                                        </Badge>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <div className="mt-1.5">
+                                                    <span className="text-[10px] text-emerald-600 font-medium py-0.5 px-2 rounded-full bg-emerald-50 border border-emerald-100">
+                                                        Thành viên Tự do (Chưa có lớp)
+                                                    </span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </SelectItem>
                                 ))}
                             </SelectContent>

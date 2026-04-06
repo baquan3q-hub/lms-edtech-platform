@@ -12,6 +12,8 @@ interface TrendDataPoint {
     lateRate: number;
     excusedRate: number;
     total: number;
+    totalPresent?: number;
+    totalSessions?: number;
 }
 
 interface Props {
@@ -40,9 +42,10 @@ function CustomTooltip({ active, payload, label }: any) {
                     <span className="font-semibold text-gray-900">{entry.value}%</span>
                 </div>
             ))}
-            {payload[0]?.payload?.total && (
-                <div className="mt-1.5 pt-1.5 border-t border-gray-100 text-gray-400 text-xs">
-                    Tổng: {payload[0].payload.total} lượt
+            {payload[0]?.payload?.totalSessions !== undefined && (
+                <div className="mt-1.5 pt-1.5 border-t border-gray-100 text-gray-500 text-xs flex flex-col gap-0.5">
+                    <span>Tổng buổi học: {payload[0].payload.totalSessions} buổi</span>
+                    <span>Số lượt điểm danh: {payload[0].payload.total} lượt ({payload[0].payload.totalPresent} có mặt)</span>
                 </div>
             )}
         </div>

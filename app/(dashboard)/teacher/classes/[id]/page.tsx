@@ -10,7 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AttendanceClient from "./AttendanceClient";
 import ScheduleManagerClient from "./ScheduleManagerClient";
-import { getRooms, getClassSchedules } from "@/lib/actions/schedule";
+import TeacherLeaveClient from "./TeacherLeaveClient";
+import { getRooms, getClassSchedules, getGeneratedSessions } from "@/lib/actions/schedule";
 import DeleteExamButton from "@/components/teacher/DeleteExamButton";
 import AnnouncementComposer from "@/components/teacher/AnnouncementComposer";
 import { fetchClassAnnouncements } from "@/lib/actions/announcement";
@@ -26,6 +27,7 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
         { data: courseItems },
         { data: roomsData },
         { data: schedulesData },
+        { data: sessionsData },
         { data: studentProgress },
         { data: classExams },
         { data: classHomework },
@@ -36,6 +38,7 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
         fetchCourseItems(id),
         getRooms(),
         getClassSchedules(id),
+        getGeneratedSessions(id),
         fetchStudentProgressForClass(id),
         fetchClassExams(id),
         fetchClassHomework(id),
@@ -365,8 +368,8 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
 
                 {/* ===== TAB: XẾP LỊCH & PHÒNG ===== */}
                 <TabsContent value="schedule" className="mt-6 space-y-6">
-                    <div>
-                        <h4 className="font-semibold text-slate-800 mb-4 whitespace-nowrap">Lịch khai báo với hệ thống (Phòng máy/Ca dạy)</h4>
+                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                        <h4 className="font-semibold text-slate-800 mb-4 whitespace-nowrap">Lịch dạy hiện tại (Do Admin sắp xếp)</h4>
                         <ScheduleManagerClient
                             classId={id}
                             initialSchedules={schedulesData || []}
@@ -374,6 +377,13 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                             readOnly={true}
                         />
                     </div>
+
+                    {/* Xin nghỉ dạy */}
+                    <TeacherLeaveClient
+                        classId={id}
+                        className={classInfo?.name || "Lớp học"}
+                        sessions={sessionsData || []}
+                    />
                 </TabsContent>
 
                 {/* ===== TAB: BÀI HỌC (E-Learning Curriculum) ===== */}

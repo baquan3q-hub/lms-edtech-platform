@@ -89,6 +89,8 @@ export async function upsertClassSchedule(scheduleData: {
     start_time: string;
     end_time: string;
     note?: string;
+    start_date?: string;
+    end_date?: string;
 }) {
     try {
         const adminSupabase = createAdminClient();
@@ -141,6 +143,19 @@ export async function upsertClassSchedule(scheduleData: {
                 .eq("id", scheduleData.class_id);
         }
 
+        // Auto-generate class_sessions nếu có start_date + end_date
+        if (scheduleData.start_date && scheduleData.end_date) {
+            await generateClassSessions(
+                scheduleData.class_id,
+                scheduleData.day_of_week,
+                scheduleData.start_time,
+                scheduleData.end_time,
+                scheduleData.start_date,
+                scheduleData.end_date
+            );
+            await reindexClassSessions(scheduleData.class_id);
+        }
+
         return { data, error: null };
     } catch (error: any) {
         console.error("Lỗi lưu lịch học:", error);
@@ -188,6 +203,226 @@ export async function deleteClassSchedule(scheduleId: string, classId: string) {
     } catch (error: any) {
         console.error("Lỗi xóa lịch học:", error);
         return { success: false, error: error.message };
+    }
+}
+
+// ================= SESSION GENERATION =================
+
+/**
+ * Auto-generate class_sessions từ lịch cố định.
+ * Duyệt từ start_date → end_date, mỗi ngày khớp day_of_week → INSERT.
+ * Skip ngày đã có session (tránh duplicate).
+ */
+export async function generateClassSessions(
+    classId: string,
+    dayOfWeek: number,
+    startTime: string,
+    endTime: string,
+    startDate: string,
+    endDate: string
+) {
+    try {
+        const adminSupabase = createAdminClient();
+
+        // 1. Lấy sessions đã tồn tại để tránh duplicate
+        const { data: existingSessions } = await adminSupabase
+            .from("class_sessions")
+            .select("session_date")
+            .eq("class_id", classId);
+
+        const existingDates = new Set(
+            (existingSessions || []).map((s: any) => s.session_date)
+        );
+
+        // 2. Generate danh sách ngày cần tạo
+        const sessionsToInsert: any[] = [];
+        const current = new Date(startDate + "T12:00:00"); // Use noon to avoid timezone issues
+        const end = new Date(endDate + "T12:00:00");
+        let sessionNum = existingSessions?.length || 0;
+
+        // Helper to format date as YYYY-MM-DD without timezone shift
+        const formatLocalDate = (d: Date) => {
+            const yyyy = d.getFullYear();
+            const mm = String(d.getMonth() + 1).padStart(2, '0');
+            const dd = String(d.getDate()).padStart(2, '0');
+            return `${yyyy}-${mm}-${dd}`;
+        };
+
+        while (current <= end) {
+            if (current.getDay() === dayOfWeek) {
+                const dateStr = formatLocalDate(current);
+                if (!existingDates.has(dateStr)) {
+                    sessionNum++;
+                    sessionsToInsert.push({
+                        class_id: classId,
+                        session_date: dateStr,
+                        start_time: startTime,
+                        end_time: endTime,
+                        status: "scheduled",
+                        teaching_status: "pending",
+                        session_number: sessionNum,
+                    });
+                }
+            }
+            current.setDate(current.getDate() + 1);
+        }
+
+        // 3. Batch insert
+        if (sessionsToInsert.length > 0) {
+            const { error } = await adminSupabase
+                .from("class_sessions")
+                .insert(sessionsToInsert);
+            if (error) {
+                console.error("[generateClassSessions] INSERT ERROR:", error);
+                throw error;
+            }
+        }
+
+        return { count: sessionsToInsert.length, error: null };
+    } catch (error: any) {
+        console.error("Lỗi generateClassSessions:", error);
+        return { count: 0, error: error.message };
+    }
+}
+
+/**
+ * Reset class_sessions cho 1 lớp.
+ * Chỉ xóa sessions CHƯA có attendance_records (bảo toàn dữ liệu ĐD).
+ * Sau đó regenerate từ tất cả schedules hiện tại.
+ */
+export async function resetClassSessions(classId: string) {
+    try {
+        const adminSupabase = createAdminClient();
+
+        // 1. Lấy danh sách session_ids đã có attendance_records
+        const { data: attendedSessions } = await adminSupabase
+            .from("attendance_sessions")
+            .select("session_date")
+            .eq("class_id", classId);
+
+        const attendedDates = new Set(
+            (attendedSessions || []).map((s: any) => s.session_date)
+        );
+
+        // 2. Lấy tất cả class_sessions của lớp
+        const { data: allSessions } = await adminSupabase
+            .from("class_sessions")
+            .select("id, session_date, lesson_title")
+            .eq("class_id", classId);
+
+        // 3. Xóa chỉ sessions chưa có ĐD VÀ chưa có giáo án để bảo toàn dữ liệu
+        const idsToDelete = (allSessions || [])
+            .filter((s: any) => !attendedDates.has(s.session_date) && !s.lesson_title)
+            .map((s: any) => s.id);
+
+        if (idsToDelete.length > 0) {
+            const { error } = await adminSupabase
+                .from("class_sessions")
+                .delete()
+                .in("id", idsToDelete);
+            if (error) throw error;
+        }
+
+        // 4. Lấy tất cả schedules của lớp và regenerate
+        const { data: schedules } = await adminSupabase
+            .from("class_schedules")
+            .select("*")
+            .eq("class_id", classId);
+
+        let totalGenerated = 0;
+        for (const sched of (schedules || [])) {
+            if (sched.start_date && sched.end_date) {
+                const { count } = await generateClassSessions(
+                    classId,
+                    sched.day_of_week,
+                    sched.start_time?.substring(0, 5) || "08:00",
+                    sched.end_time?.substring(0, 5) || "10:00",
+                    sched.start_date,
+                    sched.end_date
+                );
+                totalGenerated += count;
+            }
+        }
+
+        // Đánh số lại toàn bộ sau khi generate xong để đảm bảo thứ tự Buổi 1, 2, 3... chuẩn thời gian
+        await reindexClassSessions(classId);
+
+        revalidatePath(`/admin/classes/${classId}`);
+
+        return {
+            deleted: idsToDelete.length,
+            generated: totalGenerated,
+            preserved: (allSessions || []).length - idsToDelete.length,
+            error: null,
+        };
+    } catch (error: any) {
+        console.error("Lỗi resetClassSessions:", error);
+        return { deleted: 0, generated: 0, preserved: 0, error: error.message };
+    }
+}
+
+/**
+ * Gán GV dạy thay cho 1 buổi học cụ thể
+ */
+export async function assignSubstituteTeacher(
+    sessionId: string,
+    substituteTeacherId: string | null
+) {
+    try {
+        const adminSupabase = createAdminClient();
+        const { error } = await adminSupabase
+            .from("class_sessions")
+            .update({ substitute_teacher_id: substituteTeacherId })
+            .eq("id", sessionId);
+
+        if (error) throw error;
+        return { success: true, error: null };
+    } catch (error: any) {
+        console.error("Lỗi assignSubstituteTeacher:", error);
+        return { success: false, error: error.message };
+    }
+}
+
+/**
+ * Lấy danh sách class_sessions đã generate cho 1 lớp
+ */
+export async function getGeneratedSessions(classId: string) {
+    try {
+        const adminSupabase = createAdminClient();
+        
+        // First try with substitute join
+        let data: any[] = [];
+        const { data: sessions, error } = await adminSupabase
+            .from("class_sessions")
+            .select("*")
+            .eq("class_id", classId)
+            .order("session_date", { ascending: true });
+
+        if (error) throw error;
+        data = sessions || [];
+
+        // Separately get substitute teacher names if any have substitute_teacher_id
+        const subIds = data
+            .filter((s: any) => s.substitute_teacher_id)
+            .map((s: any) => s.substitute_teacher_id);
+
+        if (subIds.length > 0) {
+            const { data: teachers } = await adminSupabase
+                .from("users")
+                .select("id, full_name")
+                .in("id", subIds);
+
+            const teacherMap = new Map((teachers || []).map((t: any) => [t.id, t]));
+            data = data.map((s: any) => ({
+                ...s,
+                substitute: s.substitute_teacher_id ? teacherMap.get(s.substitute_teacher_id) || null : null,
+            }));
+        }
+
+        return { data, error: null };
+    } catch (error: any) {
+        console.error("Lỗi getGeneratedSessions:", error);
+        return { data: [], error: error.message };
     }
 }
 
@@ -463,6 +698,256 @@ export async function getOwnStudentSchedule() {
     } catch (error: any) {
         console.error("Lỗi getOwnStudentSchedule:", error);
         return { data: [], error: error.message };
+    }
+}
+
+// ================= SESSION CONTENT (Giáo án buổi học) =================
+
+export async function updateSessionContent(
+    sessionId: string,
+    data: {
+        lesson_title?: string | null;
+        lesson_content?: string | null;
+        attachments?: any[];
+    }
+) {
+    try {
+        const adminSupabase = createAdminClient();
+        const { data: updatedSession, error } = await adminSupabase
+            .from("class_sessions")
+            .update({
+                lesson_title: data.lesson_title,
+                lesson_content: data.lesson_content,
+                attachments: data.attachments || [],
+                updated_at: new Date().toISOString(),
+            })
+            .eq("id", sessionId)
+            .select()
+            .single();
+
+        if (error) throw error;
+        
+        // Cập nhật lại cache (nếu cần đổi path)
+        // revalidatePath(`/teacher/classes/`); // Dựa vào param gọi vào
+        return { data: updatedSession, error: null };
+    } catch (error: any) {
+        console.error("Lỗi updateSessionContent:", error);
+        return { data: null, error: error.message };
+    }
+}
+
+/**
+ * Đánh số lại session_number cho toàn bộ buổi học của lớp theo đúng thứ tự thời gian
+ */
+export async function reindexClassSessions(classId: string) {
+    try {
+        const adminSupabase = createAdminClient();
+        const { data: allSessions } = await adminSupabase
+            .from("class_sessions")
+            .select("id, session_date, start_time")
+            .eq("class_id", classId);
+
+        if (!allSessions || allSessions.length === 0) return { error: null };
+
+        // Sắp xếp theo ngày tăng dần, giờ tăng dần
+        allSessions.sort((a, b) => {
+            if (a.session_date !== b.session_date) {
+                return new Date(a.session_date).getTime() - new Date(b.session_date).getTime();
+            }
+            return (a.start_time || "").localeCompare(b.start_time || "");
+        });
+
+        // Batch update session_number
+        const promises = allSessions.map((session, index) => 
+            adminSupabase
+                .from("class_sessions")
+                .update({ session_number: index + 1 })
+                .eq("id", session.id)
+        );
+        
+        await Promise.all(promises);
+        return { error: null };
+    } catch (error: any) {
+        console.error("Lỗi reindexClassSessions:", error);
+        return { error: error.message };
+    }
+}
+
+// ================= TEACHER SYNC SESSIONS =================
+
+/**
+ * Giáo viên tự sync sessions cho tất cả lớp mình phụ trách.
+ * Quét class_schedules → generate sessions thiếu → reindex.
+ */
+export async function syncTeacherSessions(_teacherId?: string) {
+    try {
+        const adminSupabase = createAdminClient();
+
+        // Auto-resolve teacherId from auth session
+        let teacherId = _teacherId;
+        if (!teacherId) {
+            const supabase = await createClient();
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) return { synced: [], totalGenerated: 0, error: "Unauthorized" };
+            teacherId = user.id;
+        }
+
+        // 1. Lấy tất cả lớp active của GV
+        const { data: classes } = await adminSupabase
+            .from("classes")
+            .select("id, name")
+            .eq("teacher_id", teacherId)
+            .eq("status", "active");
+
+        if (!classes || classes.length === 0) {
+            return { synced: [], totalGenerated: 0, error: null };
+        }
+
+        const classIds = classes.map(c => c.id);
+        const synced: { className: string; generated: number }[] = [];
+        let totalGenerated = 0;
+
+        for (const cls of classes) {
+            // Lấy schedules có date range
+            const { data: schedules } = await adminSupabase
+                .from("class_schedules")
+                .select("*")
+                .eq("class_id", cls.id)
+                .not("start_date", "is", null)
+                .not("end_date", "is", null);
+
+            if (!schedules || schedules.length === 0) continue;
+
+            let classGenerated = 0;
+            for (const sch of schedules) {
+                const { count } = await generateClassSessions(
+                    cls.id,
+                    sch.day_of_week,
+                    sch.start_time?.substring(0, 5) || "08:00",
+                    sch.end_time?.substring(0, 5) || "10:00",
+                    sch.start_date,
+                    sch.end_date
+                );
+                classGenerated += count;
+            }
+
+            // Reindex
+            await reindexClassSessions(cls.id);
+
+            if (classGenerated > 0) {
+                synced.push({ className: cls.name, generated: classGenerated });
+                totalGenerated += classGenerated;
+            }
+        }
+
+        return { synced, totalGenerated, error: null };
+    } catch (error: any) {
+        console.error("Lỗi syncTeacherSessions:", error);
+        return { synced: [], totalGenerated: 0, error: error.message };
+    }
+}
+
+// ================= TEACHER AGGREGATED SCHEDULE =================
+
+/**
+ * Lấy TẤT CẢ buổi học từ tất cả các lớp mà giáo viên được phân công.
+ * Dùng cho trang /teacher/schedule — view tổng hợp.
+ */
+export async function fetchTeacherAllSessions(teacherId: string) {
+    try {
+        const adminSupabase = createAdminClient();
+
+        // 1. Lấy danh sách class_id mà GV này dạy
+        const { data: classes, error: classError } = await adminSupabase
+            .from("classes")
+            .select("id, name, course_id, status, courses(name)")
+            .eq("teacher_id", teacherId)
+            .eq("status", "active");
+
+        if (classError) throw classError;
+        if (!classes || classes.length === 0) {
+            return { data: [], classes: [], error: null };
+        }
+
+        const classIds = classes.map(c => c.id);
+
+        // 2. Lấy tất cả sessions của các lớp này
+        const { data: sessions, error: sessionsError } = await adminSupabase
+            .from("class_sessions")
+            .select("*")
+            .in("class_id", classIds)
+            .order("session_date", { ascending: true })
+            .order("start_time", { ascending: true });
+
+        if (sessionsError) throw sessionsError;
+
+        // 3. Lấy class_schedules để biết phòng học
+        const { data: schedules } = await adminSupabase
+            .from("class_schedules")
+            .select("class_id, day_of_week, start_time, end_time, room:rooms(name)")
+            .in("class_id", classIds);
+
+        // 4. Lấy leave requests của GV (defensive — bảng có thể chưa tồn tại)
+        let leaveRequests: any[] = [];
+        try {
+            const { data: lr } = await adminSupabase
+                .from("teacher_leave_requests")
+                .select("session_id, leave_date, class_id, status")
+                .eq("teacher_id", teacherId)
+                .in("class_id", classIds)
+                .neq("status", "rejected");
+            leaveRequests = lr || [];
+        } catch {
+            // Bảng chưa tồn tại — bỏ qua
+        }
+
+        // 5. Map thông tin lớp + phòng vào sessions
+        const classMap = new Map(classes.map(c => {
+            const course = Array.isArray(c.courses) ? c.courses[0] : c.courses;
+            return [c.id, { className: c.name, courseName: (course as any)?.name || "" }];
+        }));
+
+        const mappedSessions = (sessions || []).map(session => {
+            const classInfo = classMap.get(session.class_id);
+
+            // Tìm phòng từ class_schedules dựa trên day_of_week
+            const sessionDate = new Date(session.session_date + "T12:00:00");
+            const dayOfWeek = sessionDate.getDay(); // 0=CN, 1=T2...
+            const matchingSchedule = (schedules || []).find(
+                s => s.class_id === session.class_id && s.day_of_week === dayOfWeek
+            );
+            const roomName = matchingSchedule ? (matchingSchedule.room as any)?.name : null;
+
+            // Check xin nghỉ
+            const leaveReq = (leaveRequests || []).find(
+                lr => lr.session_id === session.id || 
+                      (lr.class_id === session.class_id && lr.leave_date === session.session_date)
+            );
+
+            return {
+                ...session,
+                class_name: classInfo?.className || "",
+                course_name: classInfo?.courseName || "",
+                room_name: roomName,
+                leave_status: leaveReq?.status || null,
+            };
+        });
+
+        // 6. Enrich schedules với tên lớp để UI hiển thị lịch cố định
+        const enrichedSchedules = (schedules || []).map(sch => {
+            const classInfo = classMap.get(sch.class_id);
+            return {
+                ...sch,
+                class_name: classInfo?.className || "",
+                course_name: classInfo?.courseName || "",
+                room_name: (sch.room as any)?.name || null,
+            };
+        });
+
+        return { data: mappedSessions, classes, schedules: enrichedSchedules, error: null };
+    } catch (error: any) {
+        console.error("Lỗi fetchTeacherAllSessions:", error);
+        return { data: [], classes: [], schedules: [], error: error.message };
     }
 }
 

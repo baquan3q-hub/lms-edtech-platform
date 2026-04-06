@@ -159,10 +159,11 @@ export async function getClassAttendanceSessions(classId: string, month: number,
             ? `${year + 1}-01-01`
             : `${year}-${String(month + 1).padStart(2, "0")}-01`;
 
+        // 1. Lấy attendance_sessions đã điểm danh
         const { data: sessions, error } = await adminSupabase
             .from("attendance_sessions")
             .select(`
-                id, session_date, start_time, end_time, status, topic,
+                id, session_date, start_time, end_time, status, note,
                 teacher:users!teacher_id(full_name)
             `)
             .eq("class_id", classId)
@@ -172,30 +173,89 @@ export async function getClassAttendanceSessions(classId: string, month: number,
 
         if (error) throw error;
 
-        if (!sessions || sessions.length === 0) return { data: [], error: null };
+        const attendedDates = new Set((sessions || []).map((s: any) => s.session_date));
 
-        const sessionIds = sessions.map(s => s.id);
+        // 2. Lấy class_sessions (lịch dạy) — bao gồm buổi chưa điểm danh
+        const { data: scheduledSessions } = await adminSupabase
+            .from("class_sessions")
+            .select(`
+                id, session_date, start_time, end_time, status,
+                class:classes!class_id(teacher_id, teacher:users!teacher_id(full_name))
+            `)
+            .eq("class_id", classId)
+            .gte("session_date", startDate)
+            .lt("session_date", endDate)
+            .order("session_date", { ascending: false });
 
-        // Lấy records summary cho mỗi session
-        const { data: records } = await adminSupabase
-            .from("attendance_records")
-            .select("session_id, status")
-            .in("session_id", sessionIds);
+        // 3. Lấy records cho sessions đã điểm danh
+        const sessionIds = (sessions || []).map((s: any) => s.id);
+        let allRecords: any[] = [];
+        if (sessionIds.length > 0) {
+            const { data: records } = await adminSupabase
+                .from("attendance_records")
+                .select("session_id, status, student_id, student:users!student_id(full_name)")
+                .in("session_id", sessionIds);
+            allRecords = records || [];
+        }
 
-        const enriched = sessions.map(sess => {
-            const sessRecords = (records || []).filter((r: any) => r.session_id === sess.id);
+        // Keep only sessions that have records (actually marked)
+        const validSessionIds = new Set(allRecords.map(r => r.session_id));
+        const validSessions = (sessions || []).filter((s: any) => validSessionIds.has(s.id));
+
+        // 4. Xây dựng danh sách sessions (kết hợp attended + scheduled)
+        const enrichedAttended = validSessions.map((sess: any) => {
+            const sessRecords = allRecords.filter((r: any) => r.session_id === sess.id);
             const teacherObj = Array.isArray(sess.teacher) ? sess.teacher[0] : sess.teacher;
             return {
                 ...sess,
+                source: "attended" as const,
                 teacherName: teacherObj?.full_name || "—",
                 totalStudents: sessRecords.length,
                 presentCount: sessRecords.filter((r: any) => r.status === "present").length,
                 absentCount: sessRecords.filter((r: any) => r.status === "absent").length,
                 lateCount: sessRecords.filter((r: any) => r.status === "late").length,
+                excusedCount: sessRecords.filter((r: any) => r.status === "excused").length,
+                students: sessRecords.map((r: any) => {
+                    const stuObj = Array.isArray(r.student) ? r.student[0] : r.student;
+                    return {
+                        student_id: r.student_id,
+                        studentName: stuObj?.full_name || r.student_id?.slice(0, 8),
+                        status: r.status,
+                    };
+                }),
             };
         });
 
-        return { data: enriched, error: null };
+        // Buổi scheduled nhưng chưa điểm danh
+        const unattendedScheduled = (scheduledSessions || [])
+            .filter((s: any) => !attendedDates.has(s.session_date) && s.status !== "cancelled")
+            .map((s: any) => {
+                const classObj = Array.isArray(s.class) ? s.class[0] : s.class;
+                const teacherObj = classObj?.teacher 
+                    ? (Array.isArray(classObj.teacher) ? classObj.teacher[0] : classObj.teacher) 
+                    : null;
+                return {
+                    id: s.id,
+                    session_date: s.session_date,
+                    start_time: s.start_time,
+                    end_time: s.end_time,
+                    status: "pending",
+                    source: "scheduled" as const,
+                    teacherName: teacherObj?.full_name || "—",
+                    totalStudents: 0,
+                    presentCount: 0,
+                    absentCount: 0,
+                    lateCount: 0,
+                    excusedCount: 0,
+                    students: null,
+                };
+            });
+
+        // Only return attended sessions as requested
+        const allSessions = [...enrichedAttended]
+            .sort((a, b) => b.session_date.localeCompare(a.session_date));
+
+        return { data: allSessions, error: null };
     } catch (error: any) {
         console.error("Lỗi getClassAttendanceSessions:", error);
         return { data: [], error: error.message };

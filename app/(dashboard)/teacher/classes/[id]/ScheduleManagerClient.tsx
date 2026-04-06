@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Calendar, Clock, MapPin, Plus, Trash2, CheckCircle, AlertCircle, RefreshCw } from "lucide-react";
+import { Calendar, Clock, MapPin, Plus, Trash2, CheckCircle, AlertCircle, RefreshCw, CalendarRange, RotateCcw, UserCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getAvailableRooms, upsertClassSchedule, deleteClassSchedule } from "@/lib/actions/schedule";
+import { getAvailableRooms, upsertClassSchedule, deleteClassSchedule, resetClassSessions } from "@/lib/actions/schedule";
+import { toast } from "sonner";
 
 const DAYS_OF_WEEK = [
     { value: 1, label: "Thứ Hai" },
@@ -37,12 +38,14 @@ export default function ScheduleManagerClient({
     const [startTime, setStartTime] = useState<string>("08:00");
     const [endTime, setEndTime] = useState<string>("10:00");
     const [roomId, setRoomId] = useState<string>("");
-    const [note, setNote] = useState<string>("");
+    const [startDate, setStartDate] = useState<string>("");
+    const [endDate, setEndDate] = useState<string>("");
 
     // Room Availability State
     const [availableRooms, setAvailableRooms] = useState<any[]>([]);
     const [isChecking, setIsChecking] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isResetting, setIsResetting] = useState(false);
     const [errorMsg, setErrorMsg] = useState("");
 
     // Hàm gọi lấy phòng trống mỗi khi thời gian thay đổi
@@ -93,7 +96,8 @@ export default function ScheduleManagerClient({
         setStartTime("08:00");
         setEndTime("10:00");
         setRoomId("");
-        setNote("");
+        setStartDate("");
+        setEndDate("");
         setIsEditing(true);
         setErrorMsg("");
     };
@@ -105,7 +109,8 @@ export default function ScheduleManagerClient({
         setStartTime(schedule.start_time.substring(0, 5));
         setEndTime(schedule.end_time.substring(0, 5));
         setRoomId(schedule.room_id || "");
-        setNote(schedule.note || "");
+        setStartDate(schedule.start_date || "");
+        setEndDate(schedule.end_date || "");
         setIsEditing(true);
         setErrorMsg("");
     };
@@ -133,7 +138,8 @@ export default function ScheduleManagerClient({
                 day_of_week: dayOfWeek,
                 start_time: startTime,
                 end_time: endTime,
-                note: note // Add note
+                start_date: startDate || undefined,
+                end_date: endDate || undefined,
             });
 
             if (result.error) {
@@ -186,10 +192,32 @@ export default function ScheduleManagerClient({
                     </p>
                 </div>
                 {!isEditing && !readOnly && (
+                <div className="flex items-center gap-2">
+                    <Button
+                        variant="outline"
+                        onClick={async () => {
+                            if (!confirm("Reset sẽ xóa các buổi học chưa điểm danh và tạo lại từ lịch hiện tại. Tiếp tục?")) return;
+                            setIsResetting(true);
+                            const res = await resetClassSessions(classId);
+                            setIsResetting(false);
+                            if (res.error) {
+                                toast.error("Lỗi reset: " + res.error);
+                            } else {
+                                toast.success(`Đã reset: xóa ${res.deleted} buổi, tạo mới ${res.generated} buổi, giữ lại ${res.preserved} buổi đã ĐD`);
+                                router.refresh();
+                            }
+                        }}
+                        disabled={isResetting || schedules.length === 0}
+                        className="border-amber-200 text-amber-700 hover:bg-amber-50"
+                    >
+                        <RotateCcw className={`w-4 h-4 mr-2 ${isResetting ? "animate-spin" : ""}`} />
+                        {isResetting ? "Đang reset..." : "Reset lịch"}
+                    </Button>
                     <Button onClick={handleAddNew} className="bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-semibold h-10 px-4 rounded-xl">
                         <Plus className="w-4 h-4 mr-2" /> Xếp lịch mới
                     </Button>
-                )}
+                </div>
+            )}
             </div>
 
             {/* List Schedules */}
@@ -221,9 +249,13 @@ export default function ScheduleManagerClient({
                                                         Phòng: {(schedule.room as any)?.name || "Chưa có"}
                                                     </span>
                                                 </div>
-                                                {schedule.note && (
-                                                    <div className="mt-3 text-sm text-slate-600 bg-amber-50 px-4 py-2.5 rounded-xl border border-amber-200">
-                                                        <strong className="text-amber-700">📝 Nội dung / Lưu ý:</strong> <span className="ml-1">{schedule.note}</span>
+                                                {/* Đã dỡ bỏ phần note ở lịch lặp cũ */}
+                                                {schedule.start_date && schedule.end_date && (
+                                                    <div className="mt-2 flex items-center gap-2 text-sm text-indigo-600">
+                                                        <CalendarRange className="w-4 h-4" />
+                                                        <span className="font-medium">
+                                                            {new Date(schedule.start_date).toLocaleDateString("vi-VN")} → {new Date(schedule.end_date).toLocaleDateString("vi-VN")}
+                                                        </span>
                                                     </div>
                                                 )}
                                             </div>
@@ -349,16 +381,40 @@ export default function ScheduleManagerClient({
                         ) : null}
                     </div>
 
-                    {/* Note input */}
-                    <div className="space-y-2 mb-6">
-                        <label className="text-sm font-bold text-slate-700">Nội dung bài học / Lưu ý cho học sinh</label>
-                        <textarea
-                            value={note}
-                            placeholder="VD: Hôm nay học Chương 3 - Phương trình bậc 2. Mang theo vở bài tập...&#10;Nội dung này sẽ hiển thị cho học sinh."
-                            onChange={(e) => setNote(e.target.value)}
-                            rows={3}
-                            className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-sm resize-y"
-                        />
+                    {/* Date Range - Khoảng thời gian áp dụng */}
+                    <div className="border border-indigo-100 rounded-xl p-5 bg-indigo-50/30 mb-6">
+                        <label className="text-sm font-bold text-indigo-800 flex items-center gap-1.5 mb-4">
+                            <CalendarRange className="w-4 h-4 text-indigo-500" />
+                            Khoảng thời gian áp dụng lịch
+                        </label>
+                        <p className="text-xs text-indigo-600/70 mb-4">
+                            Hệ thống sẽ tự động tạo các buổi học cụ thể (ngày/tháng/năm) từ ngày bắt đầu đến ngày kết thúc.
+                        </p>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-slate-600">Ngày bắt đầu</label>
+                                <input
+                                    type="date"
+                                    value={startDate}
+                                    onChange={(e) => setStartDate(e.target.value)}
+                                    className="w-full h-11 px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-sm"
+                                />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-slate-600">Ngày kết thúc</label>
+                                <input
+                                    type="date"
+                                    value={endDate}
+                                    onChange={(e) => setEndDate(e.target.value)}
+                                    className="w-full h-11 px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white text-sm"
+                                />
+                            </div>
+                        </div>
+                        {startDate && endDate && startDate < endDate && (
+                            <p className="mt-3 text-xs text-emerald-600 bg-emerald-50 px-3 py-2 rounded-lg border border-emerald-200">
+                                ✓ Sẽ tự động tạo các buổi học vào mỗi <strong>{DAYS_OF_WEEK.find(d => d.value === dayOfWeek)?.label}</strong> từ {new Date(startDate + "T00:00:00").toLocaleDateString("vi-VN")} đến {new Date(endDate + "T00:00:00").toLocaleDateString("vi-VN")}
+                            </p>
+                        )}
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">

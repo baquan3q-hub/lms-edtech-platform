@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -14,7 +14,11 @@ import { getClassAttendanceSessions } from "@/lib/actions/attendance-points";
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle,
 } from "@/components/ui/dialog";
+import {
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import AttendanceTrendChart from "../charts/AttendanceTrendChart";
+import DailyOverviewSection from "../DailyOverviewSection";
 
 interface Props {
     month: number;
@@ -26,6 +30,8 @@ interface Props {
 export default function OverviewTab({ month, year, data, loading }: Props) {
     const [trendData, setTrendData] = useState<any[]>([]);
     const [trendLoading, setTrendLoading] = useState(true);
+    const [trendPeriod, setTrendPeriod] = useState<string>("this_month");
+    const [expandedSession, setExpandedSession] = useState<string | null>(null);
     const [drillDown, setDrillDown] = useState<{
         open: boolean; classId: string; className: string; sessions: any[]; loading: boolean;
     }>({
@@ -36,12 +42,12 @@ export default function OverviewTab({ month, year, data, loading }: Props) {
     useEffect(() => {
         const loadTrend = async () => {
             setTrendLoading(true);
-            const { data: trend } = await getAttendanceTrendData(3);
+            const { data: trend } = await getAttendanceTrendData(trendPeriod, undefined, month, year);
             setTrendData(trend || []);
             setTrendLoading(false);
         };
         loadTrend();
-    }, []);
+    }, [trendPeriod, month, year]);
 
     if (loading) {
         return (
@@ -93,13 +99,27 @@ export default function OverviewTab({ month, year, data, loading }: Props) {
                 />
             </div>
 
+            {/* Daily Overview - Lớp học trong ngày */}
+            <DailyOverviewSection />
+
             {/* Trend Chart */}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-                <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+                <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                     <h3 className="font-bold text-gray-900 flex items-center gap-2">
                         <TrendingUp className="w-4 h-4 text-emerald-500" />
-                        Xu hướng chuyên cần (3 tháng gần nhất)
+                        Xu hướng chuyên cần
                     </h3>
+                    <Select value={trendPeriod} onValueChange={setTrendPeriod}>
+                        <SelectTrigger className="w-[180px] bg-white h-9 border-gray-200">
+                            <SelectValue placeholder="Chọn thời gian" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="this_month">Tháng {month}/{year}</SelectItem>
+                            <SelectItem value="3_months">3 tháng gần nhất</SelectItem>
+                            <SelectItem value="6_months">6 tháng gần nhất</SelectItem>
+                            <SelectItem value="12_months">1 năm gần nhất</SelectItem>
+                        </SelectContent>
+                    </Select>
                 </div>
                 <div className="p-4">
                     {trendLoading ? (
@@ -240,7 +260,10 @@ export default function OverviewTab({ month, year, data, loading }: Props) {
             <Dialog
                 open={drillDown.open}
                 onOpenChange={(open) => {
-                    if (!open) setDrillDown({ open: false, classId: "", className: "", sessions: [], loading: false });
+                    if (!open) {
+                        setDrillDown({ open: false, classId: "", className: "", sessions: [], loading: false });
+                        setExpandedSession(null);
+                    }
                 }}
             >
                 <DialogContent className="sm:max-w-2xl max-h-[80vh]">
@@ -282,39 +305,72 @@ export default function OverviewTab({ month, year, data, loading }: Props) {
                                         const rate = sess.totalStudents > 0
                                             ? ((sess.presentCount / sess.totalStudents) * 100).toFixed(0)
                                             : "—";
+                                        const isExpanded = expandedSession === sess.id;
                                         return (
-                                            <TableRow key={sess.id}>
-                                                <TableCell className="font-medium text-gray-800">
-                                                    {dateStr}
-                                                    {sess.start_time && (
-                                                        <span className="text-xs text-gray-400 ml-2">
-                                                            {sess.start_time.slice(0, 5)}
+                                            <React.Fragment key={sess.id}>
+                                                <TableRow 
+                                                    className="cursor-pointer hover:bg-gray-50/80 transition-colors"
+                                                    onClick={() => setExpandedSession(isExpanded ? null : sess.id)}
+                                                >
+                                                    <TableCell className="font-medium text-gray-800">
+                                                        <div className="flex items-center gap-2">
+                                                            <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                                                            <span>{dateStr}</span>
+                                                        </div>
+                                                        {sess.start_time && (
+                                                            <span className="text-xs text-gray-400 ml-6">
+                                                                {sess.start_time.slice(0, 5)}
+                                                            </span>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell className="text-gray-600">{sess.teacherName}</TableCell>
+                                                    <TableCell className="text-center text-emerald-600 font-bold">
+                                                        {sess.presentCount}
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <span className={sess.absentCount > 0 ? "text-red-600 font-bold" : "text-gray-300"}>
+                                                            {sess.absentCount}
                                                         </span>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell className="text-gray-600">{sess.teacherName}</TableCell>
-                                                <TableCell className="text-center text-emerald-600 font-bold">
-                                                    {sess.presentCount}
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    <span className={sess.absentCount > 0 ? "text-red-600 font-bold" : "text-gray-300"}>
-                                                        {sess.absentCount}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    <span className={sess.lateCount > 0 ? "text-amber-600 font-bold" : "text-gray-300"}>
-                                                        {sess.lateCount}
-                                                    </span>
-                                                </TableCell>
-                                                <TableCell className="text-center">
-                                                    <Badge className={Number(rate) >= 80
-                                                        ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                                                        : "bg-red-100 text-red-800 border-red-200"
-                                                    }>
-                                                        {rate}%
-                                                    </Badge>
-                                                </TableCell>
-                                            </TableRow>
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <span className={sess.lateCount > 0 ? "text-amber-600 font-bold" : "text-gray-300"}>
+                                                            {sess.lateCount}
+                                                        </span>
+                                                    </TableCell>
+                                                    <TableCell className="text-center">
+                                                        <Badge className={Number(rate) >= 80
+                                                            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                                            : "bg-red-100 text-red-800 border-red-200"
+                                                        }>
+                                                            {rate}%
+                                                        </Badge>
+                                                    </TableCell>
+                                                </TableRow>
+                                                {isExpanded && sess.students && sess.students.length > 0 && (
+                                                    <TableRow className="bg-slate-50/50 hover:bg-slate-50/50">
+                                                        <TableCell colSpan={6} className="p-4 border-t-0">
+                                                            <p className="text-sm font-semibold text-gray-700 mb-3 px-2">Danh sách điểm danh</p>
+                                                            <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
+                                                                {sess.students.map((stu: any) => (
+                                                                    <div key={stu.student_id} className="flex justify-between items-center bg-white p-2.5 border border-gray-200 rounded-lg shadow-sm">
+                                                                        <span className="text-sm font-medium text-gray-800 truncate pr-2" title={stu.studentName}>{stu.studentName}</span>
+                                                                        <Badge className={`shrink-0 text-xs shadow-none ${
+                                                                            stu.status === "present" ? "bg-emerald-100 text-emerald-700 border-emerald-200" :
+                                                                            stu.status === "absent" ? "bg-red-100 text-red-700 border-red-200" :
+                                                                            stu.status === "late" ? "bg-amber-100 text-amber-700 border-amber-200" :
+                                                                            "bg-blue-100 text-blue-700 border-blue-200"
+                                                                        }`}>
+                                                                            {stu.status === "present" ? "Có mặt" : 
+                                                                             stu.status === "absent" ? "Vắng" :
+                                                                             stu.status === "late" ? "Đi trễ" : "Có phép"}
+                                                                        </Badge>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                )}
+                                            </React.Fragment>
                                         );
                                     })}
                                 </TableBody>

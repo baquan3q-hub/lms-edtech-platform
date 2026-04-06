@@ -40,12 +40,19 @@ export async function fetchAvailableStudents(classId: string) {
 
         const enrolledIds = enrolledStudents?.map(e => e.student_id) || [];
 
-        // 2. Lấy danh sách học sinh (role = student) chưa nằm trong mảng enrolledIds
+        // 2. Lấy danh sách học sinh kèm thông tin lớp đang học (chỉ những lớp đang active)
         let query = supabase
             .from("users")
-            .select("id, full_name, email")
-            .eq("role", "student")
-            .order("full_name");
+            .select(`
+                id,
+                full_name,
+                email,
+                enrollments(
+                    status,
+                    class:classes(name, status)
+                )
+            `)
+            .eq("role", "student");
 
         if (enrolledIds.length > 0) {
             // Loại bỏ những người đã add rồi
@@ -55,7 +62,35 @@ export async function fetchAvailableStudents(classId: string) {
         const { data, error } = await query;
         if (error) throw error;
 
-        return { data: data || [], error: null };
+        // Xử lý dữ liệu trả về: Lọc tên các lớp đang học
+        const processedData = (data || []).map((student: any) => {
+            const currentClasses = (student.enrollments || [])
+                .filter((enr: any) => {
+                    const cls = Array.isArray(enr.class) ? enr.class[0] : enr.class;
+                    // Lọc những khoá học đang diễn ra (enrollment active và class active)
+                    return enr.status === "active" && cls && cls.status === "active";
+                })
+                .map((enr: any) => {
+                    const cls = Array.isArray(enr.class) ? enr.class[0] : enr.class;
+                    return cls.name;
+                });
+
+            // Clean up mảng enrollments thừa để giảm size
+            delete student.enrollments;
+            return {
+                ...student,
+                currentClasses
+            };
+        });
+
+        // Sort: Học sinh chưa có lớp (length=0) nổi lên trên, sau đó sắp xếp theo tên
+        processedData.sort((a: any, b: any) => {
+            if (a.currentClasses.length === 0 && b.currentClasses.length > 0) return -1;
+            if (a.currentClasses.length > 0 && b.currentClasses.length === 0) return 1;
+            return a.full_name?.localeCompare(b.full_name || "") || 0;
+        });
+
+        return { data: processedData, error: null };
     } catch (error: any) {
         console.error("Error fetching available students:", error);
         return { data: null, error: error.message };

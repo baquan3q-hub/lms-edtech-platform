@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import {
     AlertTriangle, ChevronDown, ChevronRight, GraduationCap,
-    Loader2, BarChart3, Mail, UserCircle, CheckCircle2,
+    Loader2, BarChart3, Mail, UserCircle, CheckCircle2, CalendarOff,
 } from "lucide-react";
 import { getTeacherAttendanceStats } from "@/lib/actions/attendance";
 import TeacherBarChart from "../charts/TeacherBarChart";
@@ -139,6 +139,7 @@ export default function TeacherTab({ month, year }: Props) {
                                 <th className="text-left px-3 py-3 font-medium text-gray-500">Giáo viên</th>
                                 <th className="text-center px-3 py-3 font-medium text-gray-500">Số lớp</th>
                                 <th className="text-center px-3 py-3 font-medium text-gray-500">Buổi dạy</th>
+                                <th className="text-center px-3 py-3 font-medium text-gray-500">Nghỉ</th>
                                 <th className="text-center px-3 py-3 font-medium text-gray-500">Hoàn thành</th>
                                 <th className="text-center px-3 py-3 font-medium text-gray-500">Hôm nay</th>
                             </tr>
@@ -210,6 +211,16 @@ function TeacherRow({ teacher: t, isExpanded, onToggle }: {
                     )}
                 </td>
                 <td className="text-center px-3 py-3">
+                    {t.leaveCount > 0 ? (
+                        <Badge className="bg-rose-100 text-rose-700 border-rose-200 text-xs">
+                            <CalendarOff className="w-3 h-3 mr-0.5" />
+                            {t.leaveCount}
+                        </Badge>
+                    ) : (
+                        <span className="text-gray-300 text-xs">0</span>
+                    )}
+                </td>
+                <td className="text-center px-3 py-3">
                     <div className="flex items-center justify-center gap-2">
                         <div className="w-14 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                             <div
@@ -246,7 +257,7 @@ function TeacherRow({ teacher: t, isExpanded, onToggle }: {
             {/* Expanded Class Details */}
             {isExpanded && (
                 <tr>
-                    <td colSpan={6} className="p-0">
+                    <td colSpan={7} className="p-0">
                         <div className="bg-gray-50/80 border-t border-gray-100 px-8 py-3 animate-in slide-in-from-top-1 duration-200">
                             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
                                 Danh sách lớp phụ trách
@@ -299,6 +310,37 @@ function TeacherRow({ teacher: t, isExpanded, onToggle }: {
                                     </div>
                                 ))}
                             </div>
+
+                            {/* Taught_at Timeline */}
+                            {t.taughtSessions && t.taughtSessions.length > 0 && (
+                                <div className="mt-3 pt-3 border-t border-gray-200">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                                        ⏰ Thời gian điểm danh gần nhất
+                                    </p>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-1.5">
+                                        {t.taughtSessions
+                                            .sort((a: any, b: any) => b.date.localeCompare(a.date))
+                                            .slice(0, 6)
+                                            .map((ts: any, idx: number) => (
+                                                <div key={idx} className="flex items-center gap-2 bg-white rounded px-3 py-1.5 border border-gray-100 text-xs">
+                                                    <div className={`w-1.5 h-1.5 rounded-full ${ts.teachingStatus === 'substitute' ? 'bg-blue-400' : 'bg-emerald-400'}`} />
+                                                    <span className="text-gray-700 font-medium">
+                                                        {new Date(ts.date + "T00:00:00").toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })}
+                                                    </span>
+                                                    <span className="text-gray-400">{ts.className}</span>
+                                                    <span className="ml-auto text-gray-500 font-mono">
+                                                        {ts.taughtAt
+                                                            ? new Date(ts.taughtAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
+                                                            : "—"}
+                                                    </span>
+                                                    {ts.teachingStatus === 'substitute' && (
+                                                        <Badge className="bg-blue-50 text-blue-600 border-blue-200 text-[9px] py-0 h-4">Thay</Badge>
+                                                    )}
+                                                </div>
+                                            ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </td>
                 </tr>

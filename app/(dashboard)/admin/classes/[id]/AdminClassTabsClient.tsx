@@ -2,15 +2,18 @@
 
 import { useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LayoutDashboard, Users, CalendarDays, ClipboardCheck, BookOpen, ChevronDown, ChevronUp, AlertCircle } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, ClipboardCheck, BookOpen, ChevronDown, ChevronUp, AlertCircle, UserCheck, Calendar } from "lucide-react";
 import EnrollStudentCombobox from "@/components/admin/EnrollStudentCombobox";
 import ImportStudentsDialog from "@/components/admin/ImportStudentsDialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import ScheduleManagerClient from "@/app/(dashboard)/teacher/classes/[id]/ScheduleManagerClient";
+import SessionContentManagerClient from "@/components/teacher/SessionContentManagerClient";
+import { assignSubstituteTeacher } from "@/lib/actions/schedule";
 import { format, parseISO } from "date-fns";
 import { vi } from "date-fns/locale";
+import { toast } from "sonner";
 
 // Mapping từ day_of_week số → tên tiếng Việt
 const DAY_NAMES: Record<number, string> = {
@@ -36,7 +39,9 @@ export default function AdminClassTabsClient({
     schedules,
     allRooms,
     attendanceData,
-    absenceRequests = []
+    absenceRequests = [],
+    generatedSessions = [],
+    allTeachers = [],
 }: {
     classId: string;
     activeCount: number;
@@ -47,6 +52,8 @@ export default function AdminClassTabsClient({
     allRooms: any[];
     attendanceData: any;
     absenceRequests?: any[];
+    generatedSessions?: any[];
+    allTeachers?: any[];
 }) {
     const [currentMonth, setCurrentMonth] = useState(new Date().getMonth() + 1);
     const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
@@ -176,6 +183,21 @@ export default function AdminClassTabsClient({
 
             {/* TAB LỊCH */}
             <TabsContent value="schedule" className="space-y-6">
+                {/* Session Content Manager */}
+                <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+                    <h3 className="text-xl font-bold text-slate-900 border-l-4 border-indigo-500 pl-3 mb-1">
+                        Giáo án & Nội dung Buổi học
+                    </h3>
+                    <p className="text-sm text-slate-500 pl-4 mb-6">
+                        Xem và chỉnh sửa nội dung, ghi chú và tài liệu đính kèm cho từng buổi học cụ thể.
+                    </p>
+                    <SessionContentManagerClient 
+                        classId={classId} 
+                        sessions={generatedSessions || []} 
+                        readOnly={true}
+                    />
+                </div>
+
                 <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
                     <ScheduleManagerClient
                         classId={classId}
@@ -184,6 +206,97 @@ export default function AdminClassTabsClient({
                         readOnly={false}
                     />
                 </div>
+
+                {/* Generated Sessions List */}
+                {generatedSessions.length > 0 && (
+                    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
+                        <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Calendar className="w-5 h-5 text-indigo-600" />
+                                <h3 className="text-base font-semibold text-gray-900">
+                                    Buổi học đã lên lịch ({generatedSessions.length} buổi)
+                                </h3>
+                            </div>
+                        </div>
+                        <div className="max-h-[400px] overflow-y-auto">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow className="border-gray-100 hover:bg-transparent">
+                                        <TableHead className="text-gray-500 font-medium w-10">#</TableHead>
+                                        <TableHead className="text-gray-500 font-medium">Ngày</TableHead>
+                                        <TableHead className="text-gray-500 font-medium">Giờ</TableHead>
+                                        <TableHead className="text-gray-500 font-medium">Trạng thái</TableHead>
+                                        <TableHead className="text-gray-500 font-medium">GV dạy thay</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {generatedSessions.map((sess: any, idx: number) => {
+                                        let date: Date;
+                                        try { date = parseISO(sess.session_date); } catch { date = new Date(sess.session_date); }
+                                        const dayName = DAY_NAMES[date.getDay()] || "";
+                                        const dateStr = format(date, "dd/MM/yyyy", { locale: vi });
+                                        const isPast = date < new Date(new Date().toDateString());
+
+                                        return (
+                                            <TableRow key={sess.id} className={`border-gray-100 hover:bg-gray-50 ${isPast ? "opacity-60" : ""}`}>
+                                                <TableCell className="text-gray-400 text-sm">{idx + 1}</TableCell>
+                                                <TableCell>
+                                                    <span className="font-semibold text-indigo-600 mr-1.5">{dayName}</span>
+                                                    <span className="text-gray-800">{dateStr}</span>
+                                                </TableCell>
+                                                <TableCell className="text-gray-600">
+                                                    {sess.start_time?.substring(0, 5)} - {sess.end_time?.substring(0, 5)}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {sess.status === "scheduled" && (
+                                                        <Badge className="bg-blue-100 text-blue-700 border-blue-200 hover:bg-blue-100 text-[11px]">Đã lên lịch</Badge>
+                                                    )}
+                                                    {sess.status === "completed" && (
+                                                        <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100 text-[11px]">Hoàn tất</Badge>
+                                                    )}
+                                                    {sess.status === "cancelled" && (
+                                                        <Badge className="bg-red-100 text-red-700 border-red-200 hover:bg-red-100 text-[11px]">Đã hủy</Badge>
+                                                    )}
+                                                </TableCell>
+                                                <TableCell>
+                                                    {sess.substitute_teacher_id ? (
+                                                        <div className="flex items-center gap-1.5">
+                                                            <UserCheck className="w-3.5 h-3.5 text-amber-600" />
+                                                            <span className="text-sm text-amber-700 font-medium">
+                                                                {(sess.substitute as any)?.full_name || "GV thay"}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <select
+                                                            className="text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white text-gray-500 hover:border-indigo-300 focus:ring-1 focus:ring-indigo-300 focus:outline-none"
+                                                            defaultValue=""
+                                                            onChange={async (e) => {
+                                                                const teacherId = e.target.value;
+                                                                if (!teacherId) return;
+                                                                const res = await assignSubstituteTeacher(sess.id, teacherId);
+                                                                if (res.error) {
+                                                                    toast.error("Lỗi: " + res.error);
+                                                                } else {
+                                                                    toast.success("Đã gán GV dạy thay");
+                                                                    window.location.reload();
+                                                                }
+                                                            }}
+                                                        >
+                                                            <option value="">— Gán GV thay —</option>
+                                                            {allTeachers.map((t: any) => (
+                                                                <option key={t.id} value={t.id}>{t.full_name}</option>
+                                                            ))}
+                                                        </select>
+                                                    )}
+                                                </TableCell>
+                                            </TableRow>
+                                        );
+                                    })}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </div>
+                )}
             </TabsContent>
 
             {/* TAB ĐIỂM DANH */}

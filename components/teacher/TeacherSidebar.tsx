@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import {
     LayoutDashboard,
     BookOpen,
+    CalendarDays,
     FileSignature,
     Users,
     ClipboardCheck,
@@ -17,6 +18,7 @@ import UserAvatarMenu from "@/components/shared/UserAvatarMenu";
 const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/teacher" },
     { icon: BookOpen, label: "Lớp học của tôi", href: "/teacher/classes" },
+    { icon: CalendarDays, label: "Lịch dạy", href: "/teacher/schedule" },
     { icon: Users, label: "Quản lý Học viên", href: "/teacher/students" },
     { icon: FileSignature, label: "Ngân hàng Tài liệu số", href: "/teacher/lessons" },
     { icon: ClipboardCheck, label: "Đơn xin nghỉ", href: "/teacher/absence-requests" },

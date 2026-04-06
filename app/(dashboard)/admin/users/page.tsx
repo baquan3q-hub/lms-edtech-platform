@@ -4,6 +4,7 @@ import AddUserDialog from "@/components/admin/AddUserDialog";
 import ImportUsersDialog from "@/components/admin/ImportUsersDialog";
 import UsersTabs from "@/components/admin/UsersTabs";
 import { createAdminClient } from "@/lib/supabase/admin";
+import ExportUsersExcelButton from "@/components/admin/ExportUsersExcelButton";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,7 @@ export default async function UsersPage() {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
+                    <ExportUsersExcelButton users={users || []} links={links || []} />
                     <ImportUsersDialog />
                     <AddUserDialog />
                 </div>

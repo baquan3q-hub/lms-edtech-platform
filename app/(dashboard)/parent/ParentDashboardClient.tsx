@@ -110,11 +110,13 @@ export default function ParentDashboardClient({ students }: { students: StudentI
     };
 
     // Compute attendance rate from dashboardData.attendanceSummary
+    // Tỷ lệ chỉ dựa trên Đi học vs Vắng (có phép + không phép), không tính đi muộn
     const getAttendanceRate = () => {
         if (!dashboardData?.attendanceSummary) return null;
-        const { total, present } = dashboardData.attendanceSummary;
-        if (!total || total === 0) return null;
-        return Math.round((present / total) * 100);
+        const { present, absent, excused } = dashboardData.attendanceSummary;
+        const relevantTotal = (present || 0) + (absent || 0) + (excused || 0);
+        if (relevantTotal === 0) return null;
+        return Math.round(((present || 0) / relevantTotal) * 100);
     };
 
     const next2 = getNext2Sessions();
@@ -204,6 +206,9 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                                     const isCurrentDay = isToday(date);
                                     const dayName = getDayName(session.session_date);
                                     const dateFormatted = format(date, 'dd/MM', { locale: vi });
+                                    const lessonTitle = session.lesson_title || session.topic;
+                                    const lessonContent = session.lesson_content;
+                                    const hasAttachments = session.attachments && session.attachments.length > 0;
 
                                     return (
                                         <div
@@ -227,8 +232,13 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                                                     )}
                                                     <span className="text-xs text-slate-400">({dateFormatted})</span>
                                                 </div>
+                                                {session.class_name && (
+                                                    <Badge variant="outline" className="text-[10px] text-slate-500 bg-white border-slate-200 shrink-0">
+                                                        {session.class_name}
+                                                    </Badge>
+                                                )}
                                             </div>
-                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600">
+                                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-slate-600 mb-2">
                                                 <span className="flex items-center gap-1">
                                                     <Clock className="w-3.5 h-3.5 text-emerald-500" />
                                                     <span className="font-semibold">{session.start_time?.substring(0, 5)} – {session.end_time?.substring(0, 5)}</span>
@@ -239,13 +249,53 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                                                         <span className="font-medium">{session.room_name}</span>
                                                     </span>
                                                 )}
-                                                {session.topic && (
-                                                    <span className="flex items-center gap-1 text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full">
-                                                        <FileText className="w-3 h-3" />
-                                                        {session.topic}
-                                                    </span>
-                                                )}
                                             </div>
+
+                                            {/* Nội dung giáo án từ giáo viên */}
+                                            {lessonTitle && (
+                                                <div className="bg-amber-50/80 border border-amber-200/60 rounded-lg px-3 py-2 flex items-start gap-2 mb-2">
+                                                    <BookOpen className="w-3.5 h-3.5 text-amber-600 shrink-0 mt-0.5" />
+                                                    <div className="min-w-0">
+                                                        <span className="text-xs font-bold text-amber-700">Bài học: </span>
+                                                        <span className="text-xs text-amber-900/80">{lessonTitle}</span>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {lessonContent && (
+                                                <div className="bg-rose-50/80 border border-rose-200/60 rounded-lg px-3 py-2 flex items-start gap-2 mb-2">
+                                                    <AlertTriangle className="w-3.5 h-3.5 text-rose-500 shrink-0 mt-0.5" />
+                                                    <div className="min-w-0">
+                                                        <span className="text-[10px] font-bold text-rose-700 block mb-0.5">DẶN DÒ / NỘI DUNG</span>
+                                                        <p className="text-xs text-rose-900/80 line-clamp-2 whitespace-pre-wrap">{lessonContent}</p>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Tài liệu đính kèm */}
+                                            {hasAttachments && (
+                                                <div className="flex flex-wrap gap-1.5 mb-1">
+                                                    {session.attachments.slice(0, 3).map((file: any, i: number) => (
+                                                        <a
+                                                            key={i}
+                                                            href={file.url}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-1 px-2 py-1 bg-indigo-50 border border-indigo-100 text-indigo-700 font-medium rounded-md text-[10px] hover:bg-indigo-100 transition-colors"
+                                                        >
+                                                            <FileText className="w-3 h-3" />
+                                                            <span className="max-w-[100px] truncate">{file.name}</span>
+                                                        </a>
+                                                    ))}
+                                                    {session.attachments.length > 3 && (
+                                                        <span className="text-[10px] text-slate-400 self-center">+{session.attachments.length - 3} file</span>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {!lessonTitle && !lessonContent && !hasAttachments && (
+                                                <p className="text-[11px] text-slate-400 italic">Giáo viên chưa cập nhật nội dung buổi học này.</p>
+                                            )}
                                         </div>
                                     );
                                 })

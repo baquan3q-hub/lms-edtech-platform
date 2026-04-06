@@ -514,7 +514,7 @@ export async function fetchParentDashboardData(studentId: string) {
             // 1. Lấy các sessions đã được Admin tạo thực tế (kèm room info)
             const { data: realSessions } = await supabase
                 .from("class_sessions")
-                .select("id, class_id, session_number, session_date, start_time, end_time, topic, homework, status, room_id, class:classes!class_id(name, course:courses(name), teacher:users!classes_teacher_id_fkey(full_name))")
+                .select("id, class_id, session_number, session_date, start_time, end_time, topic, homework, lesson_title, lesson_content, attachments, status, room_id, class:classes!class_id(name, course:courses(name), teacher:users!classes_teacher_id_fkey(full_name))")
                 .in("class_id", classIds)
                 .gte("session_date", lastWeekStr)
                 .order("session_date", { ascending: true });
@@ -676,7 +676,7 @@ export async function fetchParentDashboardData(studentId: string) {
         if (classIds.length > 0) {
             const { data } = await supabase
                 .from("announcements")
-                .select("id, title, content, created_at, class_id")
+                .select("id, title, content, created_at, class_id, file_url, video_url, link_url, quiz_data, quiz_id, attachments")
                 .in("class_id", classIds)
                 .order("created_at", { ascending: false })
                 .limit(10);

@@ -70,8 +70,11 @@ export default function AdminAttendanceTodayClient() {
                 const presentCount = sessRecords.filter((r: any) => r.status === "present").length;
                 const absentCount = sessRecords.filter((r: any) => r.status === "absent").length;
                 const lateCount = sessRecords.filter((r: any) => r.status === "late").length;
+                const excusedCount = sessRecords.filter((r: any) => r.status === "excused").length;
                 const totalStudents = sessRecords.length;
-                const rate = totalStudents > 0 ? ((presentCount / totalStudents) * 100).toFixed(1) : "—";
+                // Tỷ lệ chỉ dựa trên Đi học vs Vắng (có phép + không phép), không tính đi muộn
+                const relevantTotal = presentCount + absentCount + excusedCount;
+                const rate = relevantTotal > 0 ? ((presentCount / relevantTotal) * 100).toFixed(1) : "—";
 
                 return {
                     sessionId: session.id,

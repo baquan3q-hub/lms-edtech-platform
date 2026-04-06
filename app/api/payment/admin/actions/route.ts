@@ -16,6 +16,11 @@ const cashPaymentSchema = z.object({
   note: z.string().optional(),
 })
 
+const approveTransferSchema = z.object({
+  invoiceId: z.string().uuid(),
+  note: z.string().optional(),
+})
+
 /**
  * POST /api/payment/admin/actions
  * Xử lý các thao tác admin: tạo học phí, ghi thu tiền mặt
@@ -184,6 +189,69 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true })
     } catch (error) {
       console.error('[Cash Payment]', error)
+      return NextResponse.json({ error: 'Lỗi server' }, { status: 500 })
+    }
+  }
+
+  // ========== DUYỆT CHUYỂN KHOẢN ==========
+  if (action === 'approve_transfer') {
+    try {
+      const data = approveTransferSchema.parse(body)
+
+      // Lấy thông tin invoice
+      const { data: invoice } = await adminClient
+        .from('invoices')
+        .select('id, student_id, amount, invoice_number')
+        .eq('id', data.invoiceId)
+        .single()
+
+      if (!invoice) {
+        return NextResponse.json({ error: 'Invoice không tồn tại' }, { status: 404 })
+      }
+
+      // INSERT payment (bank_transfer)
+      await adminClient.from('payments').insert({
+        invoice_id: invoice.id,
+        user_id: user.id,
+        amount: invoice.amount,
+        currency: 'VND',
+        provider: 'bank_transfer',
+        status: 'succeeded',
+        provider_txn_id: `TF-${Date.now()}`,
+        ip_address: 'admin-manual',
+      })
+
+      // UPDATE invoice
+      await adminClient.from('invoices').update({
+        status: 'paid',
+        paid_at: new Date().toISOString(),
+        notes: data.note || 'Xác nhận chuyển khoản thành công',
+      }).eq('id', invoice.id)
+
+      // Notification cho PH
+      const { data: parents } = await adminClient
+        .from('parent_students')
+        .select('parent_id')
+        .eq('student_id', invoice.student_id)
+
+      if (parents && parents.length > 0) {
+        const formattedAmount = new Intl.NumberFormat('vi-VN', {
+          style: 'currency', currency: 'VND'
+        }).format(invoice.amount)
+
+        const notifs = parents.map(p => ({
+          user_id: p.parent_id,
+          title: '✅ Xác nhận thu học phí',
+          message: `Hóa đơn ${invoice.invoice_number} — ${formattedAmount} đã được xác nhận thanh toán chuyển khoản.`,
+          type: 'payment',
+          read: false,
+        }))
+        await adminClient.from('notifications').insert(notifs)
+      }
+
+      return NextResponse.json({ success: true })
+    } catch (error) {
+      console.error('[Approve Transfer]', error)
       return NextResponse.json({ error: 'Lỗi server' }, { status: 500 })
     }
   }

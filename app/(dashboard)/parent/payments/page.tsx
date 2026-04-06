@@ -142,6 +142,36 @@ export default function ParentPaymentsPage() {
     }
   }
 
+  // Xử lý xác nhận đã chuyển khoản (QR)
+  const handleConfirmTransfer = async (invoice: Invoice) => {
+    setPaymentLoading(invoice.id)
+    try {
+      const res = await fetch('/api/payment/parent/confirm-transfer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoiceId: invoice.id }),
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        alert(data.error || 'Có lỗi xảy ra')
+        return
+      }
+
+      // Update local state immediately
+      setInvoices(prev => prev.map(i => 
+        i.id === invoice.id ? { ...i, status: 'pending' as const } : i
+      ))
+      setShowPayDialog(null)
+      alert('✅ Đã ghi nhận! Admin sẽ xác nhận thanh toán trong thời gian sớm nhất.')
+    } catch (error) {
+      console.error('Confirm transfer error:', error)
+      alert('Lỗi kết nối. Vui lòng thử lại.')
+    } finally {
+      setPaymentLoading(null)
+    }
+  }
+
   // Status badge
   const statusBadge = (status: string) => {
     const map: Record<string, { label: string; cls: string }> = {
@@ -261,6 +291,13 @@ export default function ParentPaymentsPage() {
                 <CreditCard className="w-4 h-4" />
                 Thanh toán ngay
               </button>
+            )}
+
+            {invoice.status === 'pending' && (
+              <div className="w-full py-3 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-xl font-medium flex items-center justify-center gap-2">
+                <Clock className="w-4 h-4" />
+                Đang chờ Admin xác nhận thanh toán
+              </div>
             )}
 
             {invoice.status === 'paid' && invoice.pdf_url && (
@@ -422,10 +459,21 @@ export default function ParentPaymentsPage() {
                 </div>
 
                 <button
-                  onClick={() => setShowPayDialog(null)}
-                  className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition"
+                  onClick={() => handleConfirmTransfer(showPayDialog)}
+                  disabled={!!paymentLoading}
+                  className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  Đã chuyển khoản xong
+                  {paymentLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Đang xác nhận...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      Đã chuyển khoản xong
+                    </>
+                  )}
                 </button>
               </div>
             )}

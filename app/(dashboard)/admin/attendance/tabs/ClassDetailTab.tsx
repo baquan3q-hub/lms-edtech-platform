@@ -2,20 +2,28 @@
 
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
+} from "@/components/ui/dialog";
+import {
     School, Loader2, CalendarDays, ChevronDown, ChevronRight,
-    CheckCircle2, XCircle, Clock, Shield, Users,
+    CheckCircle2, XCircle, Clock, Shield, Users, RotateCcw, Trash2, Download
 } from "lucide-react";
 import {
     getAllClassesForAdmin,
     getAttendanceTrendData,
+    resetClassAttendanceData,
+    resetSessionAttendanceData,
 } from "@/lib/actions/attendance";
 import { getClassAttendanceSessions } from "@/lib/actions/attendance-points";
 import StatusDistChart from "../charts/StatusDistChart";
+import { exportClassSessionsExcel } from "../export/exportClassSessionsExcel";
 
 interface Props {
     month: number;
@@ -35,6 +43,12 @@ export default function ClassDetailTab({ month, year }: Props) {
         present: 0, absent: 0, late: 0, excused: 0, total: 0,
         totalSessions: 0, avgRate: 0,
     });
+
+    // Reset state
+    const [resetDialogOpen, setResetDialogOpen] = useState(false);
+    const [resetConfirmText, setResetConfirmText] = useState("");
+    const [isResetting, setIsResetting] = useState(false);
+    const [resettingSessionId, setResettingSessionId] = useState<string | null>(null);
 
     // Load classes danh sách
     useEffect(() => {
@@ -81,6 +95,57 @@ export default function ClassDetailTab({ month, year }: Props) {
             else next.add(sessionId);
             return next;
         });
+    };
+
+    const selectedClassName = classes.find((c: any) => c.id === selectedClassId)?.name || "";
+
+    const handleExport = () => {
+        if (!selectedClassId || sessions.length === 0) return;
+        try {
+            exportClassSessionsExcel({
+                className: selectedClassName,
+                month,
+                year,
+                sessions
+            });
+            toast.success("Xuất file Excel thành công!");
+        } catch (err) {
+            toast.error("Lỗi xuất file Excel");
+            console.error(err);
+        }
+    };
+
+    // Reset handler — bulk reset class attendance
+    const handleResetClass = async () => {
+        if (resetConfirmText !== selectedClassName) {
+            toast.error("Tên lớp không khớp");
+            return;
+        }
+        setIsResetting(true);
+        const { success, error, deletedSessions, deletedRecords } = await resetClassAttendanceData(selectedClassId, month, year);
+        if (success) {
+            toast.success(`Đã reset: xóa ${deletedSessions} buổi, ${deletedRecords} bản ghi`);
+            setResetDialogOpen(false);
+            setResetConfirmText("");
+            loadClassSessions();
+        } else {
+            toast.error(`Lỗi: ${error}`);
+        }
+        setIsResetting(false);
+    };
+
+    // Reset handler — single session
+    const handleResetSession = async (sessionId: string) => {
+        if (!confirm("Xác nhận reset điểm danh buổi này? Dữ liệu sẽ bị xóa vĩnh viễn.")) return;
+        setResettingSessionId(sessionId);
+        const { success, error } = await resetSessionAttendanceData(sessionId);
+        if (success) {
+            toast.success("Đã reset điểm danh buổi này");
+            loadClassSessions();
+        } else {
+            toast.error(`Lỗi: ${error}`);
+        }
+        setResettingSessionId(null);
     };
 
     if (loading) {
@@ -138,9 +203,33 @@ export default function ClassDetailTab({ month, year }: Props) {
                     <div className="grid md:grid-cols-2 gap-4">
                         {/* Mini Stats */}
                         <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
-                            <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                                Thống kê lớp — Tháng {month}/{year}
-                            </h4>
+                            <div className="flex items-center justify-between mb-3">
+                                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                    Thống kê lớp — Tháng {month}/{year}
+                                </h4>
+                                <div className="flex justify-end gap-2 text-right">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={handleExport}
+                                        disabled={classStats.totalSessions === 0}
+                                        className="h-7 text-xs text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                                    >
+                                        <Download className="w-3 h-3 mr-1" />
+                                        Xuất Excel
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => { setResetConfirmText(""); setResetDialogOpen(true); }}
+                                        disabled={classStats.totalSessions === 0}
+                                        className="text-red-600 border-red-200 hover:bg-red-50 h-7 text-xs"
+                                    >
+                                        <RotateCcw className="w-3 h-3 mr-1" />
+                                        Reset ĐD
+                                    </Button>
+                                </div>
+                            </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <MiniStat icon={<CalendarDays className="w-4 h-4 text-slate-500" />} label="Tổng buổi" value={classStats.totalSessions} color="slate" />
                                 <MiniStat icon={<CheckCircle2 className="w-4 h-4 text-emerald-500" />} label="TB chuyên cần" value={`${classStats.avgRate}%`} color={classStats.avgRate >= 80 ? "emerald" : "red"} />
@@ -200,6 +289,7 @@ export default function ClassDetailTab({ month, year }: Props) {
                                             </th>
                                             <th className="text-center px-3 py-3 font-medium text-gray-500">Tổng</th>
                                             <th className="text-center px-3 py-3 font-medium text-gray-500">%</th>
+                                            <th className="w-8 px-2 py-3"></th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -220,6 +310,8 @@ export default function ClassDetailTab({ month, year }: Props) {
                                                     rate={rate}
                                                     isExpanded={isExpanded}
                                                     onToggle={() => toggleSession(sess.id)}
+                                                    onReset={handleResetSession}
+                                                    resettingId={resettingSessionId}
                                                 />
                                             );
                                         })}
@@ -230,13 +322,63 @@ export default function ClassDetailTab({ month, year }: Props) {
                     </div>
                 </>
             )}
+
+            {/* Reset Confirmation Dialog */}
+            <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="text-red-600 flex items-center gap-2">
+                            <RotateCcw className="w-5 h-5" />
+                            Reset điểm danh lớp
+                        </DialogTitle>
+                        <DialogDescription>
+                            Thao tác này sẽ xóa <strong>toàn bộ</strong> dữ liệu điểm danh của lớp trong tháng {month}/{year}.
+                            Không thể hoàn tác.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-3">
+                        <div className="bg-red-50 p-3 rounded-lg border border-red-200 text-sm text-red-700">
+                            ⚠️ Sẽ xóa: {classStats.totalSessions} buổi điểm danh + tất cả bản ghi attendance.
+                            Teaching status sẽ revert về &quot;pending&quot;.
+                        </div>
+                        <div>
+                            <label className="text-sm font-bold text-slate-700 block mb-1.5">
+                                Nhập tên lớp để xác nhận: <span className="text-red-500 font-mono">{selectedClassName}</span>
+                            </label>
+                            <Input
+                                placeholder={selectedClassName}
+                                value={resetConfirmText}
+                                onChange={(e) => setResetConfirmText(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setResetDialogOpen(false)} disabled={isResetting}>
+                            Hủy
+                        </Button>
+                        <Button
+                            onClick={handleResetClass}
+                            disabled={isResetting || resetConfirmText !== selectedClassName}
+                            className="bg-red-600 hover:bg-red-700 text-white"
+                        >
+                            {isResetting ? (
+                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            ) : (
+                                <RotateCcw className="w-4 h-4 mr-2" />
+                            )}
+                            Xác nhận Reset
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
 
 // ===== Session Row with expand =====
-function SessionRow({ sess, dateStr, rate, isExpanded, onToggle }: {
+function SessionRow({ sess, dateStr, rate, isExpanded, onToggle, onReset, resettingId }: {
     sess: any; dateStr: string; rate: number; isExpanded: boolean; onToggle: () => void;
+    onReset: (id: string) => void; resettingId: string | null;
 }) {
     return (
         <>
@@ -258,40 +400,66 @@ function SessionRow({ sess, dateStr, rate, isExpanded, onToggle }: {
                     )}
                 </td>
                 <td className="px-3 py-3 text-gray-600">{sess.teacherName || "—"}</td>
-                <td className="text-center px-3 py-3 text-emerald-600 font-bold">{sess.presentCount}</td>
-                <td className="text-center px-3 py-3">
-                    <span className={sess.absentCount > 0 ? "text-red-600 font-bold" : "text-gray-300"}>
-                        {sess.absentCount}
-                    </span>
-                </td>
-                <td className="text-center px-3 py-3">
-                    <span className={sess.lateCount > 0 ? "text-amber-600 font-bold" : "text-gray-300"}>
-                        {sess.lateCount}
-                    </span>
-                </td>
-                <td className="text-center px-3 py-3">
-                    <span className={sess.excusedCount > 0 ? "text-blue-600 font-bold" : "text-gray-300"}>
-                        {sess.excusedCount || 0}
-                    </span>
-                </td>
-                <td className="text-center px-3 py-3 text-gray-700 font-semibold">{sess.totalStudents}</td>
-                <td className="text-center px-3 py-3">
-                    <Badge className={
-                        rate >= 80
-                            ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                            : rate >= 60
-                            ? "bg-amber-100 text-amber-800 border-amber-200"
-                            : "bg-red-100 text-red-800 border-red-200"
-                    }>
-                        {rate}%
-                    </Badge>
+                {sess.source === "scheduled" ? (
+                    <td colSpan={6} className="text-center px-3 py-3">
+                        <Badge className="bg-amber-50 text-amber-600 border-amber-200">
+                            <Clock className="w-3.5 h-3.5 mr-1" /> Chưa ĐD
+                        </Badge>
+                    </td>
+                ) : (
+                    <>
+                        <td className="text-center px-3 py-3 text-emerald-600 font-bold">{sess.presentCount}</td>
+                        <td className="text-center px-3 py-3">
+                            <span className={sess.absentCount > 0 ? "text-red-600 font-bold" : "text-gray-300"}>
+                                {sess.absentCount}
+                            </span>
+                        </td>
+                        <td className="text-center px-3 py-3">
+                            <span className={sess.lateCount > 0 ? "text-amber-600 font-bold" : "text-gray-300"}>
+                                {sess.lateCount}
+                            </span>
+                        </td>
+                        <td className="text-center px-3 py-3">
+                            <span className={sess.excusedCount > 0 ? "text-blue-600 font-bold" : "text-gray-300"}>
+                                {sess.excusedCount || 0}
+                            </span>
+                        </td>
+                        <td className="text-center px-3 py-3 text-gray-700 font-semibold">{sess.totalStudents}</td>
+                        <td className="text-center px-3 py-3">
+                            <Badge className={
+                                rate >= 80
+                                    ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                    : rate >= 60
+                                    ? "bg-amber-100 text-amber-800 border-amber-200"
+                                    : "bg-red-100 text-red-800 border-red-200"
+                            }>
+                                {rate}%
+                            </Badge>
+                        </td>
+                    </>
+                )}
+                <td className="px-2 py-3">
+                    <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); onReset(sess.id); }}
+                        disabled={resettingId === sess.id}
+                        className="h-6 w-6 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
+                        title="Reset buổi này"
+                    >
+                        {resettingId === sess.id ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                        ) : (
+                            <Trash2 className="w-3 h-3" />
+                        )}
+                    </Button>
                 </td>
             </tr>
 
             {/* Expanded: Student list for this session */}
-            {isExpanded && sess.students && (
+            {isExpanded && sess.students && sess.students.length > 0 && (
                 <tr>
-                    <td colSpan={9} className="p-0">
+                    <td colSpan={10} className="p-0">
                         <div className="bg-gray-50/80 border-t border-gray-100 px-8 py-3 animate-in slide-in-from-top-1 duration-200">
                             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
                                 Danh sách học sinh
@@ -328,9 +496,9 @@ function SessionRow({ sess, dateStr, rate, isExpanded, onToggle }: {
             {/* Expanded nhưng chưa có students (chưa fetch) */}
             {isExpanded && !sess.students && (
                 <tr>
-                    <td colSpan={9} className="p-0">
+                    <td colSpan={10} className="p-0">
                         <div className="bg-gray-50/80 border-t border-gray-100 px-8 py-6 text-center text-gray-400 text-sm">
-                            Chi tiết học sinh sẽ hiện ở đây khi dữ liệu được tải
+                            {sess.source === "scheduled" ? "Buổi học chưa diễn ra hoặc giáo viên chưa điểm danh." : "Chi tiết học sinh sẽ hiện ở đây khi dữ liệu được tải"}
                         </div>
                     </td>
                 </tr>

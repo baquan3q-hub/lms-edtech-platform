@@ -15,6 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { fetchStudentExams } from "@/lib/actions/exam";
 import { fetchStudentHomework } from "@/lib/actions/homework";
 import { getStudentPointHistory } from "@/lib/actions/point";
+import { getClassSessions } from "@/lib/actions/class-sessions";
+import SessionContentManagerClient from "@/components/teacher/SessionContentManagerClient";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +31,7 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
     const adminSupabase = createAdminClient();
 
     // === DATA FETCHING (song song) ===
-    const [classRes, itemsRes, progressRes, schedulesRes, examsRes, homeworkRes, announcementsRes, pointsRes] = await Promise.all([
+    const [classRes, itemsRes, progressRes, schedulesRes, examsRes, homeworkRes, announcementsRes, pointsRes, classSessionsRes] = await Promise.all([
         // 1. Thông tin lớp
         adminSupabase
             .from('classes')
@@ -67,6 +69,8 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
             .limit(20),
         // 8. Điểm tích lũy
         getStudentPointHistory(user.id, id),
+        // 9. Buổi học kèm giáo án (class_sessions)
+        getClassSessions(id),
     ]);
 
     const classInfo = classRes.data as any;
@@ -77,6 +81,7 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
     const announcements = announcementsRes.data || [];
     const pointHistory = pointsRes.data || [];
     const totalAccumulatedPoints = pointHistory.reduce((acc: number, p: any) => acc + p.points, 0);
+    const classSessions = classSessionsRes.data || [];
 
     // Progress set
     const completedSet = new Set(
@@ -357,48 +362,68 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
 
                 {/* ===== TAB: LỊCH HỌC ===== */}
                 <TabsContent value="schedule">
-                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                        <div className="px-5 py-4 border-b border-slate-200 bg-white">
-                            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                <Calendar className="w-5 h-5 text-emerald-500" /> Lịch học hàng tuần
-                            </h2>
-                            <p className="text-sm text-slate-500 mt-1">Lịch học cố định của lớp bạn</p>
+                    <div className="space-y-6">
+                        {/* Lịch cố định hàng tuần */}
+                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                            <div className="px-5 py-4 border-b border-slate-200 bg-white">
+                                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <Calendar className="w-5 h-5 text-emerald-500" /> Lịch học hàng tuần
+                                </h2>
+                                <p className="text-sm text-slate-500 mt-1">Lịch học cố định của lớp bạn</p>
+                            </div>
+
+                            {schedules.length > 0 ? (
+                                <div className="divide-y divide-slate-100">
+                                    {schedules.map((s: any) => (
+                                        <div key={s.id} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition-colors">
+                                            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex flex-col items-center justify-center shrink-0 border border-emerald-100">
+                                                <span className="text-[10px] font-bold uppercase">{s.day_of_week === 0 ? "C.Nhật" : "Thứ"}</span>
+                                                <span className="text-sm font-black leading-none">{s.day_of_week === 0 ? "CN" : s.day_of_week + 1}</span>
+                                            </div>
+                                            <div className="flex-1">
+                                                <p className="font-semibold text-slate-800">{dayNames[s.day_of_week] || `Ngày ${s.day_of_week}`}</p>
+                                                <p className="text-sm text-slate-500 flex items-center gap-2 mt-0.5">
+                                                    <Clock className="w-3.5 h-3.5" />
+                                                    {s.start_time?.slice(0, 5)} — {s.end_time?.slice(0, 5)}
+                                                    {s.room && (
+                                                        <span className="flex items-center gap-1 ml-2">
+                                                            <MapPin className="w-3.5 h-3.5" />
+                                                            {(s.room as any)?.name || "Chưa rõ"}
+                                                        </span>
+                                                    )}
+                                                </p>
+                                            </div>
+                                            <Badge className="bg-emerald-50 text-emerald-600 border-emerald-200 text-[10px]" variant="outline">
+                                                Hàng tuần
+                                            </Badge>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="text-center py-12 px-6">
+                                    <Calendar className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                                    <p className="text-slate-500 font-medium">Chưa có lịch học.</p>
+                                    <p className="text-sm text-slate-400 mt-1">Giáo viên sẽ cập nhật lịch học sớm nhất.</p>
+                                </div>
+                            )}
                         </div>
 
-                        {schedules.length > 0 ? (
-                            <div className="divide-y divide-slate-100">
-                                {schedules.map((s: any) => (
-                                    <div key={s.id} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition-colors">
-                                        <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex flex-col items-center justify-center shrink-0 border border-emerald-100">
-                                            <span className="text-[10px] font-bold uppercase">{s.day_of_week === 0 ? "C.Nhật" : "Thứ"}</span>
-                                            <span className="text-sm font-black leading-none">{s.day_of_week === 0 ? "CN" : s.day_of_week + 1}</span>
-                                        </div>
-                                        <div className="flex-1">
-                                            <p className="font-semibold text-slate-800">{dayNames[s.day_of_week] || `Ngày ${s.day_of_week}`}</p>
-                                            <p className="text-sm text-slate-500 flex items-center gap-2 mt-0.5">
-                                                <Clock className="w-3.5 h-3.5" />
-                                                {s.start_time?.slice(0, 5)} — {s.end_time?.slice(0, 5)}
-                                                {s.room && (
-                                                    <span className="flex items-center gap-1 ml-2">
-                                                        <MapPin className="w-3.5 h-3.5" />
-                                                        {(s.room as any)?.name || "Chưa rõ"}
-                                                    </span>
-                                                )}
-                                            </p>
-                                        </div>
-                                        <Badge className="bg-emerald-50 text-emerald-600 border-emerald-200 text-[10px]" variant="outline">
-                                            Hàng tuần
-                                        </Badge>
-                                    </div>
-                                ))}
+                        {/* Nội dung giáo án từng buổi học */}
+                        <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                            <div className="px-5 py-4 border-b border-slate-200 bg-white">
+                                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                    <BookOpen className="w-5 h-5 text-indigo-500" /> Nội dung buổi học
+                                </h2>
+                                <p className="text-sm text-slate-500 mt-1">Giáo án, dặn dò và tài liệu giáo viên gửi cho từng buổi học</p>
                             </div>
-                        ) : (
-                            <div className="text-center py-12 px-6">
-                                <Calendar className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                                <p className="text-slate-500 font-medium">Chưa có lịch học.</p>
-                                <p className="text-sm text-slate-400 mt-1">Giáo viên sẽ cập nhật lịch học sớm nhất.</p>
+                            <div className="p-5">
+                                <SessionContentManagerClient
+                                    classId={id}
+                                    sessions={classSessions}
+                                    readOnly={true}
+                                />
                             </div>
-                        )}
+                        </div>
                     </div>
                 </TabsContent>
 
