@@ -18,7 +18,8 @@ import { Badge } from "@/components/ui/badge";
 import {
     Bell, Megaphone, CheckCheck, Loader2, FileText,
     Calendar, BookOpen, BarChart3, Info, ExternalLink,
-    Video, Link2, ChevronDown, Filter, Inbox, MessageSquare, AlertTriangle, Circle, CheckCircle2
+    Video, Link2, ChevronDown, Filter, Inbox, MessageSquare, AlertTriangle, Circle, CheckCircle2,
+    ClipboardCheck, ThumbsUp
 } from "lucide-react";
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -26,6 +27,7 @@ const ICON_MAP: Record<string, React.ElementType> = {
     absence_request: FileText,
     quiz_feedback: BookOpen,
     child_quiz_feedback: BarChart3,
+    teacher_review: ClipboardCheck,
     system: Info,
     announcement: Megaphone,
 };
@@ -35,6 +37,7 @@ const COLOR_MAP: Record<string, string> = {
     absence_request: "text-emerald-600 bg-emerald-50 border-emerald-200",
     quiz_feedback: "text-purple-600 bg-purple-50 border-purple-200",
     child_quiz_feedback: "text-indigo-600 bg-indigo-50 border-indigo-200",
+    teacher_review: "text-teal-600 bg-teal-50 border-teal-200",
     system: "text-blue-600 bg-blue-50 border-blue-200",
     announcement: "text-orange-600 bg-orange-50 border-orange-200",
 };
@@ -165,6 +168,12 @@ export default function ParentNotificationsClient({ students, parentId }: { stud
             const { data } = await fetchStudentFeedbackForParent(item.metadata.analysisId, selectedStudentId);
             setSelectedFeedback(data);
             setLoadingFeedback(false);
+            return;
+        }
+
+        // Teacher review → navigate to reviews page
+        if (item.type === 'teacher_review' && item.link) {
+            router.push(item.link);
             return;
         }
 
@@ -315,11 +324,13 @@ export default function ParentNotificationsClient({ students, parentId }: { stud
                                                         <Badge className={`border-none text-[9px] font-semibold ${type === 'attendance' ? 'bg-amber-100 text-amber-700'
                                                             : type === 'quiz_feedback' || type === 'child_quiz_feedback' ? 'bg-purple-100 text-purple-700'
                                                             : type === 'absence_request' ? 'bg-emerald-100 text-emerald-700'
+                                                            : type === 'teacher_review' ? 'bg-teal-100 text-teal-700'
                                                             : 'bg-blue-100 text-blue-700'
                                                             }`}>
                                                             {type === 'attendance' ? '📅 Điểm danh'
                                                                 : type === 'quiz_feedback' || type === 'child_quiz_feedback' ? '📊 Kết quả học tập'
                                                                 : type === 'absence_request' ? '📄 Xin phép'
+                                                                : type === 'teacher_review' ? '📝 Nhận xét GV'
                                                                 : '🔔 Hệ thống'
                                                             }
                                                         </Badge>

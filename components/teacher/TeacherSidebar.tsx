@@ -11,7 +11,8 @@ import {
     Users,
     ClipboardCheck,
     PanelLeftClose,
-    PanelLeftOpen
+    PanelLeftOpen,
+    FileBarChart
 } from "lucide-react";
 import UserAvatarMenu from "@/components/shared/UserAvatarMenu";
 
@@ -21,6 +22,7 @@ const menuItems = [
     { icon: CalendarDays, label: "Lịch dạy", href: "/teacher/schedule" },
     { icon: Users, label: "Quản lý Học viên", href: "/teacher/students" },
     { icon: FileSignature, label: "Ngân hàng Tài liệu số", href: "/teacher/lessons" },
+    { icon: FileBarChart, label: "Báo cáo & Nhận xét", href: "/teacher/reports" },
     { icon: ClipboardCheck, label: "Đơn xin nghỉ", href: "/teacher/absence-requests" },
 ];
 

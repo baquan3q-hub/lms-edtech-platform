@@ -16,9 +16,19 @@ import DeleteExamButton from "@/components/teacher/DeleteExamButton";
 import AnnouncementComposer from "@/components/teacher/AnnouncementComposer";
 import { fetchClassAnnouncements } from "@/lib/actions/announcement";
 
-export default async function ClassDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ClassDetailPage({ 
+    params,
+    searchParams 
+}: { 
+    params: Promise<{ id: string }>,
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
     const resolvedParams = await params;
     const id = resolvedParams.id;
+    
+    // Resolve search params
+    const resolvedSearchParams = searchParams ? await searchParams : {};
+    const defaultTab = (resolvedSearchParams.tab as string) || "overview";
 
     // Fetch tất cả dữ liệu song song
     const [
@@ -156,45 +166,57 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
                     Quay lại danh sách lớp
                 </Link>
 
-                <div className="bg-gradient-to-r from-slate-900 to-indigo-900 p-6 rounded-2xl shadow-lg text-white flex flex-col md:flex-row md:items-start justify-between gap-6">
-                    <div>
-                        <div className="flex items-center gap-3 mb-2">
-                            <h2 className="text-2xl md:text-3xl font-extrabold">
-                                {classInfo.name ? `${classInfo.name}` : ""} — {classInfo.course?.name || "Lớp học"}
-                            </h2>
-                            <Badge className="bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border-none text-xs py-0.5">
-                                {classInfo.status === 'active' ? 'Đang hoạt động' : 'Kết thúc'}
-                            </Badge>
-                        </div>
-                        <p className="text-slate-300 font-medium text-sm">{classInfo.course?.description}</p>
+                <div className="flex flex-col gap-2">
+                    {/* Tên lớp nhỏ ở trên */}
+                    <div className="flex items-center justify-between px-1">
+                        <h2 className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                            <span className="w-1 h-3 bg-indigo-500 rounded-full"></span>
+                            {classInfo.name ? `${classInfo.name} — ` : ""}{classInfo.course?.name || "Lớp học"}
+                        </h2>
+                        {classInfo.status === 'active' && (
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+                                <span className="relative flex h-1.5 w-1.5">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                                </span>
+                                ONLINE
+                            </div>
+                        )}
                     </div>
 
-                    <div className="grid grid-cols-2 gap-x-6 gap-y-3 bg-white/10 p-4 rounded-xl border border-white/10 text-sm text-slate-200 shrink-0">
-                        <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-indigo-300" />
-                            <span className="font-medium">{classInfo.schedule ? (typeof classInfo.schedule === 'string' ? classInfo.schedule : JSON.stringify(classInfo.schedule)) : "Chưa có lịch"}</span>
+                    {/* Thanh Bar tối giản */}
+                    <div className="bg-white border border-slate-200 rounded-2xl p-2 sm:p-3 shadow-sm flex flex-wrap items-center gap-4 sm:gap-10">
+                        <div className="flex items-center gap-2 px-3 border-r border-slate-100 sm:pr-10">
+                            <Users className="w-4 h-4 text-slate-400" />
+                            <div className="flex flex-col">
+                                <span className="text-[9px] font-bold text-slate-400 leading-none uppercase mb-1">Sĩ số</span>
+                                <span className="text-sm font-bold text-slate-700">{students?.length || 0}/{classInfo.max_students}</span>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
+
+                        <div className="flex items-center gap-2 px-3 border-r border-slate-100 sm:pr-10">
                             {classInfo.course?.mode === "online" ? (
-                                <Monitor className="w-4 h-4 text-emerald-300" />
+                                <Monitor className="w-4 h-4 text-slate-400" />
                             ) : (
-                                <Building2 className="w-4 h-4 text-blue-300" />
+                                <Building2 className="w-4 h-4 text-slate-400" />
                             )}
-                            <span className="font-medium">{classInfo.course?.mode === "online" ? "Online" : "Offline"}</span>
+                            <div className="flex flex-col">
+                                <span className="text-[9px] font-bold text-slate-400 leading-none uppercase mb-1">Hình thức</span>
+                                <span className="text-sm font-bold text-slate-700 uppercase">{classInfo.course?.mode === "online" ? "Online" : "Offline"}</span>
+                            </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <Users className="w-4 h-4 text-blue-300" />
-                            <span className="font-medium">Sĩ số: {students?.length || 0} / {classInfo.max_students}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <BookOpen className="w-4 h-4 text-emerald-300" />
-                            <span className="font-medium">Bài: {lessonCount} ({publishedCount} public)</span>
-                        </div>
-                        <div className="col-span-2 pt-2 border-t border-white/10">
+
+                        <div className="flex items-center gap-3 ml-auto pr-2">
                             <Link href={`/teacher/classes/${id}/points`}>
-                                <Button size="sm" variant="secondary" className="w-full bg-indigo-500/20 text-indigo-100 hover:bg-indigo-500/40 hover:text-white border-0 py-0 h-8">
-                                    <Trophy className="w-4 h-4 mr-2 text-amber-300" /> 
-                                    Quản lý Điểm & Xếp hạng
+                                <Button size="sm" variant="ghost" className="h-9 px-4 rounded-xl text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 font-bold text-xs transition-all">
+                                    <ClipboardList className="w-4 h-4 mr-2" />
+                                    Quản lý Điểm
+                                </Button>
+                            </Link>
+                            <Link href={`/teacher/classes/${id}/points`}>
+                                <Button size="sm" variant="ghost" className="h-9 px-4 rounded-xl text-slate-600 hover:text-amber-600 hover:bg-amber-50 font-bold text-xs transition-all">
+                                    <Trophy className="w-4 h-4 mr-2" />
+                                    Xếp hạng
                                 </Button>
                             </Link>
                         </div>
@@ -203,7 +225,7 @@ export default async function ClassDetailPage({ params }: { params: Promise<{ id
             </div>
 
             {/* TABS SECTION */}
-            <Tabs defaultValue="overview" className="w-full">
+            <Tabs defaultValue={defaultTab} className="w-full">
                 <TabsList className="w-full justify-start bg-white border border-slate-200 rounded-xl p-1 h-auto flex-wrap gap-1">
                     <TabsTrigger value="overview" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
                         <BookOpen className="w-4 h-4 mr-2" /> Tổng quan

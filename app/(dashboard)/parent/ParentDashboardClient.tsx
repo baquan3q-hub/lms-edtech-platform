@@ -499,6 +499,23 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                                 )}
                             </div>
                         )}
+                        {/* Nhận xét từ Giáo viên */}
+                        {selectedStudentId && (
+                            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl border border-emerald-200 p-5 shadow-sm">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <MessageSquare className="w-5 h-5 text-emerald-600" />
+                                    <h4 className="font-bold text-emerald-800 text-sm">Nhận xét từ Giáo viên</h4>
+                                </div>
+                                <p className="text-xs text-emerald-700 mb-3">
+                                    Xem nhận xét buổi học, tuần, tháng và báo cáo định kỳ từ giáo viên.
+                                </p>
+                                <Link href={`/parent/children/${selectedStudentId}/reviews`}>
+                                    <Button variant="outline" className="w-full border-emerald-300 text-emerald-700 hover:bg-emerald-100 font-semibold text-sm">
+                                        <ArrowRight className="w-4 h-4 mr-2" /> Xem nhận xét
+                                    </Button>
+                                </Link>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

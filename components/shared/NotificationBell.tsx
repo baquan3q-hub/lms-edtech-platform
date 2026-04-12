@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { createClient } from "@/lib/supabase/client";
-import { Bell, Check, Calendar, FileText, Info, BookOpen, BarChart3 } from "lucide-react";
+import { Bell, Check, Calendar, FileText, Info, BookOpen, BarChart3, ClipboardCheck } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -24,6 +24,7 @@ const ICONS: Record<string, React.ElementType> = {
     absence_request: FileText,
     quiz_feedback: BookOpen,
     child_quiz_feedback: BarChart3,
+    teacher_review: ClipboardCheck,
     system: Info,
 };
 
@@ -32,6 +33,7 @@ const COLORS: Record<string, string> = {
     absence_request: "text-emerald-500 bg-emerald-50",
     quiz_feedback: "text-purple-500 bg-purple-50",
     child_quiz_feedback: "text-indigo-500 bg-indigo-50",
+    teacher_review: "text-teal-500 bg-teal-50",
     system: "text-blue-500 bg-blue-50",
 };
 
@@ -123,7 +125,10 @@ export default function NotificationBell() {
                 {notifications.length > 0 && (
                     <div className="p-2 pt-0">
                         <DropdownMenuSeparator className="bg-slate-100 mb-2" />
-                        <Button variant="ghost" className="w-full text-xs text-slate-500 hover:text-slate-900 justify-center h-9" onClick={() => router.push("/parent/notifications")}>
+                        <Button variant="ghost" className="w-full text-xs text-slate-500 hover:text-slate-900 justify-center h-9" onClick={() => {
+                            const basePath = window.location.pathname.split('/')[1] || 'parent';
+                            router.push(`/${basePath}/notifications`);
+                        }}>
                             Xem tất cả thông báo
                         </Button>
                     </div>
