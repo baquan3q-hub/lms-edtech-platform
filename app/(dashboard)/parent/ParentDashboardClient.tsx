@@ -13,6 +13,9 @@ import {
 import { parseISO, format, isBefore, isToday } from "date-fns";
 import { vi } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle,
+} from "@/components/ui/dialog";
 import { createClient } from "@/lib/supabase/client";
 import { formatKnowledgeGap } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
@@ -34,6 +37,10 @@ export default function ParentDashboardClient({ students }: { students: StudentI
     const [loading, setLoading] = useState(false);
     const [feedbackData, setFeedbackData] = useState<any[]>([]);
     const [feedbackLoading, setFeedbackLoading] = useState(false);
+
+    // Notification Modal State
+    const [selectedNotification, setSelectedNotification] = useState<any>(null);
+    const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
 
     useEffect(() => {
         if (selectedStudentId) loadDashboard(selectedStudentId);
@@ -446,10 +453,10 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="p-4 border-b border-slate-100 bg-blue-50/50 flex items-center justify-between">
                         <h3 className="font-bold text-blue-800 flex items-center gap-2 text-sm">
-                            <Bell className="w-4 h-4" /> Thông báo từ giáo viên
+                            <Bell className="w-4 h-4" /> Hệ thống thông báo
                         </h3>
                         {selectedStudentId && (
-                            <Link href={`/parent/children/${selectedStudentId}/announcements`}>
+                            <Link href={`/parent/notifications`}>
                                 <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 text-xs font-semibold h-7">
                                     Xem tất cả <ArrowRight className="w-3 h-3 ml-1" />
                                 </Button>
@@ -457,46 +464,38 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                         )}
                     </div>
                     <div className="p-4">
-                        {(!dashboardData.announcements || dashboardData.announcements.length === 0) ? (
+                        {(!dashboardData.announcements?.length && !dashboardData.recentNotifications?.length) ? (
                             <p className="text-sm text-slate-400 text-center py-6">Chưa có thông báo nào.</p>
                         ) : (
                             <div className="space-y-3">
-                                {dashboardData.announcements.slice(0, 3).map((ann: any) => (
-                                    <div key={ann.id} className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 transition-colors">
+                                {/* Combine and sort latest 5 notifications/announcements */}
+                                {[...(dashboardData.announcements || []).map((a:any)=>({...a, source: 'announcement'})), ...(dashboardData.recentNotifications || []).map((n:any)=>({...n, source: 'notification'}))]
+                                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                                .slice(0, 5)
+                                .map((item: any) => (
+                                    <div 
+                                        key={`${item.source}-${item.id}`} 
+                                        onClick={() => { setSelectedNotification(item); setIsNotificationModalOpen(true); }}
+                                        className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 transition-colors cursor-pointer group"
+                                    >
                                         <div className="flex items-start justify-between">
                                             <div className="flex-1">
-                                                <p className="font-semibold text-slate-800 text-sm">{ann.title}</p>
-                                                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{ann.content}</p>
-                                                <div className="flex flex-wrap gap-1.5 mt-2">
-                                                    {(ann.file_url || (ann.attachments && ann.attachments.length > 0)) && (
-                                                        <Badge className="bg-blue-50 text-blue-600 border-blue-200 text-[9px]" variant="outline">
-                                                            📎 {ann.attachments?.length ? `${ann.attachments.length} File` : 'File'}
-                                                        </Badge>
-                                                    )}
-                                                    {ann.video_url && (
-                                                        <Badge className="bg-rose-50 text-rose-600 border-rose-200 text-[9px]" variant="outline">🎥 Video</Badge>
-                                                    )}
-                                                    {ann.link_url && (
-                                                        <Badge className="bg-violet-50 text-violet-600 border-violet-200 text-[9px]" variant="outline">🔗 Link</Badge>
-                                                    )}
-                                                    {(ann.quiz_data || ann.quiz_id) && (
-                                                        <Badge className="bg-indigo-50 text-indigo-600 border-indigo-200 text-[9px]" variant="outline">📝 Quiz</Badge>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    {item.source === 'announcement' ? (
+                                                        <Badge className="bg-orange-100 text-orange-700 border-none text-[9px] font-semibold">📢 Lớp học</Badge>
+                                                    ) : (
+                                                        <Badge className="bg-blue-100 text-blue-700 border-none text-[9px] font-semibold">🔔 Hệ thống</Badge>
                                                     )}
                                                 </div>
+                                                <p className="font-semibold text-slate-800 text-sm group-hover:text-blue-600 transition-colors">{item.title}</p>
+                                                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{item.source === 'announcement' ? item.content : item.message}</p>
                                             </div>
                                             <span className="text-[10px] text-slate-400 shrink-0 ml-4">
-                                                {ann.created_at ? new Date(ann.created_at).toLocaleDateString("vi-VN") : ""}
+                                                {item.created_at ? new Date(item.created_at).toLocaleDateString("vi-VN") : ""}
                                             </span>
                                         </div>
                                     </div>
                                 ))}
-                                {dashboardData.announcements.length > 3 && selectedStudentId && (
-                                    <Link href={`/parent/children/${selectedStudentId}/announcements`} className="block">
-                                        <p className="text-xs text-center text-blue-500 font-semibold hover:text-blue-700 py-2">
-                                            Xem thêm {dashboardData.announcements.length - 3} thông báo khác →
-                                        </p>
-                                    </Link>
-                                )}
                             </div>
                         )}
                         {/* Nhận xét từ Giáo viên */}
@@ -519,6 +518,42 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                     </div>
                 </div>
             )}
+            
+            {/* Modal hiển thị chi tiết Thông Báo */}
+            <Dialog open={isNotificationModalOpen} onOpenChange={setIsNotificationModalOpen}>
+                <DialogContent className="sm:max-w-xl p-0 overflow-hidden bg-white">
+                    {selectedNotification && (
+                        <>
+                            <DialogHeader className="p-5 border-b border-slate-100 bg-slate-50">
+                                <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                                    {selectedNotification.source === 'announcement' ? (
+                                        <><Bell className="w-5 h-5 text-orange-500" /> Chi tiết thông báo lớp học</>
+                                    ) : (
+                                        <><Bell className="w-5 h-5 text-blue-500" /> Chi tiết thông báo hệ thống</>
+                                    )}
+                                </DialogTitle>
+                            </DialogHeader>
+                            <div className="p-5 space-y-4">
+                                <div>
+                                    <h4 className="text-base font-bold text-slate-900 mb-1">{selectedNotification.title}</h4>
+                                    <p className="text-xs text-slate-400 mb-3">Ngày gửi: {new Date(selectedNotification.created_at).toLocaleString("vi-VN")}</p>
+                                    <div className="text-sm text-slate-600 leading-relaxed whitespace-pre-wrap bg-slate-50 p-4 rounded-xl">
+                                        {selectedNotification.source === 'announcement' ? selectedNotification.content : selectedNotification.message}
+                                    </div>
+                                </div>
+                                <div className="flex justify-end pt-2">
+                                    <Link href="/parent/notifications" onClick={() => setIsNotificationModalOpen(false)}>
+                                        <Button variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50">
+                                            Xem tất cả thông báo <ArrowRight className="w-4 h-4 ml-2" />
+                                        </Button>
+                                    </Link>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 }

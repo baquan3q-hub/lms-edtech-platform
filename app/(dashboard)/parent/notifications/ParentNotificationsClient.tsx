@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { fetchParentNotifications, fetchStudentFeedbackForParent } from "@/lib/actions/parentStudent";
 import { markNotificationAsRead, markAllNotificationsAsRead } from "@/lib/actions/notifications";
+import { confirmAnnouncementRead, recordAnnouncementRead } from "@/lib/actions/admin-announcements";
 import { useRouter } from "next/navigation";
 import {
     Dialog,
@@ -15,6 +16,7 @@ import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import {
     Bell, Megaphone, CheckCheck, Loader2, FileText,
     Calendar, BookOpen, BarChart3, Info, ExternalLink,
@@ -49,7 +51,7 @@ type StudentInfo = {
     relationship: string;
 };
 
-type FilterType = 'all' | 'announcement' | 'system';
+type FilterType = 'all' | 'announcement' | 'system' | 'confirmed';
 
 export default function ParentNotificationsClient({ students, parentId }: { students: StudentInfo[]; parentId: string }) {
     const router = useRouter();
@@ -62,6 +64,8 @@ export default function ParentNotificationsClient({ students, parentId }: { stud
     const [loadingMore, setLoadingMore] = useState(false);
     const [hasMore, setHasMore] = useState(true);
     const [classIds, setClassIds] = useState<string[]>([]);
+    const [confirmedIds, setConfirmedIds] = useState<Set<string>>(new Set());
+    const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
     // Feedback Modal State
     const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
@@ -77,7 +81,9 @@ export default function ParentNotificationsClient({ students, parentId }: { stud
         else setLoadingMore(true);
 
         const offset = reset ? 0 : items.length;
-        const { data } = await fetchParentNotifications(studentId, { limit: 30, offset, filter: filterType });
+        // Khi filter = 'confirmed', fetch tất cả rồi lọc client-side
+        const apiFilter = filterType === 'confirmed' ? 'all' : filterType;
+        const { data } = await fetchParentNotifications(studentId, { limit: 30, offset, filter: apiFilter as any });
 
         if (data) {
             if (reset) {
@@ -188,10 +194,24 @@ export default function ParentNotificationsClient({ students, parentId }: { stud
         setUnreadCount(0);
     };
 
+    // Xử lý xác nhận "Đã xem" cho announcement
+    const handleConfirmRead = async (announcementId: string) => {
+        setConfirmingId(announcementId);
+        const res = await confirmAnnouncementRead(announcementId);
+        if (res.error) {
+            toast.error("Lỗi: " + res.error);
+        } else {
+            setConfirmedIds(prev => new Set([...prev, announcementId]));
+            toast.success("Đã xác nhận xem thông báo!");
+        }
+        setConfirmingId(null);
+    };
+
     const filters: { key: FilterType; label: string; icon: React.ElementType }[] = [
         { key: 'all', label: 'Tất cả', icon: Inbox },
         { key: 'announcement', label: 'Thông báo lớp', icon: Megaphone },
         { key: 'system', label: 'Hệ thống', icon: Bell },
+        { key: 'confirmed', label: 'Đã xem', icon: CheckCircle2 },
     ];
 
     return (
@@ -620,6 +640,30 @@ export default function ParentNotificationsClient({ students, parentId }: { stud
                                             </div>
                                         </div>
                                     )}
+                                </div>
+                            )}
+
+                            {/* Nút xác nhận "Đã xem" cho announcements */}
+                            {selectedGeneralItem.source === 'announcement' && !confirmedIds.has(selectedGeneralItem.id) && (
+                                <div className="flex justify-end pt-4 border-t border-slate-100">
+                                    <Button
+                                        onClick={() => handleConfirmRead(selectedGeneralItem.id)}
+                                        disabled={confirmingId === selectedGeneralItem.id}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    >
+                                        {confirmingId === selectedGeneralItem.id ? (
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                        ) : (
+                                            <CheckCircle2 className="w-4 h-4 mr-2" />
+                                        )}
+                                        Xác nhận đã xem
+                                    </Button>
+                                </div>
+                            )}
+                            {selectedGeneralItem.source === 'announcement' && confirmedIds.has(selectedGeneralItem.id) && (
+                                <div className="flex items-center justify-center gap-2 pt-4 border-t border-slate-100">
+                                    <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                                    <span className="text-sm font-semibold text-emerald-600">Đã xác nhận xem thông báo</span>
                                 </div>
                             )}
 

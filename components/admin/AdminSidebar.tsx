@@ -16,23 +16,47 @@ import {
     MessageSquare,
     ClipboardCheck,
     BarChart3,
+    Bell,
+    ClipboardList,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
-export const sidebarItems = [
-    { title: "Tổng quan", href: "/admin", icon: LayoutDashboard },
-    { title: "Quản lý Người dùng", href: "/admin/users", icon: Users },
-    { title: "Quản lý Khóa học", href: "/admin/courses", icon: BookOpen },
-    { title: "Quản lý Lớp học", href: "/admin/classes", icon: School },
-    { title: "Quản lý Phòng học", href: "/admin/rooms", icon: MapPin },
-    { title: "Quản lý Điểm danh", href: "/admin/attendance", icon: ClipboardCheck },
-    { title: "Quản lý Điểm số", href: "/admin/grades", icon: BarChart3 },
-    { title: "Liên kết PH-HS", href: "/admin/students/link-parent", icon: Link2 },
-    { title: "Phản hồi & Hỗ trợ", href: "/admin/feedback", icon: MessageSquare }, // Added missing route
-    { title: "Học phí", href: "/admin/finance", icon: DollarSign },
+export const sidebarGroups = [
+    {
+        name: "Hệ Thống",
+        items: [
+            { title: "Tổng quan", href: "/admin", icon: LayoutDashboard },
+            { title: "Quản lý Người dùng", href: "/admin/users", icon: Users },
+        ]
+    },
+    {
+        name: "Học Thuật & Vận Hành",
+        items: [
+            { title: "Quản lý Khóa học", href: "/admin/courses", icon: BookOpen },
+            { title: "Quản lý Lớp học", href: "/admin/classes", icon: School },
+            { title: "Quản lý Phòng học", href: "/admin/rooms", icon: MapPin },
+            { title: "Quản lý Điểm danh", href: "/admin/attendance", icon: ClipboardCheck },
+            { title: "Quản lý Điểm số", href: "/admin/grades", icon: BarChart3 },
+            { title: "Liên kết PH-HS", href: "/admin/students/link-parent", icon: Link2 },
+        ]
+    },
+    {
+        name: "Giao Tiếp & Hành Chính",
+        items: [
+            { title: "Thông báo", href: "/admin/announcements", icon: Bell },
+            { title: "Khảo sát", href: "/admin/surveys", icon: ClipboardList },
+            { title: "Phản hồi & Hỗ trợ", href: "/admin/feedback", icon: MessageSquare },
+        ]
+    },
+    {
+        name: "Tài Chính",
+        items: [
+            { title: "Học phí", href: "/admin/finance", icon: DollarSign },
+        ]
+    }
 ];
 
 export default function AdminSidebar() {
@@ -66,37 +90,47 @@ export default function AdminSidebar() {
             <Separator className="bg-gray-100" />
 
             {/* Navigation */}
-            <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
-                {sidebarItems.map((item) => {
-                    const isActive =
-                        pathname === item.href ||
-                        (item.href !== "/admin" &&
-                            pathname.startsWith(item.href));
-                    return (
-                        <Link key={item.href} href={item.href}>
-                            <div
-                                className={cn(
-                                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group",
-                                    isActive
-                                        ? "bg-blue-50 text-blue-600"
-                                        : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"
-                                )}
-                            >
-                                <item.icon
-                                    className={cn(
-                                        "w-5 h-5 shrink-0 transition-colors",
-                                        isActive
-                                            ? "text-blue-600"
-                                            : "text-gray-400 group-hover:text-gray-600"
-                                    )}
-                                />
-                                {!collapsed && (
-                                    <span className="truncate">{item.title}</span>
-                                )}
-                            </div>
-                        </Link>
-                    );
-                })}
+            <nav className="flex-1 p-3 space-y-5 overflow-y-auto">
+                {sidebarGroups.map((group, idx) => (
+                    <div key={idx} className="space-y-1">
+                        {!collapsed && (
+                            <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-2">
+                                {group.name}
+                            </h3>
+                        )}
+                        {group.items.map((item) => {
+                            const isActive =
+                                pathname === item.href ||
+                                (item.href !== "/admin" &&
+                                    pathname.startsWith(item.href));
+                            return (
+                                <Link key={item.href} href={item.href}>
+                                    <div
+                                        className={cn(
+                                            "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group",
+                                            isActive
+                                                ? "bg-blue-50 text-blue-600"
+                                                : "text-gray-500 hover:text-gray-900 hover:bg-gray-50"
+                                        )}
+                                        title={collapsed ? item.title : undefined}
+                                    >
+                                        <item.icon
+                                            className={cn(
+                                                "w-5 h-5 shrink-0 transition-colors",
+                                                isActive
+                                                    ? "text-blue-600"
+                                                    : "text-gray-400 group-hover:text-gray-600"
+                                            )}
+                                        />
+                                        {!collapsed && (
+                                            <span className="truncate">{item.title}</span>
+                                        )}
+                                    </div>
+                                </Link>
+                            );
+                        })}
+                    </div>
+                ))}
             </nav>
 
             {/* Collapse */}

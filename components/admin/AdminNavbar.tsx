@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle, SheetHeader } from "@/components/ui/sheet";
-import { sidebarItems } from "./AdminSidebar";
+import { sidebarGroups } from "./AdminSidebar";
 import NotificationBell from "@/components/shared/NotificationBell";
 
 interface AdminNavbarProps {
@@ -53,23 +53,32 @@ export default function AdminNavbar({ userName = "Admin", userEmail }: AdminNavb
                                     <span className="text-base font-bold text-gray-900">E-Learning Admin</span>
                                 </SheetTitle>
                             </SheetHeader>
-                            <nav className="flex-1 overflow-y-auto p-4 space-y-2">
-                                {sidebarItems.map((item) => {
-                                    const isActive = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
-                                    return (
-                                        <Link key={item.href} href={item.href}>
-                                            <div
-                                                className={cn(
-                                                    "flex items-center gap-3 px-3 py-3 rounded-lg text-sm font-medium transition-colors mb-1",
-                                                    isActive ? "bg-blue-50 text-blue-600" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                                                )}
-                                            >
-                                                <item.icon className={cn("w-5 h-5", isActive ? "text-blue-600" : "text-gray-400")} />
-                                                {item.title}
-                                            </div>
-                                        </Link>
-                                    );
-                                })}
+                            <nav className="flex-1 overflow-y-auto p-4">
+                                {sidebarGroups.map((group, idx) => (
+                                    <div key={idx} className="mb-5 last:mb-0">
+                                        <h4 className="px-3 mb-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                                            {group.name}
+                                        </h4>
+                                        <div className="space-y-1">
+                                            {group.items.map((item) => {
+                                                const isActive = pathname === item.href || (item.href !== "/admin" && pathname.startsWith(item.href));
+                                                return (
+                                                    <Link key={item.href} href={item.href} className="block">
+                                                        <div
+                                                            className={cn(
+                                                                "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors",
+                                                                isActive ? "bg-blue-50 text-blue-600" : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                                                            )}
+                                                        >
+                                                            <item.icon className={cn("w-5 h-5", isActive ? "text-blue-600" : "text-gray-400")} />
+                                                            <span>{item.title}</span>
+                                                        </div>
+                                                    </Link>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                ))}
                             </nav>
                         </SheetContent>
                     </Sheet>

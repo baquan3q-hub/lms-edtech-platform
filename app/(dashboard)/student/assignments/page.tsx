@@ -1,6 +1,6 @@
 import { fetchStudentAssignments } from "@/lib/actions/student";
 import Link from "next/link";
-import { FileText, Clock, AlertCircle, CheckCircle, Search, ClipboardList, PenTool } from "lucide-react";
+import { FileText, Clock, AlertCircle, CheckCircle, Search, ClipboardList, PenLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -8,8 +8,17 @@ export default async function StudentAssignmentsPage() {
     const { data: assignments } = await fetchStudentAssignments();
 
     const categorizedAssignments = assignments ? {
-        todo: assignments.filter(a => !a.progress || (a.progress.status !== 'completed' && a.progress.status !== 'submitted')),
-        done: assignments.filter(a => a.progress?.status === 'completed' || a.progress?.status === 'submitted')
+        todo: assignments.filter((a: any) => {
+            if (!a.progress) return true;
+            if (a.progress.status === 'completed' || a.progress.status === 'submitted') return false;
+            if (a.maxAttempts && a.progress.attempts >= a.maxAttempts) return false;
+            return true;
+        }),
+        done: assignments.filter((a: any) => {
+            if (a.progress?.status === 'completed' || a.progress?.status === 'submitted') return true;
+            if (a.maxAttempts && a.progress?.attempts >= a.maxAttempts) return true;
+            return false;
+        })
     } : { todo: [], done: [] };
 
     return (
@@ -39,7 +48,7 @@ export default async function StudentAssignmentsPage() {
                                 <div key={item.id} className="relative group bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition-all">
                                     <div className="flex gap-4 items-start">
                                         <div className={`p-3 rounded-xl shrink-0 ${item.type === 'exam' ? 'bg-rose-100 text-rose-600' : item.type === 'quiz' ? 'bg-indigo-100 text-indigo-600' : item.type === 'homework' ? 'bg-orange-100 text-orange-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                                            {item.type === 'exam' ? <FileText className="w-6 h-6" /> : item.type === 'quiz' ? <ClipboardList className="w-6 h-6" /> : item.type === 'homework' ? <FileText className="w-6 h-6" /> : <PenTool className="w-6 h-6" />}
+                                            {item.type === 'exam' ? <FileText className="w-6 h-6" /> : item.type === 'quiz' ? <ClipboardList className="w-6 h-6" /> : item.type === 'homework' ? <FileText className="w-6 h-6" /> : <PenLine className="w-6 h-6" />}
                                         </div>
                                         <div className="flex-1">
                                             <div className="flex justify-between items-start gap-4">
@@ -110,7 +119,7 @@ export default async function StudentAssignmentsPage() {
                                     <div key={item.id} className="p-4 sm:p-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
                                         <div className="flex items-start gap-4">
                                             <div className={`p-2.5 rounded-lg shrink-0 ${item.type === 'exam' ? 'bg-rose-50 text-rose-500' : item.type === 'quiz' ? 'bg-indigo-50 text-indigo-500' : item.type === 'homework' ? 'bg-orange-50 text-orange-500' : 'bg-emerald-50 text-emerald-500'}`}>
-                                                {item.type === 'exam' ? <FileText className="w-5 h-5" /> : item.type === 'quiz' ? <ClipboardList className="w-5 h-5" /> : item.type === 'homework' ? <FileText className="w-5 h-5" /> : <PenTool className="w-5 h-5" />}
+                                                {item.type === 'exam' ? <FileText className="w-5 h-5" /> : item.type === 'quiz' ? <ClipboardList className="w-5 h-5" /> : item.type === 'homework' ? <FileText className="w-5 h-5" /> : <PenLine className="w-5 h-5" />}
                                             </div>
                                             <div>
                                                 <h3 className="font-bold text-slate-800">{item.title}</h3>

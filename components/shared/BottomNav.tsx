@@ -41,7 +41,7 @@ export function BottomNav() {
             { href: "/parent", label: "Tổng quan", icon: Home },
             { href: "/parent/schedule", label: "Lịch học", icon: Calendar },
             { href: "/parent/progress", label: "Điểm số", icon: BarChart },
-            { href: "/parent/absence-request", label: "Xin nghỉ", icon: FileCheck },
+            { href: "/parent/surveys", label: "Khảo sát", icon: ClipboardList },
         ];
     } else if (role === "teacher") {
         navItems = [

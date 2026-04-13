@@ -240,6 +240,12 @@ export async function fetchStudentAssignments() {
             .eq("student_id", user.id)
             .in("item_id", itemIds);
 
+        const { data: quizAttempts } = await adminSupabase
+            .from("quiz_attempts")
+            .select("item_id, score, submitted_at")
+            .eq("student_id", user.id)
+            .in("item_id", itemIds);
+
         const examIds = exams?.map(e => e.id) || [];
         const { data: examSubmissions } = await adminSupabase
             .from("exam_submissions")
@@ -263,8 +269,23 @@ export async function fetchStudentAssignments() {
         // Trộn dữ liệu course_items
         const enrichedAssignments = assignments?.map(assignment => {
             const classInfo = enrollments.find(e => e.class_id === assignment.class_id)?.class;
-            const prog = progress?.find(p => p.item_id === assignment.id);
+            let prog = progress?.find(p => p.item_id === assignment.id) || null;
             const content = Array.isArray(assignment.contents) ? assignment.contents[0] : assignment.contents;
+
+            // Nếu là bài quiz mà đã có quiz_attempts, coi như completed dù bảng student_progress chưa update
+            if (assignment.type === 'quiz') {
+                const qAttempt = quizAttempts?.find(q => q.item_id === assignment.id);
+                if (qAttempt && (!prog || prog.status !== 'completed')) {
+                    prog = {
+                        item_id: assignment.id,
+                        ...prog,
+                        status: 'completed',
+                        score: qAttempt.score,
+                        completed_at: qAttempt.submitted_at,
+                        attempts: (prog?.attempts || 0) > 0 ? prog?.attempts : 1
+                    };
+                }
+            }
 
             return {
                 id: assignment.id,
@@ -536,11 +557,51 @@ export async function fetchSuggestedLessons() {
             }
         }
 
-        // Ưu tiên sắp xếp theo Hạn chót (nếu có), sau đó là bài học lộ trình
+        // 6. Thêm bài kiểm tra (Exams) chưa làm
+        const { data: exams } = await adminSupabase
+            .from("exams")
+            .select("id, class_id, title, due_date")
+            .in("class_id", classIds)
+            .eq("is_published", true);
+
+        const { data: examSubmissions } = await adminSupabase
+            .from("exam_submissions")
+            .select("exam_id")
+            .eq("student_id", user.id);
+
+        const examSubmittedIds = new Set(examSubmissions?.map(s => s.exam_id) || []);
+
+        if (exams) {
+            for (const ex of exams) {
+                // Chỉ gợi ý nếu chưa làm
+                if (!examSubmittedIds.has(ex.id)) {
+                    const enrollment = enrollments.find(e => e.class_id === ex.class_id);
+                    if (enrollment) {
+                        const classInfo = enrollment.class as any;
+                        suggestions.push({
+                            classId: ex.class_id,
+                            className: classInfo?.name || "Lớp học",
+                            courseName: classInfo?.course?.name || "Khóa học",
+                            nextItem: { id: ex.id, title: ex.title, type: "quiz" }, // Dùng "quiz" để có màu purple
+                            type: "exam",
+                            dueDate: ex.due_date || null,
+                            progressPercent: 0
+                        });
+                    }
+                }
+            }
+        }
+
+        // Ưu tiên sắp xếp: 1. Có hạn chót (gần nhất lên trước), 2. Homework/Exams không có hạn chót, 3. Bài học lộ trình
         suggestions.sort((a, b) => {
             if (a.dueDate && b.dueDate) return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
             if (a.dueDate) return -1;
             if (b.dueDate) return 1;
+            // Cả hai đều không có hạn chót
+            const isTaskA = a.type === 'homework' || a.type === 'exam';
+            const isTaskB = b.type === 'homework' || b.type === 'exam';
+            if (isTaskA && !isTaskB) return -1;
+            if (!isTaskA && isTaskB) return 1;
             return 0;
         });
 

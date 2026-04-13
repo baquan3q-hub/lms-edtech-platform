@@ -679,9 +679,20 @@ export async function fetchParentDashboardData(studentId: string) {
                 .select("id, title, content, created_at, class_id, file_url, video_url, link_url, quiz_data, quiz_id, attachments")
                 .in("class_id", classIds)
                 .order("created_at", { ascending: false })
-                .limit(10);
+                .limit(5);
             announcements = data || [];
         }
+
+        // 5.1 Thông báo hệ thống/khảo sát cho parent
+        let recentNotifications: any[] = [];
+        const { data: notifs } = await supabase
+            .from("notifications")
+            .select("*")
+            .eq("user_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(5);
+        recentNotifications = notifs || [];
+
 
         // 6. Tính điểm trung bình và thống kê bài tập
         const { data: quizAttempts } = await supabase
@@ -754,6 +765,7 @@ export async function fetchParentDashboardData(studentId: string) {
                 attendanceSummary: { total: totalAttendance, present: presentDays },
                 recentExams,
                 announcements,
+                recentNotifications,
                 upcomingSessions,
                 upcomingSchedules,
                 stats: {
@@ -797,9 +809,10 @@ export async function fetchParentNotifications(
 
         // Get student's class IDs
         const { data: enrollments } = await adminSupabase
-            .from("class_students")
+            .from("enrollments")
             .select("class_id")
-            .eq("student_id", studentId);
+            .eq("student_id", studentId)
+            .eq("status", "active");
         const classIds = (enrollments || []).map((e: any) => e.class_id);
 
         let notifications: any[] = [];

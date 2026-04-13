@@ -207,6 +207,12 @@ export default async function ClassDetailPage({
                         </div>
 
                         <div className="flex items-center gap-3 ml-auto pr-2">
+                            <Link href={`/teacher/classes/${id}?tab=announcements_feedback`}>
+                                <Button size="sm" variant="ghost" className="h-9 px-4 rounded-xl text-slate-600 hover:text-violet-600 hover:bg-violet-50 font-bold text-xs transition-all">
+                                    <Bell className="w-4 h-4 mr-2" />
+                                    Thông báo & Feedback
+                                </Button>
+                            </Link>
                             <Link href={`/teacher/classes/${id}/points`}>
                                 <Button size="sm" variant="ghost" className="h-9 px-4 rounded-xl text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 font-bold text-xs transition-all">
                                     <ClipboardList className="w-4 h-4 mr-2" />
@@ -248,9 +254,6 @@ export default async function ClassDetailPage({
                     </TabsTrigger>
                     <TabsTrigger value="progress" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
                         <BarChart3 className="w-4 h-4 mr-2" /> Tiến độ
-                    </TabsTrigger>
-                    <TabsTrigger value="announcements_feedback" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
-                        <Bell className="w-4 h-4 mr-2" /> Thông báo & Feedback
                     </TabsTrigger>
                 </TabsList>
 

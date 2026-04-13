@@ -46,6 +46,8 @@ export async function submitUserFeedback({
                 title,
                 content,
                 status: "pending",
+                target_teacher_id: targetTeacherId || null,
+                class_id: classId || null,
             });
 
         if (error) return { error: error.message };
@@ -173,3 +175,93 @@ export async function updateFeedbackStatus(
         return { error: err.message };
     }
 }
+
+// ============================================================
+// Teacher: Lấy danh sách phản hồi gửi đến mình
+// ============================================================
+export async function fetchTeacherFeedback(options: {
+    status?: string;
+    type?: string;
+} = {}) {
+    try {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { data: null, error: "Chưa đăng nhập" };
+
+        const adminSupabase = createAdminClient();
+
+        let query = adminSupabase
+            .from("user_feedback")
+            .select("*, user:users!user_feedback_user_id_fkey(full_name, email, avatar_url)")
+            .eq("target_teacher_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(100);
+
+        if (options.status && options.status !== "all") query = query.eq("status", options.status);
+        if (options.type && options.type !== "all") query = query.eq("type", options.type);
+
+        const { data, error } = await query;
+        if (error) return { data: null, error: error.message };
+
+        return { data: { items: data || [], total: data?.length || 0 }, error: null };
+    } catch (err: any) {
+        return { data: null, error: err.message };
+    }
+}
+
+// ============================================================
+// Teacher: Trả lời phản hồi
+// ============================================================
+export async function replyToFeedback(feedbackId: string, reply: string) {
+    try {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { error: "Chưa đăng nhập" };
+
+        const adminSupabase = createAdminClient();
+
+        const { data: userData } = await adminSupabase
+            .from("users")
+            .select("role, full_name")
+            .eq("id", user.id)
+            .single();
+
+        if (!userData || !["admin", "teacher"].includes(userData.role)) {
+            return { error: "Không có quyền" };
+        }
+
+        const { data: fb } = await adminSupabase
+            .from("user_feedback")
+            .select("user_id")
+            .eq("id", feedbackId)
+            .single();
+
+        const { error } = await adminSupabase
+            .from("user_feedback")
+            .update({
+                admin_reply: reply,
+                status: "resolved",
+                resolved_at: new Date().toISOString(),
+            })
+            .eq("id", feedbackId);
+
+        if (error) return { error: error.message };
+
+        // Gửi notification cho người gửi phản hồi
+        if (fb?.user_id) {
+            await adminSupabase.from("notifications").insert({
+                user_id: fb.user_id,
+                title: `✅ Phản hồi đã được trả lời`,
+                message: `${userData.full_name} đã trả lời: "${reply.substring(0, 100)}"`,
+                type: "feedback_reply",
+                is_read: false,
+            });
+        }
+
+        revalidatePath("/teacher/feedback");
+        return { error: null };
+    } catch (err: any) {
+        return { error: err.message };
+    }
+}
+
