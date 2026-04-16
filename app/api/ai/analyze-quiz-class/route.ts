@@ -100,7 +100,19 @@ export async function POST(req: NextRequest) {
             else scoreDistribution['9-10']++;
         });
 
-        // BƯỚC 4 — Gọi Gemini phân tích
+        // BƯỚC 4 — Kiểm tra Cache (lưu trữ) để tránh tốn Token AI
+        const { data: existingAnalysis } = await adminSupabase
+            .from("quiz_class_analysis")
+            .select("*")
+            .eq("exam_id", examId)
+            .single();
+
+        // Nếu đã có bản phân tích và số lượng bài nộp không đổi, trả về luôn (tiết kiệm Token)
+        if (existingAnalysis && existingAnalysis.total_submissions === subs.length && existingAnalysis.ai_summary && !existingAnalysis.ai_summary.includes('Không thể phân tích')) {
+            console.log("Returning cached analysis for exam:", examId);
+            return NextResponse.json({ data: existingAnalysis, error: null });
+        }
+
         const prompt = `
 Bạn là chuyên gia phân tích giáo dục.
 Phân tích kết quả bài kiểm tra sau và trả về JSON thuần túy (KHÔNG dùng markdown code block).
@@ -144,25 +156,46 @@ Trả về JSON thuần túy với cấu trúc:
         const model = getGeminiModel("gemini-2.5-flash");
         let aiResult: any = null;
 
-        // Retry logic
-        for (let attempt = 0; attempt < 3; attempt++) {
+        // Xử lý Gọi AI có Retry khi Quá tải 429 / 503
+        for (let attempt = 0; attempt < 4; attempt++) {
             try {
                 const result = await model.generateContent(prompt);
-                const text = result.response.text().replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+                let text = result.response.text();
+                
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    text = jsonMatch[0];
+                } else {
+                    text = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+                }
+                
                 aiResult = JSON.parse(text);
                 break;
-            } catch (parseErr) {
-                if (attempt === 2) {
-                    console.error("Failed to parse Gemini response after 3 attempts");
+            } catch (err: any) {
+                const isOverloaded = err.status === 429 || err.status === 503 || err.message?.includes("429") || err.message?.includes("503");
+                
+                if (isOverloaded) {
+                    if (attempt < 3) {
+                        const waitTime = Math.pow(2, attempt) * 2000 + 1000;
+                        console.log(`Gemini Rate Limit hit. Retrying in ${waitTime}ms...`);
+                        await new Promise(r => setTimeout(r, waitTime));
+                        continue;
+                    } else {
+                        return NextResponse.json({ error: "AI hiện đang vượt quá hạn mức sử dụng miễn phí hoặc quá tải. Vui lòng thử lại sau 1-2 phút." }, { status: 429 });
+                    }
+                }
+                
+                if (attempt === 3) {
+                    console.error("Failed to parse Gemini response after attempts", err.message);
                     aiResult = {
-                        ai_summary: "Không thể phân tích tự động. Vui lòng thử lại.",
+                        ai_summary: "Không thể phân tích tự động do phản hồi từ AI không đúng cấu trúc. Vui lòng thử lại.",
                         strengths: [],
                         weaknesses: [],
                         knowledge_gaps: [],
                         teaching_suggestions: []
                     };
                 }
-                await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+                await new Promise(r => setTimeout(r, 1000));
             }
         }
 

@@ -14,7 +14,8 @@ import {
     PanelLeftOpen,
     FileBarChart,
     Bell,
-    MessageSquareMore
+    MessageSquareMore,
+    Activity
 } from "lucide-react";
 import UserAvatarMenu from "@/components/shared/UserAvatarMenu";
 
@@ -22,12 +23,13 @@ const menuGroups = [
     {
         name: "Học Thuật",
         items: [
-            { icon: LayoutDashboard, label: "Dashboard", href: "/teacher" },
-            { icon: BookOpen, label: "Lớp học của tôi", href: "/teacher/classes" },
+            { icon: LayoutDashboard, label: "Tổng quan", href: "/teacher" },
+            { icon: BookOpen, label: "Quản lý lớp học", href: "/teacher/classes" },
             { icon: CalendarDays, label: "Lịch dạy", href: "/teacher/schedule" },
             { icon: Users, label: "Quản lý Học viên", href: "/teacher/students" },
             { icon: FileSignature, label: "Ngân hàng Tài liệu", href: "/teacher/lessons" },
             { icon: FileBarChart, label: "Báo cáo & Nhận xét", href: "/teacher/reports" },
+            { icon: Activity, label: "Hành vi Học tập", href: "/teacher/behavior" },
         ]
     },
     {

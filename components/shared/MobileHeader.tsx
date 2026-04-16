@@ -41,7 +41,7 @@ export function MobileHeader() {
     const pageTitle = getPageTitle(pathname || "");
 
     return (
-        <div className="lg:hidden sticky top-0 z-40 flex h-16 items-center justify-between border-b bg-background px-4">
+        <div className="lg:hidden sticky top-0 z-40 flex h-16 items-center justify-between border-b border-slate-100 bg-white/80 backdrop-blur-lg px-4">
             <div className="flex items-center gap-3">
                 <Sheet>
                     <SheetTrigger asChild>

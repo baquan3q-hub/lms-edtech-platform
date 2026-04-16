@@ -500,12 +500,12 @@ export default function AdminAnnouncementsClient() {
                                             <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[9px]" variant="outline">
                                                 {scopeMeta.label}
                                             </Badge>
-                                            {ann.course && (
+                                            {ann.course && ann.scope !== "system" && (
                                                 <Badge className="bg-purple-50 text-purple-600 border-purple-200 text-[9px]" variant="outline">
                                                     📚 {(ann.course as any).name}
                                                 </Badge>
                                             )}
-                                            {ann.class && (
+                                            {ann.class && ann.scope === "class" && (
                                                 <Badge className="bg-blue-50 text-blue-600 border-blue-200 text-[9px]" variant="outline">
                                                     🏫 {(ann.class as any).name}
                                                 </Badge>

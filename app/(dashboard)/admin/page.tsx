@@ -12,6 +12,8 @@ import { AdminAnalyticsCharts } from "./AdminAnalyticsCharts";
 import { AdminTimeFilter } from "./AdminTimeFilter";
 import { AdminRevenueChart } from "./AdminRevenueChart";
 import { AdminAiInsights } from "./AdminAiInsights";
+import { fetchSystemBehaviorAnalytics } from "@/lib/actions/behavior-analysis";
+import BehaviorAnalyticsWidget from "@/components/admin/BehaviorAnalyticsWidget";
 
 export const revalidate = 0; // Đảm bảo luôn fetch data mới (Realtime)
 
@@ -37,12 +39,13 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
     ]);
 
     // Fetch dữ liệu cho Charts (Có tính timeRange filter)
-    const [attendanceData, gradesData, submissionData, activeUsersToday, revenueData] = await Promise.all([
+    const [attendanceData, gradesData, submissionData, activeUsersToday, revenueData, behaviorAnalytics] = await Promise.all([
         fetchDailyAttendanceData(range),
         fetchGradesDistribution(range),
         fetchSubmissionStatus(range),
         fetchDailyActiveUsers(),
-        fetchMonthlyRevenueData()
+        fetchMonthlyRevenueData(),
+        fetchSystemBehaviorAnalytics()
     ]);
 
     const stats = [
@@ -148,12 +151,16 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
                 </div>
             </div>
 
-            {/* 4. AI Advisor Insight (Cuối cùng) */}
+            {/* 4. AI Advisor Insight */}
             <AdminAiInsights 
                 attendanceData={attendanceData} 
                 gradesData={gradesData} 
                 submissionData={submissionData} 
             />
+
+            {/* 5. Giám sát Hành vi Học sinh (Đã được chuyển hướng sang phục vụ Exams) */}
+            <h2 className="text-xl font-bold text-gray-900 tracking-tight mt-10 mb-4">Tổng quan Hành vi Học tập (AI Tracking)</h2>
+            <BehaviorAnalyticsWidget data={behaviorAnalytics} />
             
         </div>
     );

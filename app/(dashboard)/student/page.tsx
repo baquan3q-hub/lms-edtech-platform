@@ -17,15 +17,16 @@ import {
     Bell,
     Star
 } from "lucide-react";
-import { DotLottieReact } from '@lottiefiles/dotlottie-react';
+import LottieAnimation from "@/components/shared/LottieAnimation";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchStudentEnrolledClasses, fetchStudentDashboardStats, fetchSuggestedLessons, fetchStudentAnnouncements } from "@/lib/actions/student";
 import { getOwnStudentSchedule } from "@/lib/actions/schedule";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
-import { vi } from "date-fns/locale";
 import UpcomingSessionsWidget from "@/components/shared/UpcomingSessionsWidget";
 import FeedbackSuggestionCard from "@/components/student/FeedbackSuggestionCard";
+import ExpandableContentClient from "@/components/shared/ExpandableContentClient";
 
 // Color scheme cho các loại bài
 const typeMeta: Record<string, { icon: any; label: string; color: string; bg: string }> = {
@@ -89,11 +90,11 @@ export default async function StudentDashboardPage() {
     ];
 
     return (
-        <div className="space-y-10 pb-8 animate-in fade-in slide-in-from-bottom-4 duration-500 max-w-6xl mx-auto">
+        <div className="space-y-8 pb-24 sm:pb-8 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-6xl mx-auto px-4 sm:px-0">
             {/* ===== HERO: COLORFUL & YOUTHFUL ===== */}
-            <div className="bg-gradient-to-r from-sky-400 via-blue-400 to-indigo-400 rounded-[2rem] p-8 sm:p-10 shadow-xl shadow-blue-500/30 relative overflow-hidden text-white flex flex-col md:flex-row md:items-center justify-between gap-8 border-[6px] border-white/30">
+            <div className="hidden md:flex bg-gradient-to-r from-sky-400 via-blue-400 to-indigo-400 rounded-3xl sm:rounded-[2rem] p-6 sm:p-10 shadow-xl shadow-blue-500/30 relative overflow-hidden text-white flex-col md:flex-row md:items-center justify-between gap-8 border-4 sm:border-[6px] border-white/30">
                 <div className="absolute -top-10 -right-10 w-64 h-64 md:w-96 md:h-96 opacity-90 pointer-events-none md:translate-x-10 md:-translate-y-10">
-                    <DotLottieReact
+                    <LottieAnimation
                         src="https://assets3.lottiefiles.com/packages/lf20_w51pcehl.json"
                         loop
                         autoplay
@@ -113,196 +114,151 @@ export default async function StudentDashboardPage() {
                 </div>
             </div>
 
-            {/* ===== Thống kê (4 cards) ===== */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            {/* QUICK STATS - AUTO LAYOUT GRID */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 {dynamicStats.map((stat, idx) => {
                     const Icon = stat.icon;
                     return (
-                        <div key={idx} className={`${stat.bg} ${stat.border} border-2 rounded-2xl p-5 shadow-sm hover:shadow-md hover:-translate-y-1 transition-all duration-300 flex flex-col sm:flex-row items-start sm:items-center gap-4`}>
-                            <div className={`w-12 h-12 rounded-xl bg-white flex items-center justify-center shrink-0 shadow-sm ${stat.color}`}>
-                                <Icon className="w-6 h-6" />
+                        <div key={idx} className={`relative overflow-hidden group ${stat.bg} ${stat.border} border-2 rounded-3xl p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col gap-3`}>
+                            <div className={`w-12 h-12 rounded-2xl bg-white flex items-center justify-center shrink-0 shadow-sm ${stat.color} group-hover:scale-110 transition-transform`}>
+                                <Icon className="w-6 h-6" strokeWidth={2.5} />
                             </div>
                             <div>
-                                <p className="text-[10px] sm:text-xs font-bold text-slate-500 uppercase mb-0.5 tracking-wider">{stat.title}</p>
-                                <p className={`text-2xl sm:text-3xl font-black ${stat.color}`}>{stat.value}</p>
+                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-0.5 opacity-80">{stat.title}</p>
+                                <p className={`text-2xl sm:text-3xl font-black ${stat.color} tracking-tight`}>{stat.value}</p>
                             </div>
                         </div>
                     );
                 })}
             </div>
 
-            {/* ===== GỢI Ý HỌC TẬP (Hiển thị tới 4 thẻ) ===== */}
-            <div>
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-slate-900">Gợi ý học tập & Tác vụ cần làm</h3>
-                </div>
-                {suggestions && suggestions.length > 0 ? (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {suggestions.slice(0, 4).map((s: any, idx: number) => {
-                            const isHomework = s.type === "homework";
-                            const isExam = s.type === "exam";
-                            
-                            const linkHref = isHomework 
-                                ? `/student/classes/${s.classId}/homework/${s.nextItem.id}` 
-                                : isExam 
-                                    ? `/student/classes/${s.classId}/exams/${s.nextItem.id}` 
-                                    : `/student/classes/${s.classId}/learn/${s.nextItem.id}`;
-                            
-                            const isQuiz = s.nextItem.type === "quiz" || isExam;
-                            const accentColor = isHomework ? "rose" : isExam ? "purple" : isQuiz ? "violet" : "indigo";
-                            return (
-                                <Link href={linkHref} key={`${s.classId}-${s.nextItem.id}-${idx}`} className="block">
-                                    <div className={`bg-gradient-to-br from-${accentColor}-50 to-white rounded-2xl border-2 border-${accentColor}-100 p-5 hover:border-${accentColor}-400 transition-all duration-300 group h-full flex flex-col justify-between shadow-sm hover:shadow-${accentColor}-500/20 hover:-translate-y-1`}>
-                                        <div>
-                                            <div className="flex items-center justify-between mb-3">
-                                                <span className={`text-[10px] font-bold text-${accentColor}-500 uppercase tracking-wider`}>{s.courseName}</span>
-                                                {(isHomework || isExam) && s.dueDate && (
-                                                    <span className="text-[10px] font-medium text-slate-500">Hạn: {new Date(s.dueDate).toLocaleDateString('vi-VN')}</span>
-                                                )}
-                                                {!(isHomework || isExam) && (
-                                                    <span className={`text-[10px] font-medium text-${accentColor}-600 bg-${accentColor}-100/50 px-2 py-0.5 rounded-full`}>{s.progressPercent}% hoàn thành</span>
-                                                )}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
+                {/* LEFT COLUMN - LEARNING PATH (Focus area) */}
+                <div className="lg:col-span-8 space-y-10">
+                    {/* GỢI Ý HỌC TẬP */}
+                    <div className="space-y-6">
+                        <div className="flex items-center justify-between px-1">
+                            <h3 className="text-2xl font-black text-slate-900 flex items-center gap-3">
+                                <Zap className="w-6 h-6 text-amber-500 fill-amber-500" />
+                                Đề xuất cho bạn
+                            </h3>
+                        </div>
+                        
+                        {suggestions && suggestions.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                {suggestions.slice(0, 4).map((s: any, idx: number) => {
+                                    const isHomework = s.type === "homework";
+                                    const isExam = s.type === "exam";
+                                    const accentColor = isHomework ? "rose" : isExam ? "purple" : "blue";
+                                    
+                                    return (
+                                        <Link 
+                                            href={isHomework ? `/student/classes/${s.classId}/homework/${s.nextItem.id}` : isExam ? `/student/classes/${s.classId}/exams/${s.nextItem.id}` : `/student/classes/${s.classId}/learn/${s.nextItem.id}`} 
+                                            key={idx} 
+                                            className="block group"
+                                        >
+                                            <div className="h-full bg-white rounded-3xl border-2 border-slate-100 p-6 hover:border-blue-500 hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-300 flex flex-col justify-between">
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <Badge variant="secondary" className={`bg-${accentColor}-50 text-${accentColor}-600 border-none font-bold text-[10px] uppercase px-3 py-1 ring-1 ring-${accentColor}-100`}>
+                                                            {s.courseName}
+                                                        </Badge>
+                                                        {s.dueDate && (
+                                                            <div className="flex items-center gap-1.5 text-slate-400">
+                                                                <Clock className="w-3.5 h-3.5" />
+                                                                <span className="text-[11px] font-bold">{new Date(s.dueDate).toLocaleDateString('vi-VN')}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <h4 className="text-lg font-black text-slate-900 group-hover:text-blue-600 transition-colors leading-tight line-clamp-2">
+                                                        {s.nextItem.title}
+                                                    </h4>
+                                                </div>
+                                                <div className="mt-6 pt-6 border-t border-slate-50 flex items-center justify-between">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`w-8 h-8 rounded-lg bg-${accentColor}-50 flex items-center justify-center`}>
+                                                            <PlayCircle className={`w-4 h-4 text-${accentColor}-500`} />
+                                                        </div>
+                                                        <span className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                                            {isHomework ? "Bài tập" : isExam ? "Kiểm tra" : "Bài học"}
+                                                        </span>
+                                                    </div>
+                                                    <ArrowRight className="w-5 h-5 text-slate-300 group-hover:text-blue-500 group-hover:translate-x-1 transition-all" />
+                                                </div>
                                             </div>
-                                            <h4 className={`text-base font-bold text-slate-900 line-clamp-2 min-h-[2.5rem] group-hover:text-${accentColor}-600 transition-colors`}>
-                                                {s.nextItem.title}
-                                            </h4>
+                                        </Link>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="bg-slate-50 rounded-[2rem] border-2 border-dashed border-slate-200 p-12 text-center">
+                                <p className="text-slate-400 font-bold">Mọi thứ đã hoàn thành! Hãy nghỉ ngơi nhé.</p>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* AI FEEDBACK SECTION */}
+                    <div className="px-1">
+                        <FeedbackSuggestionCard />
+                    </div>
+
+                    {/* MY CLASSES */}
+                    <div className="space-y-6">
+                        <div className="flex items-center justify-between px-1">
+                            <h3 className="text-2xl font-black text-slate-900">Lớp học của tôi</h3>
+                            <Link href="/student/classes">
+                                <Button variant="ghost" className="text-blue-600 font-bold gap-2">Tất cả <ArrowRight className="w-4 h-4" /></Button>
+                            </Link>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                            {myClasses?.slice(0, 4).map((enroll: any) => (
+                                <Link href={`/student/classes/${enroll.class.id}`} key={enroll.id} className="group">
+                                    <div className="bg-white rounded-3xl border-2 border-slate-100 p-2 shadow-sm group-hover:shadow-xl group-hover:border-blue-200 transition-all flex items-center gap-4">
+                                        <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shrink-0 shadow-lg group-hover:scale-95 transition-transform">
+                                            <BookOpen className="w-8 h-8" />
                                         </div>
-                                        <div className="mt-4 flex items-center justify-between">
-                                            <span className={`text-xs font-bold px-3 py-1.5 rounded-lg bg-${accentColor}-100 text-${accentColor}-700 border border-${accentColor}-200 shadow-sm`}>
-                                                {isHomework ? "Bài tập về nhà" : isExam ? "Bài kiểm tra" : "Bài học tiếp theo"}
-                                            </span>
-                                            <div className={`w-8 h-8 rounded-full bg-${accentColor}-100 flex items-center justify-center group-hover:bg-${accentColor}-500 transition-colors`}>
-                                                <ArrowRight className={`w-4 h-4 text-${accentColor}-500 group-hover:text-white transition-colors`} />
-                                            </div>
-                                        </div>
-                                    </div>
-                                </Link>
-                            );
-                        })}
-                    </div>
-                ) : (
-                    <div className="bg-white rounded-2xl border border-slate-200 p-6 text-center shadow-sm">
-                        <p className="text-slate-500 text-sm">Bạn chưa có bài học nào được gợi ý.</p>
-                    </div>
-                )}
-            </div>
-
-            {/* ===== LỊCH HỌC SẮP TỚI TÓM TẮT & TÀI LIỆU ===== */}
-            <div>
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-slate-900">Lịch học & Thông tin bài giảng</h3>
-                    <Link href="/student/schedule">
-                        <Button variant="link" className="text-slate-500 hover:text-slate-900 p-0 text-xs font-semibold">Xem toàn bộ lịch trình</Button>
-                    </Link>
-                </div>
-                {upcomingSessions && upcomingSessions.length > 0 ? (
-                    <UpcomingSessionsWidget sessions={upcomingSessions} limit={2} compact={false} />
-                ) : (
-                    <div className="bg-white rounded-2xl border border-slate-200 p-6 text-center shadow-sm">
-                        <p className="text-slate-500 text-sm">Bạn không có lịch học nào sắp tới.</p>
-                    </div>
-                )}
-            </div>
-
-            {/* ===== BÀI TẬP CẢI THIỆN AI ===== */}
-            <FeedbackSuggestionCard />
-
-            {/* ===== KHÓA HỌC & THÔNG BÁO ===== */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                {/* Thông báo */}
-                <div>
-                    <h3 className="text-lg font-bold text-slate-900 mb-4">Thông báo mới</h3>
-                    {announcements && announcements.length > 0 ? (
-                        <div className="space-y-3">
-                            {announcements.slice(0, 3).map((ann: any) => (
-                                <Link key={ann.id} href={`/student/announcements/${ann.id}`} className="block">
-                                    <div className="bg-gradient-to-br from-amber-50 to-white p-4 rounded-2xl border-2 border-amber-100 shadow-sm hover:border-amber-400 transition-all duration-300 hover:-translate-y-1 hover:shadow-amber-500/20 group">
-                                        <div className="flex items-start gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform">
-                                                <Bell className="w-4 h-4 text-amber-600" />
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-slate-900 text-sm mb-1 line-clamp-1 group-hover:text-amber-700 transition-colors">{ann.title}</h4>
-                                                <p className="text-xs text-slate-600 line-clamp-2">{ann.content}</p>
-                                                <p className="text-[10px] text-amber-600/80 mt-2 font-bold flex items-center gap-1">
-                                                    <span>{new Date(ann.created_at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</span>
-                                                    <span className="text-slate-300">•</span>
-                                                    <span className="text-amber-600 group-hover:underline">Nhấn để xem chi tiết</span>
-                                                </p>
-                                            </div>
+                                        <div className="flex-1 min-w-0 pr-3">
+                                            <h4 className="text-base font-black text-slate-900 truncate">{enroll.class.course?.name}</h4>
+                                            <p className="text-xs text-slate-500 font-bold uppercase tracking-widest mt-1">Lớp: {enroll.class.name}</p>
                                         </div>
                                     </div>
                                 </Link>
                             ))}
                         </div>
-                    ) : (
-                        <div className="bg-white rounded-2xl border border-slate-200 p-6 text-center shadow-sm">
-                            <p className="text-slate-500 text-sm">Không có thông báo mới.</p>
-                        </div>
-                    )}
+                    </div>
                 </div>
 
-                {/* Khóa học của tôi */}
-                <div>
-                    <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-bold text-slate-900">Khóa học của tôi</h3>
-                        <Link href="/student/classes">
-                            <Button variant="link" className="text-slate-500 hover:text-slate-900 p-0 text-xs font-semibold">Xem tất cả</Button>
-                        </Link>
-                    </div>
-                    <div className="space-y-3">
-                        {myClasses && myClasses.length > 0 ? (
-                            myClasses.slice(0, 3).map((enrollment: any) => {
-                                const cls = enrollment.class;
-                                const suggestion = suggestions?.find((s: any) => s.classId === cls.id);
-                                const progressPercent = suggestion?.progressPercent || 0;
-
-                                return (
-                                    <Link href={`/student/classes/${cls.id}`} key={enrollment.id} className="block">
-                                        <div className="bg-gradient-to-br from-blue-50/50 to-white rounded-[1.25rem] border-2 border-blue-100 p-3 shadow-sm hover:border-blue-400 transition-all duration-300 group flex flex-col sm:flex-row items-center gap-4 hover:-translate-y-1 hover:shadow-blue-500/20">
-                                            {/* Khối hình vuông làm Thumbnail */}
-                                            <div className="w-full sm:w-24 h-24 rounded-[1rem] bg-gradient-to-br from-blue-500 to-indigo-600 flex flex-col items-center justify-center shrink-0 shadow-inner shadow-indigo-900/20 relative overflow-hidden group-hover:scale-[1.03] transition-transform duration-500">
-                                                <div className="absolute inset-0 opacity-40 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-white to-transparent"></div>
-                                                <BookOpen className="w-8 h-8 text-white mb-1.5 drop-shadow-md" />
-                                                <span className="text-[10px] font-black text-blue-100 uppercase tracking-widest drop-shadow-sm">KHÓA HỌC</span>
-                                            </div>
-
-                                            {/* Thông tin chi tiết bên ngoài */}
-                                            <div className="flex-1 w-full py-1 pr-1">
-                                                <h4 className="text-sm font-bold text-slate-900 group-hover:text-blue-700 transition-colors line-clamp-2 mb-1.5 leading-snug">
-                                                    {cls.course?.name || "Tên khóa học"}
-                                                </h4>
-                                                
-                                                <div className="flex flex-wrap items-center gap-1.5 mb-3">
-                                                    <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md border border-blue-200">
-                                                        Lớp: {cls.name || "Ẩn danh"}
-                                                    </span>
-                                                    {cls.teacher?.full_name && (
-                                                        <span className="text-[10px] font-bold bg-purple-100 text-purple-700 px-2 py-0.5 rounded-md border border-purple-200">
-                                                            GV: {cls.teacher.full_name}
-                                                        </span>
-                                                    )}
-                                                </div>
-
-                                                <div className="flex items-center gap-3">
-                                                    <div className="flex-1 bg-blue-100/50 rounded-full h-2 overflow-hidden shadow-inner">
-                                                        <div
-                                                            className="bg-gradient-to-r from-blue-400 to-indigo-500 h-2 rounded-full transition-all duration-700"
-                                                            style={{ width: `${progressPercent}%` }}
-                                                        />
-                                                    </div>
-                                                    <span className="text-[10px] font-black text-indigo-600">{progressPercent}%</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </Link>
-                                );
-                            })
+                {/* RIGHT COLUMN - ACTIVITIES & UPDATES */}
+                <div className="lg:col-span-4 space-y-10">
+                    {/* UPCOMING SESSIONS */}
+                    <div className="space-y-6">
+                        <h3 className="text-xl font-black text-slate-900 px-1">Lịch học sắp tới</h3>
+                        {upcomingSessions && upcomingSessions.length > 0 ? (
+                            <UpcomingSessionsWidget sessions={upcomingSessions} limit={3} compact={true} />
                         ) : (
-                            <div className="bg-white rounded-2xl border border-slate-200 p-6 text-center shadow-sm">
-                                <p className="text-slate-500 text-sm">Bạn chưa ghi danh vào lớp học nào.</p>
+                            <div className="bg-white rounded-[2rem] border-2 border-slate-100 p-8 text-center">
+                                <CalendarDays className="w-10 h-10 text-slate-200 mx-auto mb-3" />
+                                <p className="text-xs text-slate-400 font-black uppercase tracking-widest">Không có lịch học</p>
                             </div>
                         )}
+                    </div>
+
+                    {/* ANNOUNCEMENTS */}
+                    <div className="space-y-6">
+                        <h3 className="text-xl font-black text-slate-900 px-1">Thông báo lớp học</h3>
+                        <div className="space-y-4">
+                            {announcements?.slice(0, 3).map((ann: any) => (
+                                <ExpandableContentClient
+                                    key={ann.id}
+                                    className="border-2 border-amber-100 bg-gradient-to-br from-amber-50 to-white rounded-[2rem] shadow-sm hover:shadow-amber-200 transition-shadow"
+                                    icon={<Bell className="w-5 h-5 text-amber-600" />}
+                                    title={ann.title}
+                                    content={ann.content}
+                                    detailUrl={`/student/announcements/${ann.id}`}
+                                    timestamp={new Date(ann.created_at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })}
+                                />
+                            ))}
+                        </div>
                     </div>
                 </div>
             </div>

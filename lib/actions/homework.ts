@@ -31,7 +31,7 @@ export async function createHomework(classId: string, data: {
                 questions: data.questions,
                 total_points: data.total_points,
                 due_date: data.due_date || null,
-                is_published: false,
+                is_published: (data as any).is_published ?? true,
                 created_by: user.id,
             })
             .select()
@@ -353,3 +353,4 @@ export async function submitHomework(homeworkId: string, answers: any[]) {
         return { error: error.message };
     }
 }
+

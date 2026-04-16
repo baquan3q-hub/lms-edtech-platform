@@ -22,6 +22,9 @@ import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
+import ExpandableContentClient from "@/components/shared/ExpandableContentClient";
+import ParentMobileDashboard from "@/components/parent/ParentMobileDashboard";
+import { InstallBanner } from "@/components/shared/InstallBanner";
 
 type StudentInfo = {
     id: string;
@@ -138,7 +141,18 @@ export default function ParentDashboardClient({ students }: { students: StudentI
     };
 
     return (
-        <div className="max-w-5xl mx-auto space-y-6 pb-12">
+        <div className="max-w-5xl mx-auto space-y-6 pb-12 px-4 sm:px-0">
+            {/* MOBILE VIEW (SIMPLIFIED) */}
+            <div className="sm:hidden">
+                <ParentMobileDashboard 
+                    dashboardData={dashboardData} 
+                    activeChildren={students} 
+                    stats={{ avgScore, attendanceRate }}
+                />
+            </div>
+
+            {/* DESKTOP VIEW (FULL) */}
+            <div className="hidden sm:block space-y-6">
             {/* Tabs chọn con */}
             {students.length > 1 && (
                 <div className="flex gap-3 overflow-x-auto pb-1">
@@ -473,28 +487,22 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                                 .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
                                 .slice(0, 5)
                                 .map((item: any) => (
-                                    <div 
-                                        key={`${item.source}-${item.id}`} 
-                                        onClick={() => { setSelectedNotification(item); setIsNotificationModalOpen(true); }}
-                                        className="p-4 bg-slate-50 rounded-xl border border-slate-100 hover:border-blue-200 transition-colors cursor-pointer group"
-                                    >
-                                        <div className="flex items-start justify-between">
-                                            <div className="flex-1">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                    {item.source === 'announcement' ? (
-                                                        <Badge className="bg-orange-100 text-orange-700 border-none text-[9px] font-semibold">📢 Lớp học</Badge>
-                                                    ) : (
-                                                        <Badge className="bg-blue-100 text-blue-700 border-none text-[9px] font-semibold">🔔 Hệ thống</Badge>
-                                                    )}
-                                                </div>
-                                                <p className="font-semibold text-slate-800 text-sm group-hover:text-blue-600 transition-colors">{item.title}</p>
-                                                <p className="text-xs text-slate-500 mt-1 line-clamp-2">{item.source === 'announcement' ? item.content : item.message}</p>
-                                            </div>
-                                            <span className="text-[10px] text-slate-400 shrink-0 ml-4">
-                                                {item.created_at ? new Date(item.created_at).toLocaleDateString("vi-VN") : ""}
-                                            </span>
-                                        </div>
-                                    </div>
+                                    <ExpandableContentClient
+                                        key={`${item.source}-${item.id}`}
+                                        className="border border-slate-100 bg-slate-50 hover:border-blue-200"
+                                        title={item.title}
+                                        content={item.source === 'announcement' ? item.content : item.message}
+                                        timestamp={item.created_at ? new Date(item.created_at).toLocaleDateString("vi-VN") : ""}
+                                        icon={item.source === 'announcement' ? <Bell className="w-5 h-5 text-orange-500" /> : <Bell className="w-5 h-5 text-blue-500" />}
+                                        headerAction={
+                                            item.source === 'announcement' ? (
+                                                <Badge className="bg-orange-100 text-orange-700 border-none text-[9px] font-semibold">📢 Lớp học</Badge>
+                                            ) : (
+                                                <Badge className="bg-blue-100 text-blue-700 border-none text-[9px] font-semibold">🔔 Hệ thống</Badge>
+                                            )
+                                        }
+                                        detailUrl={item.source === 'announcement' ? `/parent/announcements/${item.id}` : undefined}
+                                    />
                                 ))}
                             </div>
                         )}
@@ -518,19 +526,17 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                     </div>
                 </div>
             )}
+            </div>
             
-            {/* Modal hiển thị chi tiết Thông Báo */}
+            {/* Notification Detail Modal */}
             <Dialog open={isNotificationModalOpen} onOpenChange={setIsNotificationModalOpen}>
-                <DialogContent className="sm:max-w-xl p-0 overflow-hidden bg-white">
+                <DialogContent className="max-w-md p-0 overflow-hidden rounded-2xl border-none">
                     {selectedNotification && (
                         <>
-                            <DialogHeader className="p-5 border-b border-slate-100 bg-slate-50">
-                                <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                                    {selectedNotification.source === 'announcement' ? (
-                                        <><Bell className="w-5 h-5 text-orange-500" /> Chi tiết thông báo lớp học</>
-                                    ) : (
-                                        <><Bell className="w-5 h-5 text-blue-500" /> Chi tiết thông báo hệ thống</>
-                                    )}
+                            <DialogHeader className={`p-6 text-white ${selectedNotification.source === 'announcement' ? 'bg-gradient-to-r from-orange-500 to-amber-500' : 'bg-gradient-to-r from-blue-500 to-indigo-500'}`}>
+                                <DialogTitle className="flex items-center gap-3 text-xl font-black">
+                                    <Bell className="w-6 h-6" />
+                                    {selectedNotification.source === 'announcement' ? 'Chi tiết Thông báo' : 'Chi tiết Cảnh báo'}
                                 </DialogTitle>
                             </DialogHeader>
                             <div className="p-5 space-y-4">
@@ -554,6 +560,7 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                 </DialogContent>
             </Dialog>
 
+            <InstallBanner />
         </div>
     );
 }

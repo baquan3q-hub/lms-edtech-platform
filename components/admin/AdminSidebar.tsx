@@ -18,6 +18,7 @@ import {
     BarChart3,
     Bell,
     ClipboardList,
+    Activity
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -41,6 +42,7 @@ export const sidebarGroups = [
             { title: "Quản lý Điểm danh", href: "/admin/attendance", icon: ClipboardCheck },
             { title: "Quản lý Điểm số", href: "/admin/grades", icon: BarChart3 },
             { title: "Liên kết PH-HS", href: "/admin/students/link-parent", icon: Link2 },
+            { title: "Hành vi Học tập", href: "/admin/behavior", icon: Activity },
         ]
     },
     {

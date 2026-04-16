@@ -9,7 +9,9 @@ import {
     ClipboardList,
     Clock,
     AlertCircle,
-    Bell
+    Bell,
+    ShieldAlert,
+    ShieldCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
@@ -20,6 +22,9 @@ import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { vi } from "date-fns/locale";
 import StudentProgressAlerts from "./StudentProgressAlerts";
+import { fetchTeacherFeedback } from "@/lib/actions/feedback";
+import { fetchTeacherGeneralAnnouncements } from "@/lib/actions/announcement";
+import ExpandableContentClient from "@/components/shared/ExpandableContentClient";
 
 export default async function TeacherDashboardPage() {
     const supabase = await createClient();
@@ -31,12 +36,16 @@ export default async function TeacherDashboardPage() {
         { data: statsData },
         { data: classesData },
         { data: notifications },
-        tasksObj
+        tasksObj,
+        { data: feedbackData },
+        { data: sentAnnouncements }
     ] = await Promise.all([
         fetchTeacherStats(user.id),
         fetchTeacherClasses(user.id),
         fetchTeacherNotifications(user.id),
-        fetchTasksStatus(user.id)
+        fetchTasksStatus(user.id),
+        fetchTeacherFeedback({ status: "pending" }),
+        fetchTeacherGeneralAnnouncements()
     ]);
 
     const stats = [
@@ -209,33 +218,112 @@ export default async function TeacherDashboardPage() {
                     </div>
 
                     {/* KHỐI 2: Thông báo Dời vào đây */}
-                    <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2 mt-8">
-                        <AlertCircle className="w-5 h-5 text-slate-400" />
-                        Thông báo hệ thống
-                    </h3>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8">
+                        {/* Cột Hệ thống */}
+                        <div>
+                            <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2 mb-4">
+                                <AlertCircle className="w-5 h-5 text-slate-400" />
+                                Thông báo hệ thống
+                            </h3>
+
+                            <div className="bg-white rounded-3xl border border-slate-100 shadow-[0_2px_20px_rgb(0,0,0,0.02)] p-2 h-[350px] overflow-y-auto">
+                                <div className="flex flex-col">
+                                    {(!notifications || notifications.length === 0) ? (
+                                        <div className="p-8 text-center flex flex-col items-center">
+                                            <Bell className="w-8 h-8 text-slate-200 mb-2" />
+                                            <p className="text-sm font-medium text-slate-400">Bạn chưa có thông báo nào</p>
+                                        </div>
+                                    ) : (
+                                        notifications.map((noti: any) => (
+                                            <ExpandableContentClient
+                                                key={noti.id}
+                                                icon={<Bell className="w-5 h-5" />}
+                                                title={noti.title}
+                                                content={noti.content || noti.message}
+                                                isUnread={!noti.read}
+                                                detailUrl={noti.link}
+                                                timestamp={formatDistanceToNow(new Date(noti.created_at), { addSuffix: true, locale: vi })}
+                                            />
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Cột Thông báo chung */}
+                        <div>
+                            <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2 mb-4">
+                                <Bell className="w-5 h-5 text-amber-500" />
+                                Thông báo chung
+                            </h3>
+
+                            <div className="bg-white rounded-3xl border border-slate-100 shadow-[0_2px_20px_rgb(0,0,0,0.02)] p-4 h-[350px] overflow-y-auto">
+                                <div className="flex flex-col gap-3">
+                                    {(!sentAnnouncements || sentAnnouncements.length === 0) ? (
+                                        <div className="p-8 text-center flex flex-col items-center">
+                                            <Bell className="w-8 h-8 text-slate-200 mb-2" />
+                                            <p className="text-sm font-medium text-slate-400">Chưa có thông báo chung nào</p>
+                                        </div>
+                                    ) : (
+                                        sentAnnouncements.map((ann: any) => (
+                                            <ExpandableContentClient
+                                                key={ann.id}
+                                                className="border border-amber-100 bg-amber-50/30"
+                                                icon={<Bell className="w-5 h-5 text-amber-600" />}
+                                                title={ann.title}
+                                                content={ann.content}
+                                                detailUrl={`/teacher/announcements/${ann.id}`}
+                                                headerAction={
+                                                    <Badge variant="outline" className="text-[10px] bg-white border-amber-200 text-amber-600 px-1 py-0 shadow-sm">
+                                                        {ann.teacher?.full_name || "Hệ thống"}
+                                                    </Badge>
+                                                }
+                                                timestamp={formatDistanceToNow(new Date(ann.created_at), { addSuffix: true, locale: vi })}
+                                            />
+                                        ))
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* KHỐI 3: Ý kiến & Phản hồi (Mới thêm) */}
+                    <div className="flex items-center justify-between mt-8">
+                        <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                            <MessageSquare className="w-5 h-5 text-violet-400" />
+                            Phản hồi chờ xử lý
+                        </h3>
+                        <Link href="/teacher/feedback" className="text-sm font-medium text-violet-600 hover:text-violet-700 transition-colors">
+                            Xem tất cả
+                        </Link>
+                    </div>
 
                     <div className="bg-white rounded-3xl border border-slate-100 shadow-[0_2px_20px_rgb(0,0,0,0.02)] p-2">
                         <div className="flex flex-col">
-                            {(!notifications || notifications.length === 0) ? (
+                            {(!feedbackData?.items || feedbackData.items.length === 0) ? (
                                 <div className="p-8 text-center flex flex-col items-center">
-                                    <Bell className="w-8 h-8 text-slate-200 mb-2" />
-                                    <p className="text-sm font-medium text-slate-400">Bạn chưa có thông báo nào</p>
+                                    <MessageSquare className="w-8 h-8 text-slate-200 mb-2" />
+                                    <p className="text-sm font-medium text-slate-400">Không có phản hồi nào đang chờ xử lý</p>
                                 </div>
                             ) : (
-                                notifications.map((noti: any) => (
-                                    <div key={noti.id} className="p-4 hover:bg-slate-50 rounded-2xl transition-colors flex gap-4 cursor-pointer">
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${noti.read ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-500'}`}>
-                                            <Bell className="w-5 h-5" />
+                                feedbackData.items.slice(0, 3).map((fb: any) => {
+                                    const userInfo = Array.isArray(fb.user) ? fb.user[0] : fb.user;
+                                    return (
+                                        <div key={fb.id} className="p-4 hover:bg-slate-50 rounded-2xl transition-colors flex gap-4 cursor-pointer">
+                                            <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-amber-50 text-amber-500">
+                                                <MessageSquare className="w-5 h-5" />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-sm font-bold text-slate-900">{fb.title}</h4>
+                                                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{fb.content}</p>
+                                                <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-400">
+                                                    <span>👤 {userInfo?.full_name || "Ẩn danh"}</span>
+                                                    <span>📅 {formatDistanceToNow(new Date(fb.created_at), { addSuffix: true, locale: vi })}</span>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h4 className={`text-sm ${noti.read ? 'font-medium text-slate-600' : 'font-bold text-slate-900'}`}>{noti.title}</h4>
-                                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{noti.content || noti.message}</p>
-                                            <p className="text-xs font-medium text-slate-400 mt-1">
-                                                {formatDistanceToNow(new Date(noti.created_at), { addSuffix: true, locale: vi })}
-                                            </p>
-                                        </div>
-                                    </div>
-                                ))
+                                    );
+                                })
                             )}
                         </div>
                     </div>

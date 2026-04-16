@@ -151,10 +151,10 @@ export default function ExamEditorClient({
         });
 
         // If the current list only has 1 empty question, replace it. Otherwise append.
-        if (questions.length === 1 && !questions[0].question.trim() && questions[0].options.every(o => !o.text.trim())) {
-            setQuestions(distributePoints(formatted));
+        if (questions.length === 1 && !questions[0].question.trim() && (questions[0].options || []).every(o => !o.text.trim())) {
+            setQuestions(distributePoints(formatted as unknown as QuizQuestion[]));
         } else {
-            setQuestions(distributePoints([...questions, ...formatted]));
+            setQuestions(distributePoints([...questions, ...formatted] as unknown as QuizQuestion[]));
         }
     };
 

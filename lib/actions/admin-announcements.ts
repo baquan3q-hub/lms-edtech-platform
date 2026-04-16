@@ -46,15 +46,25 @@ export async function createAdminAnnouncement(data: {
             attachments: data.attachments || [],
             video_url: data.video_url || null,
             link_url: data.link_url || null,
-            target_roles: data.target_roles || ["student", "parent"],
+            target_roles: data.target_roles || ["student", "parent", "teacher", "admin"],
             is_pinned: data.is_pinned || false,
         };
 
         if (data.scope === "course" && data.courseId) {
             insertData.course_id = data.courseId;
-        }
-        if (data.scope === "class" && data.classId) {
+            // Workaround bypass class_id NOT NULL cho DB chưa được alter
+            const { data: firstClass } = await adminSupabase.from("classes").select("id").eq("course_id", data.courseId).limit(1).single();
+            if (firstClass) insertData.class_id = firstClass.id;
+        } else if (data.scope === "class" && data.classId) {
             insertData.class_id = data.classId;
+        } else if (data.scope === "system") {
+            // Workaround bypass class_id NOT NULL cho DB chưa được alter
+            const { data: anyClass } = await adminSupabase.from("classes").select("id").limit(1).single();
+            if (anyClass) insertData.class_id = anyClass.id;
+        }
+
+        if (!insertData.class_id) {
+            return { error: "Không tìm thấy Lớp học nào trong hệ thống để neo dữ liệu thông báo. Bạn cần tạo ít nhất 1 Lớp học mới có thể gửi thông báo." };
         }
 
         const { data: announcement, error } = await adminSupabase
@@ -63,7 +73,9 @@ export async function createAdminAnnouncement(data: {
             .select()
             .single();
 
-        if (error) return { error: error.message };
+        if (error) {
+            return { error: error.message };
+        }
 
         // Gửi notification tự động
         try {
@@ -83,7 +95,7 @@ export async function createAdminAnnouncement(data: {
 // ============================================================
 async function sendAdminNotifications(adminSupabase: any, data: any, announcementId: string) {
     const notifications: any[] = [];
-    const targetRoles = data.target_roles || ["student", "parent"];
+    const targetRoles = data.target_roles || ["student", "parent", "teacher", "admin"];
 
     if (data.scope === "system") {
         // Gửi cho tất cả users có role phù hợp
@@ -99,7 +111,7 @@ async function sendAdminNotifications(adminSupabase: any, data: any, announcemen
                 title: `📢 ${data.title}`,
                 message: data.content?.substring(0, 150) || "Có thông báo mới từ Ban quản lý",
                 type: "announcement",
-                link: `/${rolePath}/announcements`,
+                link: `/${rolePath}/announcements/${announcementId}`,
                 metadata: { announcementId, scope: "system" },
                 is_read: false,
             });
@@ -157,7 +169,7 @@ async function buildClassNotifications(
                 title: `📢 ${data.title}`,
                 message: data.content?.substring(0, 150) || "Có thông báo mới",
                 type: "announcement",
-                link: `/student/announcements`,
+                link: `/student/announcements/${announcementId}`,
                 metadata: { announcementId, scope: data.scope },
                 is_read: false,
             });
@@ -185,7 +197,7 @@ async function buildClassNotifications(
                     title: `📢 ${data.title}`,
                     message: data.content?.substring(0, 150) || "Có thông báo mới từ nhà trường",
                     type: "announcement",
-                    link: `/parent/announcements`,
+                    link: `/parent/announcements/${announcementId}`,
                     metadata: { announcementId, scope: data.scope },
                     is_read: false,
                 });
@@ -206,7 +218,7 @@ async function buildClassNotifications(
                 title: `📢 ${data.title}`,
                 message: data.content?.substring(0, 150) || "Có thông báo mới",
                 type: "announcement",
-                link: `/teacher/announcements`,
+                link: `/teacher/announcements/${announcementId}`,
                 metadata: { announcementId, scope: data.scope },
                 is_read: false,
             });

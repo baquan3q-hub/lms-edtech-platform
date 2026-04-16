@@ -6,6 +6,7 @@ import { CheckSquare, CheckCircle, XCircle, Clock, Trophy, RotateCcw } from "luc
 import { Button } from "@/components/ui/button";
 import { getQuizQuestions, submitQuiz } from "../../actions";
 import { toast } from "sonner";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 export default function QuizViewerClient({
     classId,
@@ -32,6 +33,14 @@ export default function QuizViewerClient({
     // Past result state
     const [showPastResult, setShowPastResult] = useState(!!progress && progress.status === 'completed');
 
+    // === Activity Tracker: Theo dõi hành vi học sinh ===
+    const tracker = useActivityTracker({
+        contextType: "quiz",
+        contextId: itemId,
+        classId,
+        enabled: !showPastResult && !result,
+    });
+
     const maxPossibleScore = questions.reduce((acc, q) => acc + (q.points || 1), 0);
 
     useEffect(() => {
@@ -49,6 +58,9 @@ export default function QuizViewerClient({
     }, [itemId]);
 
     const handleAnswerChange = (questionId: string, optionId: string) => {
+        // Track câu trả lời cho behavior analysis
+        const qIdx = questions.findIndex(q => q.id === questionId);
+        if (qIdx >= 0) tracker.trackQuestionAnswer(qIdx);
         // Single choice (radio)
         setAnswers(prev => ({ ...prev, [questionId]: [optionId] }));
     };
@@ -74,6 +86,17 @@ export default function QuizViewerClient({
                 passed: res.passed as boolean,
                 maxPossibleScore: res.maxPossibleScore as number
             });
+
+            // Trigger AI behavior analysis sau khi nộp quiz
+            // PHẢI await trackSubmission để logs được ghi vào DB trước khi AI đọc
+            await tracker.trackSubmission({ score: res.score });
+            try {
+                fetch("/api/ai/behavior-analysis", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ classId, contextType: "quiz", contextId: itemId }),
+                });
+            } catch (e) { /* fire-and-forget */ }
         }
     };
 

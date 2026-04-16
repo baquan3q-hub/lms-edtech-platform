@@ -671,17 +671,19 @@ export async function fetchParentDashboardData(studentId: string) {
             }));
         }
 
-        // 5. Thông báo/announcements từ các lớp
         let announcements: any[] = [];
+        let queryStr = "scope.eq.system";
         if (classIds.length > 0) {
-            const { data } = await supabase
-                .from("announcements")
-                .select("id, title, content, created_at, class_id, file_url, video_url, link_url, quiz_data, quiz_id, attachments")
-                .in("class_id", classIds)
-                .order("created_at", { ascending: false })
-                .limit(5);
-            announcements = data || [];
+            queryStr = `class_id.in.(${classIds.join(',')}),scope.eq.system`;
         }
+        
+        const { data } = await supabase
+            .from("announcements")
+            .select("id, title, content, created_at, class_id, file_url, video_url, link_url, quiz_data, quiz_id, attachments")
+            .or(queryStr)
+            .order("created_at", { ascending: false })
+            .limit(5);
+        announcements = data || [];
 
         // 5.1 Thông báo hệ thống/khảo sát cho parent
         let recentNotifications: any[] = [];
@@ -833,12 +835,17 @@ export async function fetchParentNotifications(
             }));
         }
 
-        // 2. Class announcements
-        if ((filter === 'all' || filter === 'announcement') && classIds.length > 0) {
+        // 2. Class & System announcements
+        if ((filter === 'all' || filter === 'announcement')) {
+            let queryStr = "scope.eq.system";
+            if (classIds.length > 0) {
+                queryStr = `class_id.in.(${classIds.join(',')}),scope.eq.system`;
+            }
+
             const { data: annData } = await adminSupabase
                 .from("announcements")
-                .select("id, title, content, file_url, video_url, link_url, resource_type, created_at, class_id, teacher:users!announcements_teacher_id_fkey(full_name)")
-                .in("class_id", classIds)
+                .select("id, title, content, file_url, video_url, link_url, resource_type, created_at, class_id, scope, teacher:users!announcements_teacher_id_fkey(full_name)")
+                .or(queryStr)
                 .order("created_at", { ascending: false })
                 .range(offset, offset + limit - 1);
 

@@ -241,22 +241,63 @@ export async function fetchSubmissionStatus(range: string = 'all') {
 
 export async function fetchDailyActiveUsers() {
     const supabase = createAdminClient();
-    // Lấy tối đa auth users (giới hạn của limit mặc định là vài chục đến 1000 page size)
-    // Tối ưu nhất là gọi api auth admin.listUsers
-    const { data: { users }, error } = await supabase.auth.admin.listUsers({ perPage: 1000 });
-    
-    if (error || !users) return 0;
     
     const today = new Date();
     today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString();
     
-    const activeUsersToday = users.filter(user => {
-        if (!user.last_sign_in_at) return false;
-        const signInDate = new Date(user.last_sign_in_at);
-        return signInDate >= today;
-    });
+    // 1. Lấy TẤT CẢ user đã sign-in hôm nay (mọi vai trò: admin, teacher, student, parent)
+    // Pagination để đảm bảo không bỏ sót nếu > 1000 users
+    const allSignedInToday: string[] = [];
+    let page = 1;
+    const perPage = 1000;
+    let hasMore = true;
     
-    return activeUsersToday.length;
+    while (hasMore) {
+        const { data: { users }, error } = await supabase.auth.admin.listUsers({ page, perPage });
+        if (error || !users || users.length === 0) {
+            hasMore = false;
+            break;
+        }
+        
+        users.forEach(u => {
+            if (u.last_sign_in_at && new Date(u.last_sign_in_at) >= today) {
+                allSignedInToday.push(u.id);
+            }
+        });
+        
+        if (users.length < perPage) {
+            hasMore = false;
+        } else {
+            page++;
+        }
+    }
+        
+    // 2. Bổ sung: Học sinh có hoạt động (activity logs) — trường hợp last_sign_in_at chưa cập nhật
+    const { data: activeLogs } = await supabase
+        .from('student_activity_logs')
+        .select('student_id')
+        .gte('created_at', todayStr);
+    const activeStudentIds = (activeLogs || []).map((l: any) => l.student_id);
+
+    // 3. Bổ sung: Học sinh có nộp bài tập / làm bài thi hôm nay
+    const [ { data: subs }, { data: exams } ] = await Promise.all([
+        supabase.from('submissions').select('student_id').gte('submitted_at', todayStr),
+        supabase.from('exam_submissions').select('student_id').gte('submitted_at', todayStr)
+    ]);
+    
+    const subIds = (subs || []).map((l: any) => l.student_id);
+    const examSubsIds = (exams || []).map((l: any) => l.student_id);
+
+    // Gom tất cả ID Unique từ MỌI nguồn (tất cả vai trò)
+    const uniqueActiveUsers = new Set([
+        ...allSignedInToday,
+        ...activeStudentIds,
+        ...subIds,
+        ...examSubsIds
+    ].filter(id => Boolean(id)));
+    
+    return uniqueActiveUsers.size;
 }
 
 export async function fetchMonthlyRevenueData() {

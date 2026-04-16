@@ -98,9 +98,9 @@ export default function AIGenerateModal({ open, onOpenChange, onQuestionsGenerat
             const data = await res.json();
 
             if (!res.ok) {
-                if (res.status === 429) {
+                if (res.status === 429 || res.status === 503) {
                     setRetryCountdown(60);
-                    throw new Error("429: AI đang quá tải");
+                    throw new Error(`${res.status}: AI đang quá tải`);
                 }
                 throw new Error(data.error || "Lỗi không xác định từ máy chủ.");
             }
@@ -124,8 +124,8 @@ export default function AIGenerateModal({ open, onOpenChange, onQuestionsGenerat
 
             const message = err instanceof Error ? err.message : "Lỗi không xác định";
 
-            if (message.includes("429") || message.includes("quota") || message.includes("Too Many Requests")) {
-                setError("AI đang bận, vui lòng thử lại sau 1 phút. Nếu lỗi tiếp tục, hãy liên hệ quản trị viên.");
+            if (message.includes("429") || message.includes("503") || message.includes("quota") || message.includes("Too Many Requests")) {
+                setError("Máy chủ AI hiện đang chạy tối đa công suất do lượng truy cập cao. Vui lòng thử lại sau ít phút.");
                 if (retryCountdown === 0) setRetryCountdown(60);
             } else if (message.includes("401") || message.includes("API key")) {
                 setError("Lỗi xác thực API. Vui lòng liên hệ quản trị viên.");

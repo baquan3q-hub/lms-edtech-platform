@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getGeminiModel } from "@/lib/gemini";
+import { getGeminiModel, callGeminiWithRetry } from "@/lib/gemini";
 
 export const maxDuration = 60; // Allow more time for AI processing
 
@@ -41,10 +41,8 @@ If user provides additional instructions, strictly follow them.
 
         const userPrompt = prompt ? `User Instructions: ${prompt}` : "Please generate questions based entirely on the provided document.";
 
-        const parts: any[] = [
-            { text: systemPrompt },
-            { text: userPrompt },
-        ];
+        const combinedPrompt = `${systemPrompt}\n\n${userPrompt}`;
+        const parts: any[] = [{ text: combinedPrompt }];
 
         if (fileData && fileMimeType) {
             // Remove data URI prefix if present
@@ -57,63 +55,64 @@ If user provides additional instructions, strictly follow them.
             });
         }
 
-        // Exponential backoff retry logic for 429 Too Many Requests
-        let result;
-        let retries = 0;
-        const maxRetries = 3;
+        // Gọi AI bằng Helper dùng chung (tự động Retry khi 429/503 và xử lý lỗi đồng nhất)
+        // Nếu có file đính kèm, truyền parts array (text + inlineData), ngược lại truyền text thuần
+        const promptPayload: string | any[] = (fileData && fileMimeType)
+            ? [
+                { text: combinedPrompt },
+                {
+                    inlineData: {
+                        data: fileData.replace(/^data:(.*;base64,)?/, ""),
+                        mimeType: fileMimeType,
+                    },
+                },
+            ]
+            : combinedPrompt;
 
-        while (retries < maxRetries) {
-            try {
-                result = await model.generateContent({
-                    contents: [{ role: "user", parts }],
-                });
-                break; // Success, exit loop
-            } catch (err: any) {
-                if (err.status === 429 && retries < maxRetries - 1) {
-                    retries++;
-                    const waitTime = Math.pow(2, retries) * 1000 + (Math.random() * 1000);
-                    console.log(`Gemini Rate Limit hit (429). Retrying in ${waitTime}ms (Attempt ${retries}/${maxRetries - 1})...`);
-                    await new Promise(resolve => setTimeout(resolve, waitTime));
-                } else {
-                    throw err; // Re-throw if it's not a 429 or we ran out of retries
-                }
-            }
-        }
-
-        if (!result) {
-            throw new Error("Không thể kết nối với AI (vượt quá giới hạn request).");
-        }
-
-        const response = await result.response;
-        let text = response.text();
-
-        // Basic cleansing in case the model wraps it in markdown
-        text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-
-        let questions;
+        let questions: any;
         try {
-            questions = JSON.parse(text);
-        } catch (e) {
-            console.error("Failed to parse Gemini output as JSON:", text);
-            return NextResponse.json(
-                { error: "AI trả về định dạng không hợp lệ. Vui lòng thử lại." },
-                { status: 500 }
-            );
+            questions = await callGeminiWithRetry(promptPayload, {
+                preferredModel: "gemini-2.5-flash",
+                maxRetries: 5,
+                jsonType: "array" // Ép hàm parse tìm mảng JSON
+            });
+        } catch (error: any) {
+            console.error("Lỗi khi callGeminiWithRetry (Tạo bài kiểm tra):", error);
+            
+            if (error.message.includes("AI_RATE_LIMIT")) {
+                return NextResponse.json(
+                    { error: "AI hiện đang bị quá tải hoặc vượt hạn mức do lượng dùng cao. Vui lòng chờ 1-2 phút rồi thử lại." },
+                    { status: 503 }
+                );
+            }
+            if (error.message.includes("AI_PARSE_ERROR")) {
+                return NextResponse.json(
+                    { error: "AI trả về định dạng trả lời không hợp lệ. Vui lòng thử yêu cầu lại." },
+                    { status: 500 }
+                );
+            }
+            
+            throw error;
         }
 
         if (!Array.isArray(questions)) {
-            return NextResponse.json(
-                { error: "Kết quả trả về không phải là danh sách câu hỏi." },
-                { status: 500 }
-            );
+            // Nếu AI trả về object đơn thay vì mảng, đóng gói nó lại
+            if (typeof questions === "object" && questions !== null && questions.question) {
+                questions = [questions];
+            } else {
+                return NextResponse.json(
+                    { error: "Kết quả trả về không phải là danh sách câu hỏi hợp lệ." },
+                    { status: 500 }
+                );
+            }
         }
 
         return NextResponse.json({ questions });
 
     } catch (error: any) {
-        console.error("AI Generation Error:", error);
+        console.error("AI Generation Core Error:", error);
         return NextResponse.json(
-            { error: "Đã xảy ra lỗi khi tạo câu hỏi. " + error.message },
+            { error: "Đã xảy ra lỗi hệ thống khi tạo câu hỏi. " + error.message },
             { status: 500 }
         );
     }

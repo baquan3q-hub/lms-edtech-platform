@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { PageTracker } from "./PageTracker";
 import StudentSidebar from "@/components/student/StudentSidebar";
 import StudentNavbar from "@/components/student/StudentNavbar";
 
@@ -14,6 +15,7 @@ export default async function StudentLayout({ children }: { children: React.Reac
 
     return (
         <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
+            <PageTracker />
             {/* Sidebar */}
             <StudentSidebar userName={userData?.full_name || "Học sinh"} userEmail={userData?.email || ""} userId={user.id} />
 

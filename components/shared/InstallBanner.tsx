@@ -62,23 +62,26 @@ export function InstallBanner() {
     if (!showBanner) return null;
 
     return (
-        <div className="fixed bottom-0 left-0 right-0 z-50 p-4 bg-primary text-primary-foreground shadow-lg flex items-center justify-between gap-4 md:hidden pb-[calc(1rem+env(safe-area-inset-bottom))]">
+        <div className="fixed bottom-20 left-4 right-4 z-40 p-4 bg-white/80 backdrop-blur-lg border border-slate-200 rounded-3xl shadow-2xl flex items-center justify-between gap-4 md:hidden animate-in slide-in-from-bottom-5 duration-500">
             <div className="flex items-center gap-3">
-                <div className="text-2xl">📱</div>
-                <div className="text-sm font-medium">Cài app để dùng tiện hơn!</div>
+                <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-xl shadow-inner">📱</div>
+                <div className="flex flex-col">
+                    <div className="text-[13px] font-black text-slate-900 leading-tight">Cài đặt ứng dụng!</div>
+                    <div className="text-[11px] font-medium text-slate-500">Trải nghiệm mượt mà hơn</div>
+                </div>
             </div>
             <div className="flex items-center gap-2">
                 <Button
-                    variant="secondary"
+                    variant="default"
                     size="sm"
                     onClick={handleInstallClick}
-                    className="text-xs font-semibold h-8 px-3"
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-black h-9 px-4 rounded-xl shadow-lg shadow-blue-500/20"
                 >
                     Cài đặt
                 </Button>
                 <button
                     onClick={handleDismiss}
-                    className="p-1 hover:bg-primary-foreground/20 rounded-full transition-colors"
+                    className="p-1.5 hover:bg-slate-100 rounded-full transition-colors text-slate-400"
                     aria-label="Đóng biểu ngữ"
                 >
                     <X className="w-5 h-5" />

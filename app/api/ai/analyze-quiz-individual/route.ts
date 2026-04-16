@@ -11,17 +11,17 @@ function buildHighPerformerPrompt(
     return `
 Bạn là gia sư giáo dục chuyên nghiệp, thân thiện.
 Học sinh đạt điểm CAO. Hãy KHEN NGỢI thành tích, tạo bài ÔN TẬP + MỞ RỘNG kiến thức, và ĐỀ XUẤT học lên phần cao hơn.
-Trả về JSON THUẦN TÚY (KHÔNG dùng markdown code block, KHÔNG backtick).
+Trọng tâm: Vẫn phải chỉ ra lổ hổng kiến thức nếu có câu sai.
 
 HỌC SINH: ${student?.full_name || "Học sinh"}
 BÀI KIỂM TRA: ${exam.title}
 ĐIỂM: ${score}/${totalPoints} (${((score / totalPoints) * 100).toFixed(0)}% — Xuất sắc!)
 
-${wrongQuestions.length > 0 ? `CÂU LÀM SAI (${wrongQuestions.length} câu):\n${JSON.stringify(wrongQuestions, null, 2)}` : "Không có câu sai — hoàn hảo!"}
+${wrongQuestions.length > 0 ? `CÂU LÀM SAI CHÍNH XÁC CỦA HỌC SINH (${wrongQuestions.length} câu):\n${JSON.stringify(wrongQuestions, null, 2)}\n(AI PHẢI TẬP TRUNG PHÂN TÍCH NHỮNG KIẾN THỨC CỦA CÁC CÂU NÀY MÀ HỌC SINH ĐÃ CHỌN SAI KHỎI ĐÁP ÁN ĐÚNG)` : "Không có câu sai — hoàn hảo!"}
 
-Trả về JSON thuần túy theo cấu trúc:
+Trả về DUY NHẤT một cục JSON theo cấu trúc sau:
 {
-  "knowledge_gaps": [],
+  "knowledge_gaps": [${wrongQuestions.length > 0 ? "\"Tên kiến thức bị sai 1\", \"Tên kiến thức bị sai 2\"" : ""}],
   "ai_feedback": "Lời khen ngợi nhiệt tình (3-4 câu). Nhấn mạnh thành tích xuất sắc. Nếu có 1-2 câu sai nhẹ, nhắc nhẹ nhàng. KẾT THÚC bằng đề xuất cụ thể: Em nên tìm hiểu thêm về [chủ đề nâng cao liên quan] để phát triển hơn nữa.",
   "advancement_suggestion": "Gợi ý cụ thể 2-3 chủ đề/phần kiến thức nâng cao mà học sinh nên học tiếp theo, dựa trên nội dung bài kiểm tra. Ví dụ: Nếu bài kiểm tra về phương trình bậc 1, đề xuất học phương trình bậc 2. Viết dạng đoạn văn ngắn, thân thiện.",
   "improvement_tasks": [
@@ -86,18 +86,19 @@ function buildImprovementPrompt(
     return `
 Bạn là gia sư giáo dục chuyên nghiệp, thân thiện và KIÊN NHẪN.
 Học sinh cần được hỗ trợ cải thiện. ĐỘNG VIÊN trước, rồi hướng dẫn ôn tập.
-Trả về JSON THUẦN TÚY (KHÔNG dùng markdown code block, KHÔNG backtick).
+CHÚ Ý ĐẶC BIỆT: Bạn PHẢI đọc kỹ danh sách "CÂU LÀM SAI" để rút ra KẾT LUẬN về "Kiến thức hổng". KHÔNG đoán bừa.
 
 HỌC SINH: ${student?.full_name || "Học sinh"}
 BÀI KIỂM TRA: ${exam.title}
 ĐIỂM: ${score}/${totalPoints} (${((score / totalPoints) * 100).toFixed(0)}%)
 
-CÂU LÀM SAI (${wrongQuestions.length} câu):
+CÂU LÀM SAI CHÍNH XÁC CỦA HỌC SINH (${wrongQuestions.length} câu):
 ${JSON.stringify(wrongQuestions, null, 2)}
+(AI PHẢI TẬP TRUNG PHÂN TÍCH CÁC CÂU LÀM SAI MÀ HỌC SINH ĐÃ CHỌN ĐỂ TẠO NHẬN XÉT, TẠO MẢNG KNOWLEDGE_GAPS VÀ CÁC THỰC HÀNH IMPROVEMENT)
 
-Trả về JSON thuần túy theo cấu trúc:
+Trả về DUY NHẤT một cục JSON theo cấu trúc sau:
 {
-  "knowledge_gaps": ["Kiến thức hổng 1", "Kiến thức hổng 2"],
+  "knowledge_gaps": ["Rút ra từ các câu sai ở trên (ví dụ: Phép nhân số thập phân, Động từ to-be)"],
   "ai_feedback": "Nhận xét thân thiện: LUÔN khen điểm tốt trước (dù ít). Không dùng 'yếu', 'kém'. Dùng 'cần luyện thêm', 'sẽ tiến bộ'. 3-4 câu. Kết bằng lời động viên.",
   "improvement_tasks": [
     {
@@ -121,12 +122,11 @@ Trả về JSON thuần túy theo cấu trúc:
   ]
 }
 
-YÊU CẦU BẮT BUỘC:
-- Tạo 2-3 improvement_tasks, mỗi task cho 1 nhóm kiến thức hổng
-- Mỗi task PHẢI CÓ ĐÚNG 5 câu hỏi mini_quiz (id: q1-q5), mức trung bình-dễ
-- Câu hỏi mini_quiz phải liên quan TRỰC TIẾP đến câu sai
-- Theory phải giải thích RÕ RÀNG, có VÍ DỤ CỤ THỂ
-- Tiếng Việt, động viên, tích cực
+YÊU CẦU BẮT BUỘC DRACONIAN:
+- PHẢI điền CHÍNH XÁC danh sách mảng knowledge_gaps DỰA DỰA VÀO CÂU LÀM SAI. KHÔNG ĐƯỢC ĐỂ TRỐNG ARRAY ẤY nếu có bất kì lỗi nào!
+- Tạo thẻ knowledge_topic và theory ĐÚNG như phần kiến thức học sinh bị mất.
+- Không nhận xét chung chung, bài ôn PHẢI là bài học cụ thể về chính cái chỗ học sinh sai ở phương án!
+- Trả về JSON, không thêm văn bản bên ngoài.
 `;
 }
 
@@ -201,21 +201,43 @@ async function analyzeOneStudent(
         ? buildHighPerformerPrompt(studentObj, exam, score, totalPoints, wrongQuestions)
         : buildImprovementPrompt(studentObj, exam, score, totalPoints, wrongQuestions);
 
-    const model = getGeminiModel("gemini-2.5-flash");
+    const genAI = require("@google/generative-ai").GoogleGenerativeAI;
+    const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
+    const genAiInstance = new genAI(apiKey);
+    const model = genAiInstance.getGenerativeModel({ 
+        model: "gemini-2.5-flash",
+        generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.2 // Giảm temperature để tăng tính logic và chính xác đối với kết quả sai của hs
+        } 
+    });
+    
     let aiResult: any = null;
 
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 4; attempt++) {
         try {
             const result = await model.generateContent(prompt);
-            const text = result.response.text().replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+            let text = result.response.text();
+            
             aiResult = JSON.parse(text);
             aiResult = validateAndFixQuizCount(aiResult); // Đảm bảo 5 câu/task
             break;
-        } catch (parseErr) {
-            if (attempt === 1) {
+        } catch (err: any) {
+            const isOverloaded = err.status === 429 || err.status === 503 || err.message?.includes("429") || err.message?.includes("503");
+            
+            if (isOverloaded && attempt < 3) {
+                const waitTime = Math.pow(2, attempt) * 2000 + 1000;
+                console.log(`Individual Analysis - Gemini Rate Limit hit. Retry ${attempt + 1}/3 in ${waitTime}ms...`);
+                await new Promise(r => setTimeout(r, waitTime));
+                continue;
+            }
+            
+            if (attempt === 3) {
                 aiResult = {
                     knowledge_gaps: [],
-                    ai_feedback: "Không thể tạo nhận xét tự động. Giáo viên vui lòng viết nhận xét thủ công.",
+                    ai_feedback: isOverloaded 
+                        ? "AI đang quá tải. Vui lòng thử lại sau vài phút."
+                        : "Không thể tạo nhận xét tự động. Giáo viên vui lòng viết nhận xét thủ công.",
                     improvement_tasks: []
                 };
             }

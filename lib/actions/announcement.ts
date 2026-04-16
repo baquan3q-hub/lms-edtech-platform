@@ -101,6 +101,56 @@ export async function fetchClassAnnouncements(classId: string) {
 }
 
 // ============================================================
+// Lấy tổng hợp danh sách thông báo đã gửi của TẤT CẢ các lớp
+// ============================================================
+export async function fetchTeacherAllAnnouncements() {
+    try {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { error: "Chưa đăng nhập" };
+
+        const adminSupabase = createAdminClient();
+
+        const { data, error } = await adminSupabase
+            .from("announcements")
+            .select("id, title, content, file_url, video_url, link_url, attachments, target_roles, created_at, class:classes(name)")
+            .eq("teacher_id", user.id)
+            .order("created_at", { ascending: false })
+            .limit(10); // Show top 10 on dashboard
+
+        if (error) return { error: error.message };
+        return { data: data || [] };
+    } catch (err: any) {
+        return { error: err.message || "Lỗi không xác định" };
+    }
+}
+
+// ============================================================
+// Lấy thông báo chung (Từ hệ thống / Admin gửi cho Giáo viên)
+// ============================================================
+export async function fetchTeacherGeneralAnnouncements() {
+    try {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { error: "Chưa đăng nhập" };
+
+        const adminSupabase = createAdminClient();
+
+        const { data, error } = await adminSupabase
+            .from("announcements")
+            .select("id, title, content, file_url, video_url, link_url, attachments, target_roles, created_at, teacher:users!announcements_teacher_id_fkey(full_name, role)")
+            .contains("target_roles", ["teacher"])
+            .order("created_at", { ascending: false })
+            .limit(10);
+
+        if (error) return { error: error.message };
+        return { data: data || [] };
+    } catch (err: any) {
+        return { error: err.message || "Lỗi không xác định" };
+    }
+}
+
+// ============================================================
 // Xóa thông báo
 // ============================================================
 export async function deleteAnnouncement(announcementId: string) {

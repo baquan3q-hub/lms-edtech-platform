@@ -62,8 +62,8 @@ export function BottomNav() {
     }
 
     return (
-        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t shadow-[0_-2px_10px_rgba(0,0,0,0.05)] pb-[env(safe-area-inset-bottom)]">
-            <nav className="flex justify-around items-center h-16 px-2">
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-lg border-t border-slate-200 shadow-[0_-8px_20px_rgba(0,0,0,0.05)] pb-[env(safe-area-inset-bottom)]">
+            <nav className="flex justify-around items-center h-16 px-4">
                 {navItems.map((item) => {
                     const isActive = pathname === item.href || (item.href !== `/${role}` && pathname.startsWith(item.href));
                     const Icon = item.icon;
@@ -72,16 +72,22 @@ export function BottomNav() {
                         <Link
                             key={item.href}
                             href={item.href}
-                            className={`flex flex-col items-center justify-center w-full h-full min-h-[44px] min-w-[44px] gap-1 transition-colors ${isActive
-                                    ? "text-primary font-medium"
-                                    : "text-muted-foreground hover:text-foreground"
+                            className={`flex flex-col items-center justify-center w-full min-h-[44px] gap-1 transition-all relative ${isActive
+                                    ? "text-blue-600 scale-110"
+                                    : "text-slate-400"
                                 }`}
                         >
-                            <Icon
-                                className={`w-5 h-5 ${isActive ? "fill-primary/20" : ""}`}
-                                strokeWidth={isActive ? 2.5 : 2}
-                            />
-                            <span className="text-[10px] sm:text-xs text-center leading-none">{item.label}</span>
+                            <div className={`p-1.5 rounded-xl transition-colors ${isActive ? "bg-blue-50" : ""}`}>
+                                <Icon
+                                    className={`w-5 h-5 ${isActive ? "stroke-[2.5px]" : "stroke-[2px]"}`}
+                                />
+                            </div>
+                            <span className={`text-[10px] font-bold tracking-tight transition-all ${isActive ? "opacity-100" : "opacity-70 font-medium"}`}>
+                                {item.label}
+                            </span>
+                            {isActive && (
+                                <div className="absolute -top-px left-1/2 -translate-x-1/2 w-8 h-[3px] bg-blue-600 rounded-b-full shadow-[0_1px_4px_rgba(37,99,235,0.4)]" />
+                            )}
                         </Link>
                     );
                 })}

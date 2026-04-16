@@ -98,10 +98,13 @@ export default function AttendanceClient({ classId, className, students }: Atten
     const [initialLoading, setInitialLoading] = useState(true);
     const [sessionId, setSessionId] = useState<string | null>(null);
     const [sessionStatus, setSessionStatus] = useState<"open" | "closed">("open");
-    const [selectedDate, setSelectedDate] = useState(() => {
-        return new Date().toISOString().split("T")[0];
-    });
+    const [selectedDate, setSelectedDate] = useState<string>("");
     const [attendanceState, setAttendanceState] = useState<Record<string, AttendanceState>>({});
+
+    // Set date only on client to avoid hydration mismatch
+    useEffect(() => {
+        setSelectedDate(new Date().toISOString().split("T")[0]);
+    }, []);
 
     // Draft key for localStorage
     const draftKey = `attendance_draft_${classId}_${selectedDate}`;
@@ -169,6 +172,7 @@ export default function AttendanceClient({ classId, className, students }: Atten
     }, [classId, students, draftKey]);
 
     useEffect(() => {
+        if (!selectedDate) return;
         if (students.length > 0) {
             loadSessionData(selectedDate);
         } else {

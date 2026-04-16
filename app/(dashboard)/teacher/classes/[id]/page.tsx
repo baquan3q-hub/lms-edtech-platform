@@ -1,20 +1,25 @@
-import { ArrowLeft, BookOpen, Calendar, Users, MapPin, Bell, FileText, MessageSquare, Video, PlusCircle, Clock, ChevronDown, Monitor, Building2, Folder, CheckSquare, Music, ClipboardList, VideoIcon, Eye, EyeOff, ExternalLink, BarChart3, CheckCircle2, Circle, Trophy, Activity, Pencil, Trash2, Home } from "lucide-react";
+import { ArrowLeft, BookOpen, Calendar, Users, MapPin, Bell, FileText, MessageSquare, Video, PlusCircle, Clock, ChevronDown, Monitor, Building2, Folder, CheckSquare, Music, ClipboardList, VideoIcon, Eye, EyeOff, ExternalLink, BarChart3, CheckCircle2, Circle, Trophy, Activity, Pencil, Trash2, Home, ShieldAlert } from "lucide-react";
 import Link from "next/link";
 import { fetchClassDetails, fetchClassStudents, fetchStudentProgressForClass } from "./actions";
+import { fetchClassBehaviorScores } from "@/lib/actions/behavior-analysis";
 import { fetchCourseItems } from "@/lib/actions/courseBuilder";
 import { fetchClassExams } from "@/lib/actions/exam";
 import { fetchClassHomework } from "@/lib/actions/homework";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Suspense } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AttendanceClient from "./AttendanceClient";
 import ScheduleManagerClient from "./ScheduleManagerClient";
 import TeacherLeaveClient from "./TeacherLeaveClient";
 import { getRooms, getClassSchedules, getGeneratedSessions } from "@/lib/actions/schedule";
 import DeleteExamButton from "@/components/teacher/DeleteExamButton";
+import DeleteHomeworkButton from "@/components/teacher/DeleteHomeworkButton";
 import AnnouncementComposer from "@/components/teacher/AnnouncementComposer";
 import { fetchClassAnnouncements } from "@/lib/actions/announcement";
+import StudentBehaviorPanel from "@/components/teacher/StudentBehaviorPanel";
 
 export default async function ClassDetailPage({ 
     params,
@@ -30,32 +35,16 @@ export default async function ClassDetailPage({
     const resolvedSearchParams = searchParams ? await searchParams : {};
     const defaultTab = (resolvedSearchParams.tab as string) || "overview";
 
-    // Fetch tất cả dữ liệu song song
+    // Giữ lại các data bắt buộc cho Header và Overview
     const [
         { data: classInfo, error: classError },
-        { data: students, error: studentsError },
-        { data: courseItems },
-        { data: roomsData },
-        { data: schedulesData },
-        { data: sessionsData },
-        { data: studentProgress },
-        { data: classExams },
-        { data: classHomework },
-        announcementsResult
+        { data: students },
+        { data: courseItems }
     ] = await Promise.all([
         fetchClassDetails(id),
         fetchClassStudents(id),
-        fetchCourseItems(id),
-        getRooms(),
-        getClassSchedules(id),
-        getGeneratedSessions(id),
-        fetchStudentProgressForClass(id),
-        fetchClassExams(id),
-        fetchClassHomework(id),
-        fetchClassAnnouncements(id)
+        fetchCourseItems(id)
     ]);
-
-    const classAnnouncements = (announcementsResult as any)?.data || [];
 
     const items = courseItems || [];
     const lessonCount = items.filter((i: any) => i.type !== 'folder').length;
@@ -252,8 +241,14 @@ export default async function ClassDetailPage({
                     <TabsTrigger value="exams_homework" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
                         <ClipboardList className="w-4 h-4 mr-2" /> Kiểm tra & Bài tập
                     </TabsTrigger>
+                    <TabsTrigger value="announcements_feedback" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
+                        <MessageSquare className="w-4 h-4 mr-2" /> TB & Feedback
+                    </TabsTrigger>
                     <TabsTrigger value="progress" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
                         <BarChart3 className="w-4 h-4 mr-2" /> Tiến độ
+                    </TabsTrigger>
+                    <TabsTrigger value="behavior" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
+                        <ShieldAlert className="w-4 h-4 mr-2" /> Hành vi
                     </TabsTrigger>
                 </TabsList>
 
@@ -380,35 +375,18 @@ export default async function ClassDetailPage({
                             Đánh dấu tình trạng chuyên cần của học viên. Chọn ngày và lưu điểm danh.
                         </p>
                     </div>
-                    {studentsError ? (
-                        <div className="text-red-500 p-4 bg-red-50 rounded-xl">Lỗi tải danh sách học sinh: {studentsError}</div>
-                    ) : (
-                        <AttendanceClient
-                            classId={id}
-                            className={classInfo?.name || "Lớp học"}
-                            students={students || []}
-                        />
-                    )}
+                    <AttendanceClient
+                        classId={id}
+                        className={classInfo?.name || "Lớp học"}
+                        students={students || []}
+                    />
                 </TabsContent>
 
                 {/* ===== TAB: XẾP LỊCH & PHÒNG ===== */}
                 <TabsContent value="schedule" className="mt-6 space-y-6">
-                    <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-                        <h4 className="font-semibold text-slate-800 mb-4 whitespace-nowrap">Lịch dạy hiện tại (Do Admin sắp xếp)</h4>
-                        <ScheduleManagerClient
-                            classId={id}
-                            initialSchedules={schedulesData || []}
-                            allRooms={roomsData || []}
-                            readOnly={true}
-                        />
-                    </div>
-
-                    {/* Xin nghỉ dạy */}
-                    <TeacherLeaveClient
-                        classId={id}
-                        className={classInfo?.name || "Lớp học"}
-                        sessions={sessionsData || []}
-                    />
+                    <Suspense fallback={<div className="p-12 text-center text-slate-500">Đang tải lịch dạy...</div>}>
+                        <ScheduleTabData classId={id} classInfo={classInfo} />
+                    </Suspense>
                 </TabsContent>
 
                 {/* ===== TAB: BÀI HỌC (E-Learning Curriculum) ===== */}
@@ -444,57 +422,9 @@ export default async function ClassDetailPage({
 
                 {/* ===== TAB: THÔNG BÁO & FEEDBACK ===== */}
                 <TabsContent value="announcements_feedback" className="mt-6 space-y-6">
-                    {/* KHU VỰC THÔNG BÁO — dùng AnnouncementComposer */}
-                    <AnnouncementComposer classId={id} initialAnnouncements={classAnnouncements} />
-
-                    {/* KHU VỰC FEEDBACK */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                        <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-lg font-bold text-slate-900 flex items-center">
-                                <MessageSquare className="w-5 h-5 mr-2 text-violet-500" /> Kết quả & Phản hồi Học viên
-                            </h3>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="border border-slate-200 rounded-xl p-5">
-                                <h4 className="font-bold text-slate-800 mb-4 flex items-center text-sm">
-                                    <FileText className="w-4 h-4 mr-2 text-indigo-500" /> Kết quả Bài tập gần đây
-                                </h4>
-                                <div className="space-y-3">
-                                    <div className="flex items-center justify-between p-3 bg-slate-50 rounded-lg">
-                                        <div>
-                                            <p className="text-sm font-semibold text-slate-800">Tổng nội dung đã tạo</p>
-                                            <p className="text-xs text-slate-500">Tất cả bài giảng</p>
-                                        </div>
-                                        <span className="text-2xl font-black text-indigo-600">{lessonCount}</span>
-                                    </div>
-                                    <div className="text-center py-4 border border-dashed border-slate-200 rounded-lg">
-                                        <p className="text-sm text-slate-400">Dữ liệu chi tiết kết quả bài tập sẽ hiển thị khi có bài nộp.</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="border border-slate-200 rounded-xl p-5">
-                                <h4 className="font-bold text-slate-800 mb-4 flex items-center text-sm">
-                                    <MessageSquare className="w-4 h-4 mr-2 text-violet-500" /> Phản hồi từ Học viên
-                                </h4>
-                                <div className="space-y-3">
-                                    <div className="flex items-center justify-between p-3 bg-violet-50 rounded-lg">
-                                        <div>
-                                            <p className="text-sm font-semibold text-slate-800">Đánh giá trung bình</p>
-                                            <p className="text-xs text-slate-500">Dựa trên phản hồi học viên</p>
-                                        </div>
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-2xl font-black text-violet-600">—</span>
-                                        </div>
-                                    </div>
-                                    <div className="text-center py-4 border border-dashed border-slate-200 rounded-lg">
-                                        <p className="text-sm text-slate-400">Chưa có phản hồi nào từ học viên.</p>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <Suspense fallback={<div className="p-12 text-center text-slate-500">Đang tải thông báo...</div>}>
+                        <AnnouncementsTabData classId={id} classInfo={classInfo} />
+                    </Suspense>
                 </TabsContent>
 
                 {/* ===== TAB: TIẾN ĐỘ HỌC VIÊN ===== */}
@@ -510,262 +440,263 @@ export default async function ClassDetailPage({
                                 </p>
                             </div>
                         </div>
-
-                        {studentProgress && studentProgress.length > 0 ? (
-                            <div className="overflow-x-auto">
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="border-b border-slate-200 bg-slate-50/50">
-                                            <th className="text-left py-3 px-5 font-bold text-slate-700">#</th>
-                                            <th className="text-left py-3 px-5 font-bold text-slate-700">Học viên</th>
-                                            <th className="text-left py-3 px-5 font-bold text-slate-700">Tiến độ</th>
-                                            <th className="text-center py-3 px-5 font-bold text-slate-700">Hoàn thành</th>
-                                            <th className="text-center py-3 px-5 font-bold text-slate-700">Điểm TB Quiz</th>
-                                            <th className="text-center py-3 px-5 font-bold text-slate-700">Lần truy cập</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {studentProgress.map((sp: any, idx: number) => (
-                                            <tr key={sp.studentId} className="border-b border-slate-50 hover:bg-indigo-50/30 transition-colors">
-                                                <td className="py-3.5 px-5 text-slate-400 font-medium">{idx + 1}</td>
-                                                <td className="py-3.5 px-5">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold text-xs">
-                                                            {sp.name.charAt(0).toUpperCase()}
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-semibold text-slate-800">{sp.name}</p>
-                                                            <p className="text-[11px] text-slate-400">{sp.email}</p>
-                                                        </div>
-                                                    </div>
-                                                </td>
-                                                <td className="py-3.5 px-5">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="flex-1 bg-slate-100 rounded-full h-2.5 overflow-hidden min-w-[80px]">
-                                                            <div
-                                                                className={`h-2.5 rounded-full transition-all ${sp.progressPercent >= 80 ? 'bg-emerald-500' :
-                                                                    sp.progressPercent >= 40 ? 'bg-indigo-500' :
-                                                                        sp.progressPercent > 0 ? 'bg-amber-500' : 'bg-slate-200'
-                                                                    }`}
-                                                                style={{ width: `${sp.progressPercent}%` }}
-                                                            />
-                                                        </div>
-                                                        <span className={`text-xs font-bold min-w-[36px] text-right ${sp.progressPercent >= 80 ? 'text-emerald-600' :
-                                                            sp.progressPercent >= 40 ? 'text-indigo-600' :
-                                                                sp.progressPercent > 0 ? 'text-amber-600' : 'text-slate-400'
-                                                            }`}>
-                                                            {sp.progressPercent}%
-                                                        </span>
-                                                    </div>
-                                                </td>
-                                                <td className="py-3.5 px-5 text-center">
-                                                    <span className="text-sm font-semibold text-slate-700">
-                                                        {sp.completedItems}/{sp.totalItems}
-                                                    </span>
-                                                </td>
-                                                <td className="py-3.5 px-5 text-center">
-                                                    {sp.avgQuizScore !== null ? (
-                                                        <span className={`text-sm font-bold ${sp.avgQuizScore >= 8 ? 'text-emerald-600' :
-                                                            sp.avgQuizScore >= 5 ? 'text-indigo-600' : 'text-red-500'
-                                                            }`}>
-                                                            {sp.avgQuizScore}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-xs text-slate-400">Chưa làm</span>
-                                                    )}
-                                                </td>
-                                                <td className="py-3.5 px-5 text-center">
-                                                    {sp.lastActive ? (
-                                                        <span className="text-xs text-slate-500">
-                                                            {new Date(sp.lastActive).toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                                                        </span>
-                                                    ) : (
-                                                        <span className="text-xs text-slate-400">Chưa truy cập</span>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-
-                                {/* Summary Stats */}
-                                <div className="grid grid-cols-3 gap-4 p-5 bg-slate-50/50 border-t border-slate-100">
-                                    <div className="text-center">
-                                        <p className="text-2xl font-black text-emerald-600">
-                                            {studentProgress.filter((s: any) => s.progressPercent === 100).length}
-                                        </p>
-                                        <p className="text-xs text-slate-500 font-medium">Hoàn thành 100%</p>
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-2xl font-black text-indigo-600">
-                                            {studentProgress.filter((s: any) => s.progressPercent > 0 && s.progressPercent < 100).length}
-                                        </p>
-                                        <p className="text-xs text-slate-500 font-medium">Đang học</p>
-                                    </div>
-                                    <div className="text-center">
-                                        <p className="text-2xl font-black text-red-500">
-                                            {studentProgress.filter((s: any) => s.progressPercent === 0).length}
-                                        </p>
-                                        <p className="text-xs text-slate-500 font-medium">Chưa bắt đầu</p>
-                                    </div>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="p-12 text-center">
-                                <Activity className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                                <p className="text-slate-500 font-medium">Chưa có dữ liệu tiến độ.</p>
-                                <p className="text-sm text-slate-400 mt-1">Khi học viên bắt đầu học, tiến độ sẽ hiển thị ở đây.</p>
-                            </div>
-                        )}
+                        <Suspense fallback={<div className="p-12 text-center text-slate-500">Đang tải tiến độ học tập...</div>}>
+                            <ProgressTabData classId={id} />
+                        </Suspense>
                     </div>
                 </TabsContent>
 
                 {/* ===== TAB: KIỂM TRA & BÀI TẬP ===== */}
                 <TabsContent value="exams_homework" className="mt-6 space-y-6">
-                    {/* KHU VỰC KIỂM TRA */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-900 flex items-center">
-                                    <ClipboardList className="w-5 h-5 mr-2 text-indigo-500" /> Bài kiểm tra
-                                </h3>
-                                <p className="text-sm text-slate-500 mt-1">
-                                    Tạo và quản lý bài kiểm tra trắc nghiệm cho lớp
-                                </p>
-                            </div>
-                            <Link href={`/teacher/classes/${id}/exams/create`}>
-                                <Button className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold">
-                                    <PlusCircle className="w-4 h-4 mr-2" /> Tạo bài kiểm tra
-                                </Button>
-                            </Link>
-                        </div>
+                    <Suspense fallback={<div className="p-12 text-center text-slate-500">Đang tải bài tập và kiểm tra...</div>}>
+                        <ExamsHomeworkTabData classId={id} />
+                    </Suspense>
+                </TabsContent>
 
-                        {classExams && classExams.length > 0 ? (
-                            <div className="divide-y divide-slate-100">
-                                {classExams.map((exam: any) => (
-                                    <div key={exam.id} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition-colors">
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${exam.is_published ? 'bg-emerald-50 text-emerald-500' : 'bg-slate-100 text-slate-400'}`}>
-                                            <ClipboardList className="w-5 h-5" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="font-semibold text-slate-800">{exam.title}</p>
-                                            <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
-                                                <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {exam.duration_minutes} phút</span>
-                                                <span>{exam.total_points} điểm</span>
-                                                <span>{((exam.questions as any[]) || []).length} câu</span>
-                                            </div>
-                                        </div>
-                                        {exam.is_published ? (
-                                            <Badge className="bg-emerald-50 text-emerald-600 border-emerald-200 text-[10px]" variant="outline">Đã giao</Badge>
-                                        ) : (
-                                            <Badge className="bg-slate-100 text-slate-500 border-slate-200 text-[10px]" variant="outline">Nháp</Badge>
-                                        )}
-                                        <div className="flex items-center gap-1">
-                                            <Link href={`/teacher/classes/${id}/exams/${exam.id}/analytics`}>
-                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-indigo-500 hover:text-indigo-600">
-                                                    <BarChart3 className="w-4 h-4" />
-                                                </Button>
-                                            </Link>
-                                            <Link href={`/teacher/classes/${id}/exams/${exam.id}/edit`}>
-                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600">
-                                                    <Pencil className="w-4 h-4" />
-                                                </Button>
-                                            </Link>
-                                            <DeleteExamButton examId={exam.id} classId={id} />
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="p-12 text-center">
-                                <ClipboardList className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                                <p className="text-slate-500 font-medium">Chưa có bài kiểm tra nào.</p>
-                                <p className="text-sm text-slate-400 mt-1 mb-4">
-                                    Tạo bài kiểm tra trắc nghiệm để giao cho học viên.
-                                </p>
-                                <Link href={`/teacher/classes/${id}/exams/create`}>
-                                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-white">
-                                        <PlusCircle className="w-4 h-4 mr-2" /> Tạo bài kiểm tra
-                                    </Button>
-                                </Link>
-                            </div>
-                        )}
+                {/* ===== TAB: HÀNH VI HỌC SINH ===== */}
+                <TabsContent value="behavior" className="mt-6">
+                    <div className="mb-4">
+                        <h3 className="text-xl font-bold text-slate-900 border-l-4 border-red-500 pl-3">
+                            Theo dõi hành vi học sinh
+                        </h3>
+                        <p className="text-slate-500 mt-1 pl-4 text-sm">
+                            AI phân tích hành vi và phát hiện dấu hiệu “Gaming the System”. Dữ liệu cập nhật khi học sinh hoàn thành bài.
+                        </p>
                     </div>
-                    {/* KHU VỰC BÀI TẬP VỀ NHÀ */}
-                    <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-                        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                            <div>
-                                <h3 className="text-lg font-bold text-slate-900 flex items-center">
-                                    <Home className="w-5 h-5 mr-2 text-emerald-500" /> Bài tập về nhà
-                                </h3>
-                                <p className="text-sm text-slate-500 mt-1">
-                                    Giao bài tập với 4 dạng: trắc nghiệm, tự luận, video, đính kèm
-                                </p>
-                            </div>
-                            <Link href={`/teacher/classes/${id}/homework/create`}>
-                                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold">
-                                    <PlusCircle className="w-4 h-4 mr-2" /> Tạo bài tập
-                                </Button>
-                            </Link>
-                        </div>
-
-                        {classHomework && classHomework.length > 0 ? (
-                            <div className="divide-y divide-slate-100">
-                                {classHomework.map((hw: any) => (
-                                    <div key={hw.id} className="flex items-center gap-4 px-5 py-4 hover:bg-slate-50 transition-colors">
-                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${hw.is_published ? 'bg-emerald-50 text-emerald-500' : 'bg-slate-100 text-slate-400'}`}>
-                                            <Home className="w-5 h-5" />
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <p className="font-semibold text-slate-800">{hw.title}</p>
-                                            <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
-                                                <span>{hw.total_points} điểm</span>
-                                                <span>{(hw.questions as any[] || []).length} câu</span>
-                                                {hw.due_date && (
-                                                    <span className="flex items-center gap-1">
-                                                        <Clock className="w-3 h-3" />
-                                                        Hạn: {new Date(hw.due_date).toLocaleDateString('vi-VN')}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                        {hw.is_published ? (
-                                            <Badge className="bg-emerald-50 text-emerald-600 border-emerald-200 text-[10px]" variant="outline">Đã giao</Badge>
-                                        ) : (
-                                            <Badge className="bg-slate-100 text-slate-500 border-slate-200 text-[10px]" variant="outline">Nháp</Badge>
-                                        )}
-                                        <div className="flex items-center gap-1">
-                                            <Link href={`/teacher/classes/${id}/homework/${hw.id}/submissions`}>
-                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-indigo-500 hover:text-indigo-600" title="Xem bài nộp">
-                                                    <BarChart3 className="w-4 h-4" />
-                                                </Button>
-                                            </Link>
-                                            <Link href={`/teacher/classes/${id}/homework/${hw.id}/edit`}>
-                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0 text-slate-400 hover:text-slate-600" title="Sửa">
-                                                    <Pencil className="w-4 h-4" />
-                                                </Button>
-                                            </Link>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="p-12 text-center">
-                                <Home className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                                <p className="text-slate-500 font-medium">Chưa có bài tập nào.</p>
-                                <p className="text-sm text-slate-400 mt-1 mb-4">
-                                    Tạo bài tập về nhà để giao cho học viên.
-                                </p>
-                                <Link href={`/teacher/classes/${id}/homework/create`}>
-                                    <Button className="bg-emerald-600 hover:bg-emerald-700 text-white">
-                                        <PlusCircle className="w-4 h-4 mr-2" /> Tạo bài tập
-                                    </Button>
-                                </Link>
-                            </div>
-                        )}
-                    </div>
+                    <Suspense fallback={<div className="p-12 text-center text-slate-500">Đang tải biểu đồ hành vi...</div>}>
+                        <BehaviorTabData classId={id} />
+                    </Suspense>
                 </TabsContent>
             </Tabs>
         </div>
     );
+}
+
+// ==========================================
+// THÀNH PHẦN WRAPPER SUSPENSE (SERVER COMPONENTS)
+// ==========================================
+
+async function ScheduleTabData({ classId, classInfo }: { classId: string; classInfo: any }) {
+    const [{ data: roomsData }, { data: schedulesData }, { data: sessionsData }] = await Promise.all([
+        getRooms(),
+        getClassSchedules(classId),
+        getGeneratedSessions(classId)
+    ]);
+    return (
+        <>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h4 className="font-semibold text-slate-800 mb-4 whitespace-nowrap">Lịch dạy hiện tại (Do Admin sắp xếp)</h4>
+                <ScheduleManagerClient
+                    classId={classId}
+                    initialSchedules={schedulesData || []}
+                    allRooms={roomsData || []}
+                    readOnly={true}
+                />
+            </div>
+            <TeacherLeaveClient
+                classId={classId}
+                className={classInfo?.name || "Lớp học"}
+                sessions={sessionsData || []}
+            />
+        </>
+    );
+}
+
+async function AnnouncementsTabData({ classId, classInfo }: { classId: string; classInfo: any }) {
+    const announcementsResult = await fetchClassAnnouncements(classId);
+    const classAnnouncements = (announcementsResult as any)?.data || [];
+    return (
+        <>
+            <div className="w-full">
+                <AnnouncementComposer classId={classId} initialAnnouncements={classAnnouncements} />
+            </div>
+
+            <div className="space-y-4 mt-8">
+                <h4 className="font-bold text-slate-800 border-l-4 border-slate-400 pl-3">Lịch sử Thông báo</h4>
+                {classAnnouncements.length > 0 ? (
+                    classAnnouncements.map((ann: any) => (
+                        <div key={ann.id} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex justify-between items-start mb-2">
+                                <h5 className="font-bold text-slate-900 text-lg leading-tight">{ann.title}</h5>
+                                <span className="text-[10px] sm:text-xs font-semibold text-slate-400 bg-slate-50 px-3 py-1 rounded-full whitespace-nowrap ml-4 border border-slate-100">
+                                    {new Date(ann.created_at).toLocaleDateString("vi-VN", { hour: '2-digit', minute: '2-digit' })}
+                                </span>
+                            </div>
+                            <p className="text-slate-600 text-sm whitespace-pre-wrap leading-relaxed">{ann.content}</p>
+                            <div className="flex gap-2 mt-4 pt-4 border-t border-slate-50">
+                                <Badge variant="secondary" className="bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100">Phụ huynh</Badge>
+                                <Badge variant="secondary" className="bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100">Học sinh</Badge>
+                            </div>
+                        </div>
+                    ))
+                ) : (
+                    <div className="p-10 text-center bg-slate-50 rounded-2xl border border-slate-100 border-dashed">
+                        <Bell className="w-10 h-10 text-slate-300 mx-auto mb-3" />
+                        <p className="text-slate-500 font-medium">Chưa có thông báo nào được gửi đi.</p>
+                    </div>
+                )}
+            </div>
+            
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden mt-8">
+                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                        <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                            <MessageSquare className="w-5 h-5 text-purple-500" /> Ý kiến Phản hồi
+                        </h3>
+                        <p className="text-sm text-slate-500 mt-1">Học sinh và phụ huynh gửi thắc mắc, phản ánh.</p>
+                    </div>
+                    <Link href={`/teacher/classes/${classId}/feedback`}>
+                        <Button variant="outline" className="text-purple-600 border-purple-200 hover:bg-purple-50">
+                            Chi tiết <ExternalLink className="w-4 h-4 ml-2" />
+                        </Button>
+                    </Link>
+                </div>
+                <div className="p-8 text-center bg-slate-50">
+                    <MessageSquare className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                    <p className="text-slate-500 font-medium">Bạn hiện không có phản hồi nào mới.</p>
+                </div>
+            </div>
+        </>
+    );
+}
+
+async function ProgressTabData({ classId }: { classId: string }) {
+    const { data: studentProgress } = await fetchStudentProgressForClass(classId);
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {studentProgress && studentProgress.length > 0 ? (
+                studentProgress.map((p: any) => {
+                    const percent = p.progressPercent || 0;
+                    return (
+                        <div key={p.studentId} className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col items-center text-center">
+                            <Avatar className="w-14 h-14 mb-3 border-2 border-indigo-100">
+                                <AvatarFallback className="bg-indigo-50 text-indigo-600 font-bold">{p.name?.charAt(0) || "?"}</AvatarFallback>
+                            </Avatar>
+                            <h4 className="font-bold text-slate-900">{p.name || "N/A"}</h4>
+                            <div className="w-full bg-slate-100 rounded-full h-2 mt-4 overflow-hidden mb-1">
+                                <div
+                                    className={`h-2 rounded-full transition-all ${percent >= 80 ? 'bg-emerald-500' : percent >= 50 ? 'bg-amber-500' : 'bg-red-500'}`}
+                                    style={{ width: `${percent}%` }}
+                                />
+                            </div>
+                            <span className="text-xs font-bold text-slate-500 mb-3">{percent}% Hoàn thành</span>
+                            <Link href={`/teacher/classes/${classId}/students/${p.studentId}/progress`} className="w-full mt-auto">
+                                <Button variant="outline" size="sm" className="w-full">Xem chi tiết</Button>
+                            </Link>
+                        </div>
+                    );
+                })
+            ) : (
+                <div className="col-span-full p-12 text-center text-slate-500">Chưa có dữ liệu tiến độ.</div>
+            )}
+        </div>
+    );
+}
+
+async function ExamsHomeworkTabData({ classId }: { classId: string }) {
+    const [{ data: classExams }, { data: classHomework }] = await Promise.all([
+        fetchClassExams(classId),
+        fetchClassHomework(classId)
+    ]);
+    return (
+        <>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                        <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                            <FileText className="w-5 h-5 text-orange-500" /> Bài kiểm tra
+                        </h3>
+                        <p className="text-sm text-slate-500 mt-1">Danh sách đề thi và điểm số.</p>
+                    </div>
+                    <Link href={`/teacher/classes/${classId}/exams/create`}>
+                        <Button size="sm" className="bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-xl">
+                            <PlusCircle className="w-4 h-4 mr-2" /> Tạo đề thi
+                        </Button>
+                    </Link>
+                </div>
+                {classExams && classExams.length > 0 ? (
+                    <div className="divide-y divide-slate-100">
+                        {classExams.map((exam: any) => (
+                            <div key={exam.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
+                                <div>
+                                    <h4 className="font-bold text-slate-800 text-base">{exam.title}</h4>
+                                    <div className="flex gap-4 mt-2 text-xs font-medium text-slate-500">
+                                        <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Dài: {exam.duration_minutes || exam.duration}p</span>
+                                        <span>Tổng: {exam.total_points} điểm</span>
+                                        <span>{((exam.questions as any[]) || []).length} câu hỏi</span>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <Link href={`/teacher/classes/${classId}/exams/${exam.id}/analytics`}>
+                                        <Button size="sm" variant="outline" className="border-emerald-200 text-emerald-600 hover:bg-emerald-50"><BarChart3 className="w-4 h-4 mr-1.5" /> Thống kê</Button>
+                                    </Link>
+                                    <Link href={`/teacher/classes/${classId}/exams/${exam.id}/edit`}>
+                                        <Button variant="outline" size="sm"><Pencil className="w-4 h-4 text-slate-500"/></Button>
+                                    </Link>
+                                    <DeleteExamButton examId={exam.id} classId={classId} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="p-8 text-center text-slate-500">
+                        <FileText className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                        Lớp chưa có Bài kiểm tra nào.
+                    </div>
+                )}
+            </div>
+
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+                    <div>
+                        <h3 className="font-bold text-slate-900 flex items-center gap-2">
+                            <Home className="w-5 h-5 text-indigo-500" /> Bài tập về nhà
+                        </h3>
+                        <p className="text-sm text-slate-500 mt-1">Giao bài tập chụp ảnh / file về nhà.</p>
+                    </div>
+                    <Link href={`/teacher/classes/${classId}/homework/create`}>
+                        <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl">
+                            <PlusCircle className="w-4 h-4 mr-2" /> Tạo bài tập
+                        </Button>
+                    </Link>
+                </div>
+                {classHomework && classHomework.length > 0 ? (
+                    <div className="divide-y divide-slate-100">
+                        {classHomework.map((hw: any) => (
+                            <div key={hw.id} className="p-5 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                                <div>
+                                    <h4 className="font-bold text-slate-800">{hw.title}</h4>
+                                    <div className="text-xs text-slate-500 mt-1">
+                                        <span>{hw.total_points || 0} điểm</span> • <span>Hạn: {hw.due_date ? new Date(hw.due_date).toLocaleDateString('vi-VN') : 'Không có'}</span> 
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 text-indigo-500 items-center">
+                                    <Link href={`/teacher/classes/${classId}/homework/${hw.id}/submissions`}>
+                                        <Button size="sm" variant="outline">Chấm điểm</Button>
+                                    </Link>
+                                    <Link href={`/teacher/classes/${classId}/homework/${hw.id}/edit`}>
+                                        <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Sửa bài tập">
+                                            <Pencil className="w-4 h-4 text-slate-500" />
+                                        </Button>
+                                    </Link>
+                                    <DeleteHomeworkButton homeworkId={hw.id} classId={classId} />
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="p-8 text-center text-slate-500">
+                        <Home className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                        Chưa có bài tập về nhà nào.
+                    </div>
+                )}
+            </div>
+        </>
+    );
+}
+
+async function BehaviorTabData({ classId }: { classId: string }) {
+    const behaviorResult = await fetchClassBehaviorScores(classId);
+    const behaviorData = (behaviorResult as any)?.data || [];
+    return <StudentBehaviorPanel data={behaviorData} />;
 }

@@ -14,6 +14,7 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { useActivityTracker } from "@/hooks/useActivityTracker";
 
 const typeConfig: Record<string, { label: string; icon: any; color: string; bg: string }> = {
     multiple_choice: { label: "Trắc nghiệm", icon: ListChecks, color: "text-indigo-600", bg: "bg-indigo-50" },
@@ -54,6 +55,14 @@ export default function HomeworkSubmitClient({
     // Upload state
     const [uploading, setUploading] = useState<Record<number, boolean>>({});
     const [uploadProgress, setUploadProgress] = useState<Record<number, number>>({});
+
+    // === Activity Tracker: Theo dõi hành vi học sinh ===
+    const tracker = useActivityTracker({
+        contextType: "homework",
+        contextId: homework.id,
+        classId,
+        enabled: !isSubmitted,
+    });
 
     const handleVideoUpload = async (qIdx: number, file: File) => {
         if (!file) return;
@@ -146,6 +155,18 @@ export default function HomeworkSubmitClient({
             toast.error("Lỗi: " + res.error);
         } else {
             toast.success("Nộp bài thành công!");
+
+            // Trigger AI behavior analysis sau khi nộp homework
+            // PHẢI await trackSubmission để logs được ghi vào DB trước khi AI đọc
+            await tracker.trackSubmission({ score: res.data?.score });
+            try {
+                fetch("/api/ai/behavior-analysis", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ classId, contextType: "homework", contextId: homework.id }),
+                });
+            } catch (e) { /* fire-and-forget */ }
+
             router.refresh();
         }
         setSubmitting(false);

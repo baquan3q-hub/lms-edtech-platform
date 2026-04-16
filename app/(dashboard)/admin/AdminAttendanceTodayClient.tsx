@@ -82,7 +82,7 @@ export default function AdminAttendanceTodayClient() {
                                 {s.attendanceRate}%
                             </td>
                             <td className="py-3 px-4 text-right text-gray-500 text-sm">
-                                {getStatusText(s.sessionStatus, s.totalStudents > 0)}
+                                {getStatusText(s.status, s.totalStudents > 0)}
                             </td>
                         </tr>
                     ))}

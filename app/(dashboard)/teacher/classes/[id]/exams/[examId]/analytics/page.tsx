@@ -14,6 +14,7 @@ import AnalyticsTabsClient from "./AnalyticsTabsClient";
 import AIClassAnalysis from "./AIClassAnalysis";
 import AIStudentAnalysis from "./AIStudentAnalysis";
 import TeacherProgressTracking from "./TeacherProgressTracking";
+import ClassBehaviorTab from "./ClassBehaviorTab";
 
 export default async function ExamAnalyticsPage({ params }: { params: Promise<{ id: string; examId: string }> }) {
     const { id: classId, examId } = await params;
@@ -87,6 +88,7 @@ export default async function ExamAnalyticsPage({ params }: { params: Promise<{ 
                     { label: "Phân tích AI Lớp", icon: "🤖" },
                     { label: "Nhận xét Cá nhân", icon: "👤" },
                     { label: "Theo dõi tiến độ", icon: "📈" },
+                    { label: "Hành vi học tập", icon: "🛡️" },
                 ]}
             >
                 {/* TAB 1: Tổng quan (nội dung gốc) */}
@@ -220,6 +222,9 @@ export default async function ExamAnalyticsPage({ params }: { params: Promise<{ 
                 <TeacherProgressTracking
                     analyses={analysesWithProgress || []}
                 />
+
+                {/* TAB 5: Behavior Tracking */}
+                <ClassBehaviorTab classId={classId} />
             </AnalyticsTabsClient>
         </div>
     );

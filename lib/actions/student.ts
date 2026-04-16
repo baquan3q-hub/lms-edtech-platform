@@ -253,11 +253,12 @@ export async function fetchStudentAssignments() {
             .eq("student_id", user.id)
             .in("exam_id", examIds);
 
-        // Lấy thêm Bài tập về nhà (Homework) thuộc các classIds này
+        // Lấy thêm Bài tập về nhà (Homework) thuộc các classIds này — chỉ lấy đã publish
         const { data: homeworks, error: hwError } = await adminSupabase
             .from("homework")
             .select("id, class_id, title, due_date, total_points")
-            .in("class_id", classIds);
+            .in("class_id", classIds)
+            .eq("is_published", true);
 
         const hwIds = homeworks?.map(h => h.id) || [];
         const { data: hwSubmissions } = await adminSupabase
@@ -633,12 +634,19 @@ export async function fetchStudentAnnouncements() {
         const classIds = (enrollments || []).map((e: any) => e.class_id);
         if (classIds.length === 0) return { data: [], error: null };
 
-        const { data, error } = await adminSupabase
+        let query = adminSupabase
             .from("announcements")
             .select("id, title, content, resource_type, class_id, created_at")
-            .in("class_id", classIds)
             .order("created_at", { ascending: false })
             .limit(10);
+
+        if (classIds.length > 0) {
+            query = query.or(`class_id.in.(${classIds.join(',')}),scope.eq.system`);
+        } else {
+            query = query.eq("scope", "system");
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
         return { data: data || [], error: null };
