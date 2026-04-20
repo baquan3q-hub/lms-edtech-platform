@@ -3,8 +3,12 @@
 import { useState, useMemo } from "react";
 import {
     BarChart3, TrendingUp, Users, Award, Search, Filter,
-    ArrowUpDown, Trophy, GraduationCap, BookOpen, ChevronDown
+    ArrowUpDown, Trophy, GraduationCap, BookOpen, ChevronDown,
+    Download, Loader2
 } from "lucide-react";
+import * as XLSX from "xlsx";
+import { toast } from "sonner";
+import { fetchGradeExportData } from "@/lib/actions/admin-grades";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,6 +36,7 @@ export default function AdminGradesClient({ data }: AdminGradesClientProps) {
     const [searchQuery, setSearchQuery] = useState("");
     const [sortBy, setSortBy] = useState<"name" | "score">("score");
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+    const [isExporting, setIsExporting] = useState(false);
 
     if (!data) {
         return (
@@ -109,6 +114,88 @@ export default function AdminGradesClient({ data }: AdminGradesClientProps) {
         }
     };
 
+    const handleExport = async () => {
+        setIsExporting(true);
+        const toastId = toast.loading("Đang lập báo cáo, vui lòng đợi...");
+
+        const res = await fetchGradeExportData({
+            courseId: selectedCourse !== "all" ? selectedCourse : undefined,
+            classId: selectedClass !== "all" ? selectedClass : undefined
+        });
+
+        if (res.error || !res.data) {
+            toast.error(res.error || "Không lấy được dữ liệu xuất!", { id: toastId });
+            setIsExporting(false);
+            return;
+        }
+
+        const wb = XLSX.utils.book_new();
+
+        // 1. Sheet Tổng hợp
+        const summaryRows = filteredStudents.map((s: any, idx: number) => ({
+            "STT": idx + 1,
+            "Họ và tên": s.studentName,
+            "Email": s.studentEmail,
+            "Lớp": s.className,
+            "Khóa học": s.courseName,
+            "Số bài đã nộp": s.totalSubmissions,
+            "ĐTB": s.avgScore,
+            "Xếp loại": s.rank
+        }));
+        
+        const wsSummary = XLSX.utils.json_to_sheet(summaryRows.length > 0 ? summaryRows : [{"Thông báo": "Không có dữ liệu"}]);
+        XLSX.utils.book_append_sheet(wb, wsSummary, "Tổng hợp");
+
+        // 2. Sheet từng HS (giới hạn top 50 dựa trên kết quả lọc hiện tại để tránh file lỗi)
+        const topStudentsForExport = filteredStudents.slice(0, 50);
+        
+        for (const s of topStudentsForExport) {
+            const subs = res.data[s.studentId] || [];
+            // Sort by date desc
+            subs.sort((a: any, b: any) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+            
+            const studentRows = subs.map((sub: any, idx: number) => ({
+                "STT": idx + 1,
+                "Loại bài": sub.type,
+                "Tên bài": sub.title,
+                "Điểm đạt": sub.score,
+                "Điểm tối đa": sub.totalPoints,
+                "Điểm quy chuẩn (Hệ 10)": sub.normalizedScore,
+                "Ngày nộp": sub.submittedAt ? new Date(sub.submittedAt).toLocaleString("vi-VN") : ""
+            }));
+
+            // Sheetname in excel must be <= 31 chars and no reserved characters
+            let cleanName = (s.studentName || "HocSinh").replace(/[\[\]\:\*\?\/\\']/g, "");
+            cleanName = cleanName.substring(0, 31);
+            
+            // Generate unique sheet name just in case
+            let sheetName = cleanName;
+            let counter = 1;
+            while(wb.SheetNames.includes(sheetName) && sheetName.length > 0) {
+                 const suffix = `_${counter}`;
+                 sheetName = cleanName.substring(0, 31 - suffix.length) + suffix;
+                 counter++;
+            }
+
+            const wsStudent = XLSX.utils.json_to_sheet(studentRows.length > 0 ? studentRows : [{"Thông báo": "Chưa nộp bài nào"}]);
+            XLSX.utils.book_append_sheet(wb, wsStudent, sheetName || "Hoc Sinh");
+        }
+
+        let prefix = "BaoCaoDiem";
+        if (selectedCourse !== "all") {
+             const crs = data.courses.find((c:any) => c.id === selectedCourse);
+             if (crs) prefix += `_${crs.name.replace(/\s+/g, "")}`;
+        }
+        if (selectedClass !== "all") {
+             const cls = (data.classGrades || []).find((c:any) => c.classId === selectedClass);
+             if (cls) prefix += `_${cls.className.replace(/\s+/g, "")}`;
+        }
+
+        XLSX.writeFile(wb, `${prefix}.xlsx`);
+        toast.success("Xuất báo cáo thành công!", { id: toastId });
+        setIsExporting(false);
+    };
+
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Header */}
@@ -124,6 +211,15 @@ export default function AdminGradesClient({ data }: AdminGradesClientProps) {
                         Theo dõi và đánh giá xu hướng điểm số toàn hệ thống
                     </p>
                 </div>
+                
+                <Button 
+                    onClick={handleExport} 
+                    disabled={isExporting}
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-xl shadow-sm px-5 py-2.5 h-auto transition-all inline-flex items-center gap-2 max-w-fit"
+                >
+                    {isExporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    {isExporting ? "Đang xuất..." : "Xuất báo cáo Excel"}
+                </Button>
             </div>
 
             {/* Overview Cards */}

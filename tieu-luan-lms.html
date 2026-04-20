@@ -1,0 +1,1428 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tiểu luận — Nghiên cứu mô hình học tập số và xây dựng hệ thống LMS</title>
+  <meta name="description" content="Tiểu luận cuối kỳ môn Quản trị hệ thống E-Learning: Nghiên cứu mô hình học tập số và xây dựng hệ thống LMS cho trung tâm tiếng Anh theo hướng cá nhân hóa và can thiệp sớm." />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,400;0,700;1,400&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* ===== DESIGN SYSTEM ===== */
+    :root {
+      --bg: #f5f0e6;
+      --paper: #fffdf8;
+      --ink: #1a1f26;
+      --muted: #5a6370;
+      --line: #d6cdbf;
+      --accent: #8b3526;
+      --accent-light: #f4e2d4;
+      --accent-2: #1c4f60;
+      --accent-2-light: #e8f4f7;
+      --quote-bg: #f9f0e4;
+      --shadow: 0 10px 32px rgba(28, 24, 18, 0.07);
+      --serif: "Noto Serif", "Georgia", "Times New Roman", serif;
+      --sans: "Inter", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+      --mono: "Consolas", "Fira Code", monospace;
+      --radius: 20px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: radial-gradient(circle at top, rgba(140,53,38,.07), transparent 35%),
+                  linear-gradient(180deg, #f0e9dd 0%, var(--bg) 100%);
+      color: var(--ink);
+      font-family: var(--serif);
+      line-height: 1.78;
+      font-size: 16px;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ===== PAGE LAYOUT ===== */
+    .page {
+      width: min(1200px, calc(100% - 32px));
+      margin: 24px auto 80px;
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 24px;
+      align-items: start;
+    }
+
+    /* ===== SIDEBAR TOC ===== */
+    .toc {
+      position: sticky; top: 16px;
+      background: rgba(255,253,249,.94);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(214,205,191,.85);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 22px;
+      font-family: var(--sans);
+    }
+    .toc h2 {
+      margin: 0 0 12px;
+      font-size: .82rem;
+      text-transform: uppercase;
+      letter-spacing: .18em;
+      color: var(--accent);
+    }
+    .toc ol { margin: 0; padding-left: 18px; font-size: .93rem; }
+    .toc li { margin: 0 0 8px; color: var(--muted); }
+    .toc li a { color: var(--ink); }
+    .toc .sub { padding-left: 16px; font-size: .88rem; }
+    .toc .divider {
+      margin: 14px 0;
+      border-top: 1px solid var(--line);
+    }
+    .toc .note {
+      font-size: .86rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ===== MAIN ARTICLE ===== */
+    main { min-width: 0; }
+    article {
+      background: var(--paper);
+      border: 1px solid rgba(214,205,191,.95);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    /* ===== COVER / HERO ===== */
+    .cover {
+      padding: 56px 60px 44px;
+      background: linear-gradient(135deg, rgba(140,53,38,.1), rgba(28,79,96,.08)),
+                  linear-gradient(180deg, #fff7f0, #fffdf8);
+      border-bottom: 1px solid var(--line);
+      text-align: center;
+    }
+    .cover .uni {
+      font-family: var(--sans);
+      font-size: .82rem;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    .cover .dept {
+      font-family: var(--sans);
+      font-size: .92rem;
+      color: var(--muted);
+      margin-bottom: 28px;
+    }
+    .cover h1 {
+      font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+      line-height: 1.18;
+      font-weight: 700;
+      letter-spacing: -.02em;
+      max-width: 800px;
+      margin: 0 auto 12px;
+    }
+    .cover .subtitle {
+      font-size: 1rem;
+      color: #3a4550;
+      max-width: 720px;
+      margin: 0 auto 28px;
+    }
+    .cover .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      max-width: 700px;
+      margin: 0 auto;
+      font-family: var(--sans);
+    }
+    .cover .meta-card {
+      background: rgba(255,255,255,.6);
+      border: 1px solid rgba(214,205,191,.8);
+      border-radius: 14px;
+      padding: 12px 16px;
+      text-align: left;
+    }
+    .cover .meta-card strong {
+      display: block;
+      font-size: .72rem;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+    .cover .meta-card span { font-size: .95rem; }
+
+    /* ===== SECTION STYLING ===== */
+    .section {
+      padding: 40px 60px;
+      border-bottom: 1px solid rgba(214,205,191,.7);
+    }
+    .section:last-child { border-bottom: 0; }
+    h2 {
+      margin: 0 0 20px;
+      font-size: clamp(1.5rem, 2vw, 1.95rem);
+      line-height: 1.22;
+      color: var(--ink);
+    }
+    h3 {
+      margin: 30px 0 14px;
+      font-size: 1.15rem;
+      line-height: 1.35;
+      color: var(--accent-2);
+    }
+    h4 {
+      margin: 22px 0 8px;
+      font-size: .98rem;
+      font-family: var(--sans);
+      text-transform: uppercase;
+      letter-spacing: .07em;
+      color: var(--accent-2);
+    }
+    p, ul, ol, table, blockquote { margin: 0 0 16px; font-size: 1rem; }
+    ul, ol { padding-left: 24px; }
+    li { margin-bottom: 7px; }
+    code {
+      font-family: var(--mono);
+      background: #f5efe6;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: .92em;
+    }
+
+    /* ===== CALLOUTS ===== */
+    .callout {
+      margin: 22px 0;
+      padding: 16px 20px;
+      border-left: 4px solid var(--accent);
+      background: var(--accent-light);
+      border-radius: 12px;
+      font-size: .97rem;
+    }
+    .callout.info { border-left-color: var(--accent-2); background: var(--accent-2-light); }
+    blockquote {
+      padding: 16px 22px;
+      background: var(--quote-bg);
+      border-left: 4px solid #d1a270;
+      border-radius: 12px;
+      color: #43362b;
+      font-style: italic;
+    }
+
+    /* ===== TABLES ===== */
+    .table-wrap {
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fff;
+      margin: 20px 0;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: .94rem; }
+    thead { background: #f7f1e7; }
+    th, td {
+      padding: 12px 14px;
+      border-bottom: 1px solid #e8dfd2;
+      text-align: left;
+      vertical-align: top;
+    }
+    tbody tr:last-child td { border-bottom: 0; }
+    th {
+      font-family: var(--sans);
+      font-size: .82rem;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: #4f5a66;
+    }
+
+    /* ===== CARDS & GRIDS ===== */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 16px 18px;
+      background: linear-gradient(180deg, #fffdfa, #fff8f0);
+    }
+    .card h3, .card h4 { margin-top: 0; }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+      background: #fff;
+      text-align: center;
+    }
+    .metric strong {
+      display: block;
+      font-size: 1.8rem;
+      line-height: 1;
+      color: var(--accent);
+      margin-bottom: 4px;
+    }
+    .metric span { font-family: var(--sans); font-size: .88rem; color: var(--muted); }
+
+    /* ===== MERMAID ===== */
+    .mermaid-block {
+      margin: 24px 0;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: linear-gradient(180deg, #fffefc, #faf6f0);
+      overflow: auto;
+    }
+    .mermaid-title {
+      margin: 0 0 10px;
+      font-family: var(--sans);
+      font-size: .88rem;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      color: var(--accent-2);
+      font-weight: 600;
+    }
+
+    /* ===== WORK DIVISION TABLE ===== */
+    .work-table {
+      margin: 24px 0;
+    }
+    .work-table td:first-child {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    /* ===== REFERENCES ===== */
+    .ref-list { padding-left: 22px; }
+    .ref-list li { margin-bottom: 14px; overflow-wrap: anywhere; font-size: .95rem; }
+
+    /* ===== KEYWORDS ===== */
+    .keywords {
+      margin-top: 16px;
+      font-family: var(--sans);
+      color: var(--muted);
+      font-size: .94rem;
+    }
+
+    /* ===== RESPONSIVE ===== */
+    @media (max-width: 980px) {
+      .page { grid-template-columns: 1fr; }
+      .toc { position: static; }
+      .cover, .section { padding: 30px 20px; }
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+      .cover .meta-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* ===== PRINT ===== */
+    @media print {
+      body { background: #fff; font-size: 11pt; }
+      .page { width: 100%; margin: 0; display: block; }
+      .toc { display: none; }
+      article { box-shadow: none; border: 0; border-radius: 0; }
+      .cover, .section { padding: 20px 0; }
+      .mermaid-block { break-inside: avoid; }
+      .section { page-break-inside: avoid; }
+      .cover { page-break-after: always; }
+      h2 { page-break-before: always; }
+      h2:first-of-type { page-break-before: auto; }
+    }
+
+    .footnote { font-family: var(--sans); font-size: .86rem; color: var(--muted); }
+    .small { font-size: .92rem; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <!-- ===== SIDEBAR TOC ===== -->
+    <aside class="toc">
+      <h2>Mục lục</h2>
+      <ol>
+        <li><a href="#loi-mo-dau">Lời mở đầu</a></li>
+        <li><a href="#co-so-ly-luan">Cơ sở lý luận và tổng quan nghiên cứu</a>
+          <ol class="sub">
+            <li><a href="#ly-do">Lý do chọn đề tài</a></li>
+            <li><a href="#hoc-thuyet">Các học thuyết nền tảng</a></li>
+            <li><a href="#mo-hinh-nc">Mô hình nghiên cứu đề xuất</a></li>
+            <li><a href="#thuc-trang">Thực trạng vấn đề</a></li>
+          </ol>
+        </li>
+        <li><a href="#he-thong">Giới thiệu hệ thống</a>
+          <ol class="sub">
+            <li><a href="#tong-quan">Tổng quan</a></li>
+            <li><a href="#usecase">Use Case Diagram</a></li>
+            <li><a href="#activity">Activity Diagrams</a></li>
+            <li><a href="#kien-truc">Kiến trúc kỹ thuật</a></li>
+            <li><a href="#erd">ERD</a></li>
+            <li><a href="#modules">Module hệ thống</a></li>
+            <li><a href="#ai-layer">Lớp AI</a></li>
+          </ol>
+        </li>
+        <li><a href="#ket-qua">Kết quả nghiên cứu &amp; thảo luận</a></li>
+        <li><a href="#kiem-thu">Quy trình kiểm thử</a></li>
+        <li><a href="#ket-luan">Kết luận &amp; hướng phát triển</a></li>
+        <li><a href="#tai-lieu">Tài liệu tham khảo</a></li>
+        <li><a href="#phu-luc">Phụ lục</a></li>
+      </ol>
+      <div class="divider"></div>
+      <p class="note">
+        <strong>Đề tài:</strong> Nghiên cứu mô hình học tập số và xây dựng hệ thống LMS cho trung tâm tiếng Anh theo hướng cá nhân hóa và can thiệp sớm<br><br>
+        <strong>Lớp:</strong> EDT4006 1<br>
+        <strong>Trường:</strong> Đại học Giáo dục — Khoa Công nghệ Giáo dục
+      </p>
+    </aside>
+
+    <main>
+      <article>
+        <!-- ===== TRANG BÌA ===== -->
+        <header class="cover">
+          <p class="uni">Trường Đại học Giáo dục — Đại học Quốc gia Hà Nội</p>
+          <p class="dept">Khoa Công nghệ Giáo dục · Lớp EDT4006 1</p>
+          <h1>Nghiên cứu mô hình học tập số và xây dựng hệ thống LMS cho trung tâm tiếng Anh theo hướng cá nhân hóa và can thiệp sớm</h1>
+          <p class="subtitle">
+            Tiểu luận cuối kỳ môn Quản trị hệ thống E-Learning — Năm học 2025–2026
+          </p>
+          <div class="meta-grid">
+            <div class="meta-card"><strong>Thành viên 1</strong><span>Bùi Anh Quân — 24010853</span></div>
+            <div class="meta-card"><strong>Thành viên 2</strong><span>Lê Ngọc Đạt — 24010369</span></div>
+            <div class="meta-card"><strong>Giảng viên hướng dẫn</strong><span>[Tên giảng viên]</span></div>
+            <div class="meta-card"><strong>Thời gian</strong><span>Học kỳ II, 2025–2026</span></div>
+          </div>
+        </header>
+
+        <!-- ===== BẢNG PHÂN CHIA CÔNG VIỆC ===== -->
+        <section class="section" id="phan-cong">
+          <h2>Bảng phân chia công việc</h2>
+          <div class="table-wrap work-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nội dung công việc</th>
+                  <th>Bùi Anh Quân</th>
+                  <th>Lê Ngọc Đạt</th>
+                  <th>Ghi chú</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Nghiên cứu cơ sở lý luận và các học thuyết nền tảng</td>
+                  <td>✔ Chính</td>
+                  <td>Hỗ trợ</td>
+                  <td>Constructivism, SRL, Formative Assessment, Learning Analytics...</td>
+                </tr>
+                <tr>
+                  <td>Phân tích yêu cầu và thiết kế hệ thống</td>
+                  <td>✔ Chính</td>
+                  <td>Hỗ trợ</td>
+                  <td>Use Case, Activity Diagram, ERD, kiến trúc kỹ thuật</td>
+                </tr>
+                <tr>
+                  <td>Phát triển Frontend &amp; Backend (Web Application)</td>
+                  <td>✔ Chính</td>
+                  <td>—</td>
+                  <td>Next.js, Supabase, TanStack Query, Zustand, Gemini AI</td>
+                </tr>
+                <tr>
+                  <td>Thiết kế cơ sở dữ liệu &amp; API</td>
+                  <td>✔ Chính</td>
+                  <td>—</td>
+                  <td>34 phase migration, RLS, Realtime</td>
+                </tr>
+                <tr>
+                  <td>Xây dựng nội dung học liệu số</td>
+                  <td>—</td>
+                  <td>✔ Chính</td>
+                  <td>Giáo trình, slide bài giảng, tài liệu tham khảo</td>
+                </tr>
+                <tr>
+                  <td>Biên soạn và chuẩn hóa nội dung khóa học</td>
+                  <td>Hỗ trợ</td>
+                  <td>✔ Chính</td>
+                  <td>Cấu trúc lesson tree, nội dung bài học</td>
+                </tr>
+                <tr>
+                  <td>Kiểm thử hệ thống</td>
+                  <td>✔ Chính</td>
+                  <td>Hỗ trợ</td>
+                  <td>Test theo module, test tích hợp, UAT</td>
+                </tr>
+                <tr>
+                  <td>Viết báo cáo tiểu luận</td>
+                  <td>✔ Chính</td>
+                  <td>Hỗ trợ</td>
+                  <td>Tổng hợp, biên tập, trích dẫn APA</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ===== LỜI MỞ ĐẦU ===== -->
+        <section class="section" id="loi-mo-dau">
+          <h2>Lời mở đầu</h2>
+          <p>
+            Trước hết, nhóm chúng em xin gửi lời trân trọng cảm ơn đến Thầy — người đã đồng hành, định hướng và tạo cơ hội để chúng em được thực hiện đề tài này. Đối với nhóm, bài tiểu luận cuối kỳ không đơn thuần là một bài tập học phần, mà là một dự án thực sự mà chúng em đã dành tâm huyết nghiên cứu, phân tích và xây dựng trong suốt học kỳ vừa qua.
+          </p>
+          <p>
+            Quá trình làm việc trên đề tài này đã giúp chúng em không chỉ vận dụng kiến thức chuyên môn về quản trị hệ thống e-learning, mà còn rèn luyện cách tư duy hệ thống: từ việc phân tích bài toán thực tế, lựa chọn giải pháp kỹ thuật, tổ chức dữ liệu, cho đến việc đặt câu hỏi phản biện trước những giới hạn mà năng lực hiện tại chưa thể vượt qua. Mỗi quyết định thiết kế, mỗi dòng mã nguồn, mỗi lần viết lại một luồng xử lý đều là một bài học về sự cân nhắc giữa lý thuyết và thực hành.
+          </p>
+          <p>
+            Chúng em ý thức rằng sản phẩm này vẫn còn nhiều điểm cần cải thiện và mở rộng. Tuy nhiên, điều quan trọng nhất mà quá trình này mang lại chính là sự phát triển về năng lực và tư duy — hai điều sẽ đi cùng chúng em vào những dự án tiếp theo, dù ở bất kỳ lĩnh vực nào.
+          </p>
+          <p>
+            Một lần nữa, chúng em xin chân thành cảm ơn Thầy đã dành thời gian đọc, đánh giá và nhận xét. Chúng em rất mong nhận được sự góp ý của Thầy — không chỉ để hoàn thiện sản phẩm, mà để mở rộng góc nhìn và tư duy trong lĩnh vực công nghệ giáo dục nói riêng và các lĩnh vực liên quan nói chung.
+          </p>
+          <p class="keywords">
+            <strong>Từ khóa:</strong> LMS thông minh, chuyển đổi số giáo dục, học tập cá nhân hóa, learning analytics, can thiệp sớm, phụ huynh đồng hành, trung tâm tiếng Anh, formative assessment.
+          </p>
+        </section>
+
+        <!-- ===== PHẦN II: CƠ SỞ LÝ LUẬN ===== -->
+        <section class="section" id="co-so-ly-luan">
+          <h2>Phần II — Cơ sở lý luận và tổng quan nghiên cứu</h2>
+
+          <h3 id="ly-do">2.1. Lý do chọn đề tài</h3>
+          <p>
+            Có bốn lý do chính thúc đẩy nhóm lựa chọn đề tài xây dựng một nền tảng LMS theo hướng cá nhân hóa và can thiệp sớm cho bối cảnh trung tâm tiếng Anh.
+          </p>
+          <p>
+            <strong>Thứ nhất</strong>, hệ sinh thái giáo dục số ở nhiều cơ sở hiện nay vẫn còn phân mảnh nghiêm trọng: giáo viên quản lý bài học bằng nhiều công cụ rời rạc, học sinh học trên một nền tảng nhưng nộp bài hoặc nhận phản hồi trên nền tảng khác, phụ huynh ít có khả năng theo dõi tiến độ theo thời gian thực. Điều này tạo ra độ trễ trong can thiệp sư phạm và làm suy yếu tính nhất quán của trải nghiệm học tập.
+          </p>
+          <p>
+            <strong>Thứ hai</strong>, yêu cầu chuyển đổi số giáo dục tại Việt Nam nhấn mạnh người học và nhà giáo là trung tâm, đồng thời coi lợi ích mang lại cho người học là thước đo thành công của chuyển đổi số (Thủ tướng Chính phủ, 2022). Do đó, một hệ thống chỉ số hóa thao tác hành chính nhưng không cải thiện chất lượng học tập, phản hồi và cá nhân hóa sẽ chưa đáp ứng đúng tinh thần chính sách.
+          </p>
+          <p>
+            <strong>Thứ ba</strong>, các báo cáo quốc tế gần đây cho thấy công nghệ giáo dục chỉ thực sự có giá trị khi được tích hợp vào một hệ sinh thái dữ liệu, phương pháp sư phạm và cơ chế quản trị phù hợp; nếu không, công nghệ có thể chỉ đơn giản sao chép mô hình dạy học cũ trong một giao diện mới (Global Education Monitoring Report Team, 2023; OECD, 2023). Nền tảng nghiên cứu trong tiểu luận này được thiết kế để giải quyết đúng điểm nghẽn đó thông qua lesson tree, quiz/exam analytics, phản hồi liên tục, chuyên cần thời gian thực và kết nối phụ huynh.
+          </p>
+          <p>
+            <strong>Thứ tư</strong>, về mặt công nghệ, codebase hiện có đã hình thành đủ lớp dữ liệu hành vi để mở rộng sang learning analytics và machine learning: lịch sử học tập, chuyên cần, tiến độ hoàn thành, hoạt động trong lớp, thông báo và phản hồi. Đây là điều kiện thuận lợi để đề xuất các mô hình dự báo rủi ro, knowledge tracing và khuyến nghị học liệu trong giai đoạn tiếp theo.
+          </p>
+
+          <h3 id="hoc-thuyet">2.2. Các học thuyết nền tảng</h3>
+          <p>
+            Phần này xây dựng nền tảng học thuật để biện minh cho các quyết định thiết kế của sản phẩm. Thay vì chọn các học thuyết rời rạc, nhóm tổ chức cơ sở lý luận theo logic trực tiếp gắn với tính năng phần mềm: học liệu số, lộ trình học, đánh giá quá trình, phản hồi, phân tích hành vi, kết nối phụ huynh và chấp nhận công nghệ.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Vấn đề giáo dục</th>
+                  <th>Tính năng nền tảng</th>
+                  <th>Cơ sở lý thuyết hỗ trợ</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Học tập thụ động, thiếu cá nhân hóa</td>
+                  <td>Lesson tree, course items, học theo lộ trình, tiến độ cá nhân</td>
+                  <td>Constructivism, Social Constructivism, Mastery Learning</td>
+                </tr>
+                <tr>
+                  <td>Phản hồi chậm, khó điều chỉnh học tập</td>
+                  <td>Quiz, homework, AI feedback, teacher feedback</td>
+                  <td>Formative Assessment, Feedback Theory</td>
+                </tr>
+                <tr>
+                  <td>Học sinh khó tự quản lý việc học</td>
+                  <td>Dashboard tiến độ, lịch học, deadline, thông báo</td>
+                  <td>Self-Regulated Learning</td>
+                </tr>
+                <tr>
+                  <td>Nhà trường thiếu dữ liệu hành vi để can thiệp sớm</td>
+                  <td>Attendance, activity logs, analytics, realtime sync</td>
+                  <td>Learning Analytics, Educational Data Mining</td>
+                </tr>
+                <tr>
+                  <td>Phụ huynh khó đồng hành sát quá trình học</td>
+                  <td>Parent portal, attendance, feedback, notifications</td>
+                  <td>Parental Involvement</td>
+                </tr>
+                <tr>
+                  <td>Thiếu động lực duy trì gắn kết</td>
+                  <td>Attendance points, leaderboard, achievements</td>
+                  <td>Self-Determination Theory, Gamification</td>
+                </tr>
+                <tr>
+                  <td>Người dùng ngại dùng công nghệ mới</td>
+                  <td>UI đa vai trò, điều hướng theo role, workflow tập trung</td>
+                  <td>TAM, UTAUT</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4>2.2.1. Constructivism và Social Constructivism</h4>
+          <p>
+            Constructivism xem người học là chủ thể tích cực kiến tạo tri thức, thay vì chỉ tiếp nhận kiến thức một chiều. Trong các môi trường học tập kiến tạo, người học phải tham gia vào hoạt động giải quyết vấn đề, kết nối tri thức mới với kinh nghiệm trước đó và chủ động tạo nghĩa cho nội dung học (Loyens &amp; Gijbels, 2008). Social constructivism mở rộng lập trường này bằng cách nhấn mạnh vai trò của tương tác xã hội, ngôn ngữ và cộng đồng trong quá trình hình thành nhận thức (Vygotsky, 1978).
+          </p>
+          <p>
+            <em>Liên hệ với sản phẩm:</em> Lesson tree, tài nguyên số, học liệu phân tầng, thảo luận giữa giáo viên và học sinh, cùng cơ chế học theo lớp là các cấu phần hỗ trợ trực tiếp cho tiếp cận kiến tạo. Hệ thống tổ chức bài học như một chuỗi trải nghiệm học tập gồm nội dung, bài kiểm tra, phản hồi và tiến độ — không phải một kho tệp tĩnh.
+          </p>
+
+          <h4>2.2.2. Self-Regulated Learning</h4>
+          <p>
+            Self-regulated learning (SRL) mô tả quá trình người học tự đặt mục tiêu, lập kế hoạch, giám sát tiến trình và điều chỉnh chiến lược học tập của mình (Zimmerman, 2002). Người học không chỉ cần nội dung mà còn cần các công cụ giúp nhận biết mình đang ở đâu, còn thiếu gì và bước tiếp theo là gì.
+          </p>
+          <p>
+            <em>Liên hệ với sản phẩm:</em> Dashboard tiến độ, lịch học, deadline, trạng thái hoàn thành, thông báo nhắc hạn và hồ sơ kết quả đóng vai trò là các scaffold cho self-regulation, từ đó hỗ trợ giả thuyết rằng minh bạch tiến độ và phản hồi kịp thời có thể cải thiện khả năng tự điều chỉnh học tập.
+          </p>
+
+          <h4>2.2.3. Formative Assessment và Feedback</h4>
+          <p>
+            Formative assessment là đánh giá <em>vì học tập</em> — sử dụng đánh giá như công cụ giúp học sinh tiến bộ thay vì chỉ xếp loại cuối kỳ. Black và Wiliam (1998) cho thấy phản hồi thường xuyên và đánh giá quá trình có thể tạo ra tác động tích cực đáng kể lên kết quả học tập. Hattie và Timperley (2007) chỉ ra rằng sức mạnh của phản hồi phụ thuộc vào nội dung, thời điểm và mức độ giúp người học trả lời ba câu hỏi: <em>đang hướng đến đâu, đang ở đâu, và bước tiếp theo là gì</em>.
+          </p>
+          <p>
+            <em>Liên hệ với sản phẩm:</em> Quiz, homework, exam analytics, AI-generated quiz, teacher feedback và reporting dashboard tạo nên chu trình phản hồi ngắn, liên tục và có thể cá nhân hóa — không chỉ làm nhiệm vụ chấm điểm.
+          </p>
+
+          <h4>2.2.4. Mastery Learning và định hướng theo năng lực</h4>
+          <p>
+            Bloom (1968) cho rằng phần lớn người học có thể đạt mức nắm vững kiến thức cao nếu được cung cấp đủ thời gian, điều kiện học tập phù hợp và phản hồi sửa sai kịp thời. Sản phẩm cho phép giáo viên xây dựng course items, theo dõi tiến độ từng học sinh, giao bài bổ trợ và phân tích kết quả — phù hợp với tinh thần mastery learning.
+          </p>
+
+          <h4>2.2.5. Learning Analytics và Educational Data Mining</h4>
+          <p>
+            Learning analytics tập trung vào đo lường, thu thập, phân tích và báo cáo dữ liệu về người học và bối cảnh học tập nhằm hiểu và tối ưu hóa học tập (Siemens &amp; Long, 2011; Ferguson, 2012). Educational data mining bổ sung góc nhìn kỹ thuật về khai phá mô hình từ dữ liệu giáo dục: phân loại, phân cụm, phát hiện bất thường và dự báo (Baker &amp; Yacef, 2009; Romero &amp; Ventura, 2007).
+          </p>
+          <p>
+            <em>Liên hệ với sản phẩm:</em> Codebase đã thu thập nhiều dòng dữ liệu hành vi: điểm danh, tiến độ, bài nộp, điểm số, thông báo, achievements và trạng thái lớp học theo thời gian thực — cho phép chuyển từ "LMS ghi nhận dữ liệu" thành "LMS phân tích dữ liệu để hỗ trợ quyết định sư phạm".
+          </p>
+
+          <h4>2.2.6. Parental Involvement</h4>
+          <p>
+            Nghiên cứu nhấn mạnh rằng sự tham gia có chất lượng của phụ huynh có liên hệ tích cực với kết quả học tập, chuyên cần và hành vi học đường (Epstein, 2018; Jeynes, 2005). Parent portal giúp hệ thống chuyển từ mô hình "teacher-student only" sang "teacher-student-parent triangle", qua đó củng cố cơ chế giám sát mềm và kết nối phản hồi giữa gia đình với nhà trường.
+          </p>
+
+          <h4>2.2.7. Self-Determination Theory và Gamification</h4>
+          <p>
+            Self-Determination Theory cho rằng động lực nội tại được nuôi dưỡng khi môi trường hỗ trợ ba nhu cầu tâm lý cơ bản: tự chủ, năng lực và gắn kết (Deci &amp; Ryan, 2000). Gamification có thể tăng gắn kết học tập qua tín hiệu tiến bộ, cảm giác thành tựu và tham gia xã hội — tuy nhiên, hiệu quả phụ thuộc mạnh vào cách triển khai (Hamari et al., 2014).
+          </p>
+          <p>
+            <em>Liên hệ với sản phẩm:</em> Attendance points, leaderboard, achievements và streak phải hỗ trợ cảm giác tiến bộ, không biến quá trình học thành cơ chế thưởng phạt máy móc.
+          </p>
+
+          <h4>2.2.8. Technology Acceptance: TAM và UTAUT</h4>
+          <p>
+            TAM cho rằng ý định sử dụng công nghệ chịu ảnh hưởng bởi cảm nhận về tính hữu ích và dễ sử dụng (Davis, 1989). UTAUT mở rộng bằng kỳ vọng hiệu quả, kỳ vọng nỗ lực, ảnh hưởng xã hội và điều kiện thuận lợi (Venkatesh et al., 2003). Thiết kế điều hướng theo role, phân quyền, workflow chuyên biệt và dashboard theo nhiệm vụ không chỉ là quyết định UI mà là quyết định dựa trên lý thuyết chấp nhận công nghệ.
+          </p>
+
+          <h3 id="mo-hinh-nc">2.3. Mô hình nghiên cứu đề xuất</h3>
+          <div class="mermaid-block">
+            <p class="mermaid-title">Sơ đồ khung nghiên cứu và giả thuyết</p>
+            <pre class="mermaid">
+flowchart LR
+  A["Cá nhân hóa học tập<br/>(H1)"] --> M1["Engagement<br/>học tập"]
+  B["Phản hồi liên tục<br/>(H2)"] --> M2["Self-regulated<br/>learning"]
+  C["Minh bạch tiến độ<br/>(H3)"] --> M2
+  D["Kết nối phụ huynh<br/>(H4)"] --> M1
+  D --> Y2["Chuyên cần &<br/>hoàn thành bài"]
+  E["Gamification<br/>(H5)"] --> M1
+  F["Learning analytics<br/>(H6)"] --> T["Can thiệp sư<br/>phạm sớm"]
+  G["Tính dễ sử dụng<br/>(H7)"] --> U["Ý định tiếp tục<br/>sử dụng"]
+  M1 --> Y1["Kết quả<br/>học tập"]
+  M2 --> Y1
+  T --> Y1
+  T --> Y2
+            </pre>
+          </div>
+
+          <h4>Giả thuyết nghiên cứu đề xuất</h4>
+          <ol>
+            <li><strong>H1:</strong> Cá nhân hóa học tập trên nền tảng có tác động tích cực đến mức độ gắn kết học tập.</li>
+            <li><strong>H2:</strong> Phản hồi liên tục từ quiz, homework và giáo viên có tác động tích cực đến self-regulated learning.</li>
+            <li><strong>H3:</strong> Minh bạch tiến độ và deadline có tác động tích cực đến tỉ lệ hoàn thành bài.</li>
+            <li><strong>H4:</strong> Mức độ kết nối phụ huynh có tác động tích cực đến chuyên cần và theo dõi học tập.</li>
+            <li><strong>H5:</strong> Gamification được thiết kế phù hợp có tác động tích cực đến engagement.</li>
+            <li><strong>H6:</strong> Learning analytics hỗ trợ giáo viên can thiệp sớm, cải thiện kết quả học tập.</li>
+            <li><strong>H7:</strong> Tính hữu ích và dễ sử dụng có tác động tích cực đến ý định tiếp tục sử dụng.</li>
+          </ol>
+
+          <h3 id="thuc-trang">2.4. Thực trạng vấn đề nghiên cứu</h3>
+          <p>
+            Bối cảnh thực tiễn của đề tài được xác định từ ba lớp vấn đề. <strong>Ở cấp độ chính sách</strong>, chuyển đổi số giáo dục được thúc đẩy mạnh nhằm nâng cao chất lượng, hiệu quả và công bằng trong giáo dục, đặt người học và nhà giáo ở vị trí trung tâm (Thủ tướng Chính phủ, 2022). <strong>Ở cấp độ quốc tế</strong>, UNESCO và OECD nhấn mạnh chuyển đổi số giáo dục hiệu quả phải đi cùng bằng chứng, dữ liệu, quản trị hệ sinh thái và bảo đảm quyền lợi người học (Global Education Monitoring Report Team, 2023; OECD, 2023).
+          </p>
+          <p>
+            <strong>Ở cấp độ cơ sở triển khai</strong>, nhiều hệ thống LMS hiện hành vẫn gặp các hạn chế: tập trung vào phân phối tài nguyên nhưng thiếu phản hồi chất lượng; dữ liệu nằm rời rạc; phụ huynh không quan sát được tiến độ; giáo viên khó phát hiện sớm học sinh rủi ro; và dữ liệu tuy nhiều nhưng ít được chuyển hóa thành quyết định sư phạm.
+          </p>
+          <div class="grid-3" style="margin: 24px 0;">
+            <div class="metric"><strong>4</strong><span>Cổng vai trò chính</span></div>
+            <div class="metric"><strong>~80</strong><span>Trang chức năng</span></div>
+            <div class="metric"><strong>224+</strong><span>Hàm nghiệp vụ</span></div>
+          </div>
+
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Nhóm vấn đề</th>
+                  <th>Biểu hiện thực tế</th>
+                  <th>Giải pháp của nền tảng</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Phân mảnh công cụ</td>
+                  <td>Bài giảng, bài tập, điểm danh, phản hồi nằm ở nhiều nơi</td>
+                  <td>Tập trung trên một hệ thống với dữ liệu đồng bộ qua Supabase</td>
+                </tr>
+                <tr>
+                  <td>Phản hồi chậm</td>
+                  <td>Giáo viên và học sinh nhận tín hiệu học tập trễ</td>
+                  <td>Quiz/exam/homework analytics và notification realtime</td>
+                </tr>
+                <tr>
+                  <td>Thiếu nhìn toàn cảnh hành vi</td>
+                  <td>Dữ liệu có nhưng không chuyển thành cảnh báo</td>
+                  <td>Learning analytics, attendance dashboards, AI analysis</td>
+                </tr>
+                <tr>
+                  <td>Phụ huynh đồng hành hạn chế</td>
+                  <td>Phụ huynh chỉ nhận thông tin theo đợt</td>
+                  <td>Parent portal theo dõi tiến độ, chuyên cần, feedback</td>
+                </tr>
+                <tr>
+                  <td>Động lực không bền</td>
+                  <td>Học sinh dễ mất tương tác với học liệu số</td>
+                  <td>Gamification mềm qua attendance points, leaderboard</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <blockquote>
+            Giá trị của nền tảng không nằm ở việc "có nhiều tính năng" mà ở khả năng tạo thành một vòng phản hồi liên tục giữa học liệu, hành vi học tập, đánh giá, can thiệp sư phạm và sự đồng hành của phụ huynh.
+          </blockquote>
+        </section>
+
+        <!-- ===== PHẦN III: GIỚI THIỆU HỆ THỐNG ===== -->
+        <section class="section" id="he-thong">
+          <h2>Phần III — Giới thiệu hệ thống</h2>
+
+          <h3 id="tong-quan">3.1. Tổng quan về hệ thống</h3>
+          <p>
+            Sản phẩm là một nền tảng LMS đa vai trò (multi-role) xây dựng trên kiến trúc web hiện đại, phục vụ bốn nhóm người dùng chính: <strong>Quản trị viên</strong> (Admin), <strong>Giáo viên</strong> (Teacher), <strong>Học sinh</strong> (Student) và <strong>Phụ huynh</strong> (Parent). Ngoài ra, hệ thống có một lớp AI/Analytics đóng vai trò tác nhân hỗ trợ ra quyết định, không tham gia trực tiếp vào dòng nghiệp vụ sư phạm.
+          </p>
+          <p>
+            Về bản chất, đây là sự kết hợp giữa <em>Learning Management System</em>, <em>Academic Operations Platform</em>, <em>Parent Portal</em>, <em>Communication Hub</em> và một phần <em>Finance/Service Management</em>. Hệ thống số hóa toàn bộ chuỗi giá trị vận hành của trung tâm tiếng Anh: từ tổ chức lớp học, lịch học, điểm danh, bài giảng, bài tập, kiểm tra, nhận xét, chăm sóc phụ huynh đến học phí và thông báo.
+          </p>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Vấn đề</th><th>Giải pháp hệ thống</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Thiếu điểm truy cập tập trung cho học tập, quản lý lớp và phụ huynh</td><td>LMS đa portal theo role với điều hướng tự động và phân quyền route</td></tr>
+                <tr><td>Dữ liệu học tập khó cập nhật theo thời gian thực</td><td>Supabase Realtime + TanStack Query invalidation + notification store</td></tr>
+                <tr><td>Khó tạo đề, phản hồi và phân tích nhanh</td><td>AI routes dùng Gemini để sinh quiz và hỗ trợ phân tích</td></tr>
+                <tr><td>Phụ huynh ít thấy toàn cảnh kết quả học tập</td><td>Parent queries và dashboard theo học sinh, lớp, tiến độ, attendance</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="usecase">3.2. Use Case Diagram</h3>
+          <p>
+            Sơ đồ Use Case dưới đây mô tả các chức năng chính của hệ thống theo từng nhóm actor. Mỗi actor tương tác với hệ thống thông qua cổng riêng, được phân quyền ở cả tầng route, tầng logic và tầng dữ liệu (RLS).
+          </p>
+          <div class="mermaid-block">
+            <p class="mermaid-title">Use Case Diagram — Tổng quan theo vai trò</p>
+            <pre class="mermaid">
+flowchart LR
+  subgraph AD["🔧 Admin"]
+    A1["Quản lý người dùng & phân quyền"]
+    A2["Quản lý khóa học & lớp học"]
+    A3["Quản lý phòng học & lịch học"]
+    A4["Quản lý tài chính & học phí"]
+    A5["Gửi thông báo hệ thống"]
+    A6["Xem dashboard & analytics tổng hợp"]
+    A7["Quản lý khảo sát & phản hồi"]
+    A8["Theo dõi hành vi & cảnh báo sớm"]
+  end
+  subgraph TC["📚 Teacher"]
+    T1["Tạo học liệu & lesson tree"]
+    T2["Tạo quiz / homework / exam"]
+    T3["Điểm danh buổi học"]
+    T4["Xem analytics & phản hồi học sinh"]
+    T5["Giao bài & cài deadline"]
+    T6["Gửi thông báo lớp"]
+    T7["Duyệt đơn xin nghỉ"]
+    T8["Xem báo cáo tiến độ lớp"]
+  end
+  subgraph ST["🎓 Student"]
+    S1["Học theo lộ trình lesson tree"]
+    S2["Làm quiz / homework / exam"]
+    S3["Nộp bài & xem kết quả"]
+    S4["Theo dõi tiến độ & thông báo"]
+    S5["Xem lịch học & điểm danh"]
+    S6["Tham gia thảo luận"]
+  end
+  subgraph PR["👨‍👩‍👧 Parent"]
+    P1["Theo dõi con em & chuyên cần"]
+    P2["Xem điểm số & phản hồi"]
+    P3["Gửi đơn xin nghỉ"]
+    P4["Thanh toán học phí"]
+    P5["Gửi phản hồi cho trung tâm"]
+    P6["Tham gia khảo sát"]
+  end
+  subgraph AI["🤖 AI / System"]
+    AI1["Sinh câu hỏi quiz tự động"]
+    AI2["Phân tích kết quả bài kiểm tra"]
+    AI3["Cảnh báo hành vi bất thường"]
+    AI4["Realtime sync & notifications"]
+  end
+            </pre>
+          </div>
+
+          <h3 id="activity">3.3. Luồng nghiệp vụ chính</h3>
+
+          <h4>Activity Diagram 1: Quy trình dạy – học – đánh giá</h4>
+          <div class="mermaid-block">
+            <p class="mermaid-title">Activity Diagram — Dạy học & Đánh giá</p>
+            <pre class="mermaid">
+flowchart TD
+  subgraph TEACHER["👨‍🏫 Teacher"]
+    T1["Đăng nhập hệ thống"]
+    T2["Tạo nội dung lesson tree"]
+    T3["Tạo quiz / homework / exam"]
+    T4["Mở buổi học & điểm danh"]
+    T5["Xem analytics & phản hồi"]
+    T6["Can thiệp & giao bài bổ trợ"]
+  end
+  subgraph STUDENT["🎓 Student"]
+    S1["Đăng nhập & vào lớp"]
+    S2["Học nội dung theo lộ trình"]
+    S3["Làm bài quiz / homework / exam"]
+    S4["Xem kết quả & phản hồi"]
+    S5["Theo dõi tiến độ"]
+  end
+  subgraph SYSTEM["⚙️ System"]
+    SY1["Lưu progress, submissions, scores"]
+    SY2["AI phân tích kết quả"]
+    SY3["Realtime sync & cập nhật dashboard"]
+    SY4["Gửi notification"]
+  end
+  T1 --> T2 --> T3 --> T4
+  S1 --> S2 --> S3
+  T4 --> SY1
+  S3 --> SY1
+  SY1 --> SY2 --> SY3
+  SY3 --> T5
+  SY3 --> S4 --> S5
+  SY2 --> SY4
+  T5 --> T6 --> T3
+            </pre>
+          </div>
+
+          <h4>Activity Diagram 2: Quy trình phụ huynh đồng hành</h4>
+          <div class="mermaid-block">
+            <p class="mermaid-title">Activity Diagram — Phụ huynh đồng hành</p>
+            <pre class="mermaid">
+flowchart TD
+  subgraph PARENT["👨‍👩‍👧 Parent"]
+    P1["Đăng nhập parent portal"]
+    P2["Liên kết với con em"]
+    P3["Xem dashboard tổng hợp"]
+    P4["Xem attendance & progress"]
+    P5["Xem điểm số & feedback"]
+    P6["Gửi đơn xin nghỉ"]
+    P7["Thanh toán học phí"]
+    P8["Gửi phản hồi"]
+  end
+  subgraph SYSTEM2["⚙️ System"]
+    SY5["Cập nhật dữ liệu realtime"]
+    SY6["Gửi cảnh báo khi cần"]
+    SY7["Xử lý payment webhook"]
+  end
+  subgraph TEACHER2["👨‍🏫 Teacher"]
+    T7["Nhận & duyệt đơn xin nghỉ"]
+    T8["Đọc phản hồi phụ huynh"]
+  end
+  P1 --> P2 --> P3
+  P3 --> P4
+  P3 --> P5
+  P3 --> P6 --> SY5 --> T7
+  P3 --> P7 --> SY7
+  P3 --> P8 --> T8
+  SY5 --> SY6 --> P3
+            </pre>
+          </div>
+
+          <h4>Activity Diagram 3: Quy trình quản trị hệ thống</h4>
+          <div class="mermaid-block">
+            <p class="mermaid-title">Activity Diagram — Quản trị tổng thể</p>
+            <pre class="mermaid">
+flowchart TD
+  subgraph ADMIN["🔧 Admin"]
+    AD1["Đăng nhập admin portal"]
+    AD2["Tạo khóa học & lớp học"]
+    AD3["Phân công giáo viên"]
+    AD4["Ghi danh học sinh"]
+    AD5["Thiết lập phòng & lịch học"]
+    AD6["Tạo kế hoạch học phí"]
+    AD7["Xem dashboard & analytics"]
+    AD8["Gửi thông báo hệ thống"]
+    AD9["Quản lý khảo sát"]
+  end
+  subgraph SYSTEM3["⚙️ System"]
+    SY8["Sinh buổi học từ lịch"]
+    SY9["Sinh hóa đơn từ fee plan"]
+    SY10["Tổng hợp dữ liệu realtime"]
+    SY11["AI analytics & cảnh báo"]
+  end
+  AD1 --> AD2 --> AD3 --> AD4
+  AD2 --> AD5 --> SY8
+  AD6 --> SY9
+  SY10 --> AD7
+  SY11 --> AD7
+  AD1 --> AD8
+  AD1 --> AD9
+            </pre>
+          </div>
+
+          <h3 id="kien-truc">3.4. Kiến trúc kỹ thuật</h3>
+
+          <h4>Architecture Diagram</h4>
+          <div class="mermaid-block">
+            <p class="mermaid-title">Kiến trúc 3 tầng</p>
+            <pre class="mermaid">
+flowchart TB
+  subgraph FE["🖥️ Frontend Layer"]
+    FE1["Next.js 16 App Router"]
+    FE2["React 19 + TypeScript"]
+    FE3["Tailwind CSS 4 + shadcn/ui"]
+    FE4["TanStack Query + Zustand"]
+    FE5["Recharts + Mermaid"]
+  end
+  subgraph BE["⚡ Backend Logic Layer"]
+    BE1["Server Components"]
+    BE2["Server Actions (34 modules, ~224 functions)"]
+    BE3["API Routes (AI, Payment, Activity, Notifications)"]
+    BE4["Role-based Proxy & Middleware"]
+  end
+  subgraph DATA["🗄️ Data & Service Layer"]
+    DA1["Supabase Auth (Email + OAuth)"]
+    DA2["Supabase PostgreSQL (~60 tables, RLS)"]
+    DA3["Supabase Realtime"]
+    DA4["Supabase Storage"]
+    DA5["Google Gemini AI"]
+    DA6["Stripe / VNPay"]
+  end
+  FE --> BE --> DATA
+            </pre>
+          </div>
+
+          <h4>Tech Stack</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Lớp</th><th>Công nghệ</th><th>Vai trò</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Frontend</td><td>Next.js 16.1.6, React 19.2.3, TypeScript</td><td>App Router, SSR/CSR, typed codebase</td></tr>
+                <tr><td>UI</td><td>Tailwind CSS 4, shadcn/ui, Radix, Lucide, Recharts</td><td>Thiết kế giao diện, components, charts</td></tr>
+                <tr><td>State</td><td>TanStack Query, Zustand</td><td>Server state cache, client state, notifications</td></tr>
+                <tr><td>BaaS</td><td>Supabase SSR + Supabase JS</td><td>Auth, Postgres, Realtime, Storage</td></tr>
+                <tr><td>AI</td><td>Google Generative AI (Gemini)</td><td>Sinh quiz, phân tích bài làm, nhận xét AI</td></tr>
+                <tr><td>Payment</td><td>Stripe, VNPay</td><td>Thanh toán quốc tế và nội địa</td></tr>
+                <tr><td>PWA</td><td>next-pwa</td><td>Cài đặt như app, truy cập linh hoạt</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h4>Data Flow & Realtime Sync</h4>
+          <div class="mermaid-block">
+            <p class="mermaid-title">Luồng dữ liệu và đồng bộ thời gian thực</p>
+            <pre class="mermaid">
+flowchart LR
+  UI["Next.js UI<br/>theo role"] --> ACT["Server Actions<br/>/ API Routes"]
+  ACT --> DB["Supabase<br/>PostgreSQL"]
+  DB --> RT["Supabase<br/>Realtime"]
+  RT --> SYNC["RealtimeSyncProvider<br/>+ useRealtimeSync"]
+  SYNC --> CACHE["TanStack Query<br/>cache"]
+  CACHE --> UI
+  DB --> AI["AI Routes<br/>Gemini"]
+  AI --> DB
+            </pre>
+          </div>
+
+          <h3 id="erd">3.5. ERD — Sơ đồ quan hệ thực thể</h3>
+          <p>
+            Sơ đồ ERD dưới đây mô tả các thực thể chính và quan hệ trong cơ sở dữ liệu của hệ thống, được nhóm theo 9 miền dữ liệu. Hệ thống hiện có khoảng 60 bảng/miền dữ liệu, dưới đây là ERD thu gọn cho các thực thể cốt lõi.
+          </p>
+          <div class="mermaid-block">
+            <p class="mermaid-title">ERD — Core Entities</p>
+            <pre class="mermaid">
+erDiagram
+    users {
+        uuid id PK
+        text email UK
+        text role
+        text full_name
+        text phone
+        text avatar_url
+    }
+    profiles {
+        uuid id PK
+        uuid user_id FK
+        text bio
+        date date_of_birth
+    }
+    parent_students {
+        uuid id PK
+        uuid parent_id FK
+        uuid student_id FK
+    }
+    courses {
+        uuid id PK
+        text name
+        text description
+        uuid teacher_id FK
+    }
+    classes {
+        uuid id PK
+        uuid course_id FK
+        uuid teacher_id FK
+        text status
+        int max_students
+    }
+    enrollments {
+        uuid id PK
+        uuid student_id FK
+        uuid class_id FK
+        text status
+    }
+    rooms {
+        uuid id PK
+        text name
+        int capacity
+    }
+    class_schedules {
+        uuid id PK
+        uuid class_id FK
+        uuid room_id FK
+        int day_of_week
+        time start_time
+        time end_time
+    }
+    course_items {
+        uuid id PK
+        uuid class_id FK
+        uuid parent_id FK
+        text title
+        text type
+        boolean is_published
+    }
+    item_contents {
+        uuid id PK
+        uuid item_id FK
+        text content
+        text video_url
+        text file_url
+    }
+    quiz_questions {
+        uuid id PK
+        uuid item_id FK
+        text content
+        jsonb options
+        jsonb correct_options
+    }
+    student_progress {
+        uuid id PK
+        uuid student_id FK
+        uuid item_id FK
+        text status
+        numeric score
+    }
+    quiz_attempts {
+        uuid id PK
+        uuid student_id FK
+        uuid item_id FK
+        jsonb answers
+        numeric score
+    }
+    attendance_sessions {
+        uuid id PK
+        uuid class_id FK
+        uuid teacher_id FK
+        date session_date
+        text status
+    }
+    attendance_records {
+        uuid id PK
+        uuid session_id FK
+        uuid student_id FK
+        text status
+    }
+    absence_requests {
+        uuid id PK
+        uuid parent_id FK
+        uuid student_id FK
+        uuid class_id FK
+        date absence_date
+        text status
+    }
+    notifications {
+        uuid id PK
+        uuid user_id FK
+        text title
+        text type
+        boolean read
+    }
+    announcements {
+        uuid id PK
+        uuid class_id FK
+        uuid teacher_id FK
+        text title
+    }
+    fee_plans {
+        uuid id PK
+        uuid class_id FK
+        text name
+        bigint amount
+    }
+    invoices {
+        uuid id PK
+        uuid fee_plan_id FK
+        uuid student_id FK
+        bigint amount
+        text status
+    }
+    payments {
+        uuid id PK
+        uuid invoice_id FK
+        uuid user_id FK
+        bigint amount
+        text provider
+        text status
+    }
+    student_activity_logs {
+        uuid id PK
+        uuid student_id FK
+        text activity_type
+        uuid class_id FK
+        jsonb metadata
+    }
+    student_behavior_scores {
+        uuid id PK
+        uuid student_id FK
+        uuid class_id FK
+        text period
+        float gaming_score
+        text risk_level
+    }
+    behavior_alerts {
+        uuid id PK
+        uuid student_id FK
+        uuid class_id FK
+        text alert_type
+        text severity
+    }
+
+    users ||--o| profiles : "has"
+    users ||--o{ parent_students : "parent"
+    users ||--o{ parent_students : "student"
+    users ||--o{ enrollments : "enrolls"
+    users ||--o{ notifications : "receives"
+    courses ||--o{ classes : "has"
+    users ||--o{ courses : "teaches"
+    classes ||--o{ enrollments : "contains"
+    classes ||--o{ class_schedules : "scheduled"
+    rooms ||--o{ class_schedules : "used_by"
+    classes ||--o{ course_items : "contains"
+    course_items ||--o| item_contents : "has_content"
+    course_items ||--o{ quiz_questions : "has_questions"
+    course_items ||--o{ student_progress : "tracked_by"
+    course_items ||--o{ quiz_attempts : "attempted_by"
+    classes ||--o{ attendance_sessions : "has"
+    attendance_sessions ||--o{ attendance_records : "contains"
+    classes ||--o{ absence_requests : "for"
+    classes ||--o{ announcements : "has"
+    classes ||--o{ fee_plans : "billed_by"
+    fee_plans ||--o{ invoices : "generates"
+    invoices ||--o{ payments : "paid_by"
+    users ||--o{ student_activity_logs : "logs"
+    users ||--o{ student_behavior_scores : "scored"
+    users ||--o{ behavior_alerts : "alerted"
+            </pre>
+          </div>
+
+          <h4>Mô tả các miền dữ liệu</h4>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Miền dữ liệu</th><th>Bảng chính</th><th>Ý nghĩa quản trị</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Danh tính & Hồ sơ</td><td>users, profiles, parent_students</td><td>Quản lý con người, vai trò, quan hệ phụ huynh–học sinh</td></tr>
+                <tr><td>Học vụ</td><td>courses, classes, enrollments, rooms, class_schedules</td><td>Quản lý chương trình, lớp, lịch, phòng</td></tr>
+                <tr><td>Nội dung học tập</td><td>course_items, item_contents, quiz_questions</td><td>Quản lý lesson tree và học liệu số</td></tr>
+                <tr><td>Đánh giá</td><td>homework, exams, exam_submissions, submissions</td><td>Bài tập, kiểm tra, kết quả đánh giá</td></tr>
+                <tr><td>Tiến trình học tập</td><td>student_progress, quiz_attempts</td><td>Theo dõi tiến độ và hoàn thành</td></tr>
+                <tr><td>Chuyên cần</td><td>attendance_sessions, attendance_records, absence_requests</td><td>Điểm danh, xin nghỉ, chuyên cần</td></tr>
+                <tr><td>Giao tiếp</td><td>announcements, notifications, discussion_messages</td><td>Giao tiếp có cấu trúc</td></tr>
+                <tr><td>Tài chính</td><td>fee_plans, invoices, payments, fee_schedules</td><td>Học phí, hóa đơn, thanh toán</td></tr>
+                <tr><td>AI & Hành vi</td><td>student_activity_logs, student_behavior_scores, behavior_alerts</td><td>Phân tích, cảnh báo sớm</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="modules">3.6. Module hệ thống và ý nghĩa học thuật</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Module</th><th>Mô tả</th><th>Lý thuyết hỗ trợ</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Course builder / Lesson tree</td><td>Thiết kế nội dung học tập theo cấu trúc cây</td><td>Constructivism, Mastery Learning</td></tr>
+                <tr><td>Quiz / Exam / Homework</td><td>Đánh giá thường xuyên và cuối chặng</td><td>Formative Assessment</td></tr>
+                <tr><td>Dashboard tiến độ</td><td>Theo dõi hoàn thành, lịch và trạng thái học</td><td>Self-Regulated Learning</td></tr>
+                <tr><td>Attendance & Absence</td><td>Điểm danh, chuyên cần, xin nghỉ</td><td>Learning Analytics, Parental Involvement</td></tr>
+                <tr><td>Parent portal</td><td>Theo dõi con em và phản hồi từ giáo viên</td><td>Parental Involvement</td></tr>
+                <tr><td>Achievements / Leaderboard</td><td>Tăng gắn kết và tín hiệu tiến bộ</td><td>Self-Determination Theory, Gamification</td></tr>
+                <tr><td>Realtime sync & Notifications</td><td>Cập nhật dữ liệu theo thời gian thực</td><td>Feedback ecology</td></tr>
+                <tr><td>AI Routes</td><td>Tạo quiz và phân tích hỗ trợ giáo viên</td><td>Formative Assessment, Learning Analytics</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3 id="ai-layer">3.7. Lớp AI và năng lực phân tích thông minh</h3>
+          <p>
+            AI trong hệ thống được triển khai theo ba định hướng: <strong>hỗ trợ giáo viên</strong> (sinh quiz, phân tích bài, nhận xét cá nhân hóa), <strong>hỗ trợ học sinh</strong> (phản hồi sau bài kiểm tra, gợi ý ôn tập), và <strong>hỗ trợ quản trị</strong> (phân tích hành vi, cảnh báo sớm). Nguyên tắc xuyên suốt: <em>AI gợi ý, con người quyết định</em>.
+          </p>
+          <div class="grid-2">
+            <div class="card">
+              <h4>AI hỗ trợ giáo viên</h4>
+              <ul>
+                <li>Sinh câu hỏi từ nội dung bài giảng</li>
+                <li>Phân tích kết quả bài kiểm tra ở cấp lớp</li>
+                <li>Tạo nhận xét cá nhân hóa</li>
+                <li>Đề xuất điểm mạnh, yếu và lỗ hổng kiến thức</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4>AI hỗ trợ học sinh & hệ thống</h4>
+              <ul>
+                <li>Phản hồi sau bài kiểm tra</li>
+                <li>Sinh bài ôn tập bổ sung</li>
+                <li>Phân tích hành vi học tập</li>
+                <li>Cảnh báo dấu hiệu bất thường</li>
+              </ul>
+            </div>
+          </div>
+
+          <h4>3.8. Đề xuất mở rộng Machine Learning</h4>
+          <div class="mermaid-block">
+            <p class="mermaid-title">ML Roadmap cho hành vi học sinh</p>
+            <pre class="mermaid">
+flowchart LR
+  P1["Pha 1:<br/>Early warning"] --> P2["Pha 2:<br/>Knowledge tracing"]
+  P2 --> P3["Pha 3:<br/>Recommender<br/>học liệu"]
+  P3 --> P4["Pha 4:<br/>Anomaly<br/>detection"]
+  P4 --> P5["Pha 5:<br/>Smart<br/>notifications"]
+  P5 --> P6["Pha 6:<br/>Teacher decision<br/>support"]
+            </pre>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Use case ML</th><th>Mục tiêu</th><th>Dữ liệu đầu vào</th><th>Mô hình</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Early warning</td><td>Phát hiện sớm học sinh có nguy cơ</td><td>Login, attendance, score trend, late submissions</td><td>Logistic Regression, XGBoost</td></tr>
+                <tr><td>Knowledge tracing</td><td>Ước lượng mức nắm vững kỹ năng</td><td>Chuỗi đúng/sai, topic tags, thời lượng</td><td>BKT, Deep Knowledge Tracing</td></tr>
+                <tr><td>Recommender</td><td>Gợi ý bài học bổ trợ phù hợp</td><td>Progress, mastery, lịch sử nội dung</td><td>Content-based filtering</td></tr>
+                <tr><td>Anomaly detection</td><td>Phát hiện hành vi bất thường</td><td>Rapid guesses, tab switching, idle time</td><td>Isolation Forest</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="callout info">
+            ML phải hỗ trợ giáo viên ra quyết định, không thay giáo viên phán xét học sinh. Cần công bố rõ mục đích sử dụng dữ liệu, đặc biệt với dữ liệu trẻ em. Ưu tiên mô hình có khả năng giải thích (explainable AI).
+          </div>
+        </section>
+
+        <!-- ===== PHẦN IV: KẾT QUẢ NGHIÊN CỨU ===== -->
+        <section class="section" id="ket-qua">
+          <h2>Phần IV — Kết quả nghiên cứu và thảo luận</h2>
+          <p>
+            Vì nghiên cứu hiện ở giai đoạn thiết kế giải pháp và xác lập khung đánh giá, "kết quả" được trình bày là kết quả tổng hợp lý thuyết, phân tích sản phẩm và mô hình hóa giá trị học thuật. Nói cách khác, phần này trả lời: nền tảng giải quyết vấn đề giáo dục nào, trên cơ sở lý luận nào, và mở ra khả năng nào.
+          </p>
+
+          <h3>4.1. Kết quả ở cấp độ thiết kế hệ thống</h3>
+          <div class="grid-2">
+            <div class="card">
+              <h4>Chu trình học tập</h4>
+              <p>Hệ thống đã hình thành được chu trình: tạo học liệu → phân phối theo lớp → học theo lộ trình → làm bài tập/quiz/exam → ghi nhận điểm & phản hồi → theo dõi tiến độ → cập nhật phụ huynh.</p>
+            </div>
+            <div class="card">
+              <h4>Chu trình dữ liệu</h4>
+              <p>Dữ liệu từ attendance, progress, notifications, achievements và submissions được lưu theo cấu trúc đủ để xây dựng learning analytics và ML trong giai đoạn sau.</p>
+            </div>
+          </div>
+
+          <h3>4.2. Đối chiếu với cơ sở lý luận</h3>
+          <p>
+            Khi đối chiếu với các học thuyết nền, nền tảng không phải một LMS lưu trữ nội dung đơn thuần. Lesson tree và learning path phù hợp với constructivist và mastery-oriented design. Dashboard tiến độ tương thích với SRL. Quiz, homework, AI analysis bám sát formative assessment. Parent portal có nền tảng từ parental involvement. Attendance points và achievements được biện minh bởi SDT. Toàn bộ lớp analytics mở ra hướng learning analytics thực thụ.
+          </p>
+
+          <h3>4.3. Giá trị học thuật kỳ vọng</h3>
+          <ul>
+            <li>Chứng minh tác động của phản hồi liên tục và minh bạch tiến độ đối với self-regulated learning.</li>
+            <li>Đo được vai trò của parent portal trong cải thiện chuyên cần.</li>
+            <li>Đánh giá mức độ chấp nhận công nghệ giữa các nhóm vai trò.</li>
+            <li>Xây dựng bộ chỉ báo hành vi phục vụ dự báo rủi ro.</li>
+            <li>Mở rộng từ sản phẩm công nghệ sang nền tảng nghiên cứu ứng dụng.</li>
+          </ul>
+          <div class="callout info">
+            Phần này không khẳng định nền tảng đã "chứng minh" hiệu quả bằng dữ liệu thực nghiệm. Tài liệu chỉ chỉ ra rằng về lý luận và thiết kế, nền tảng có cấu trúc đủ tốt để trở thành đối tượng nghiên cứu hỗn hợp có giá trị.
+          </div>
+        </section>
+
+        <!-- ===== PHẦN V: KIỂM THỬ ===== -->
+        <section class="section" id="kiem-thu">
+          <h2>Phần V — Quy trình kiểm thử</h2>
+
+          <h3>5.1. Chiến lược kiểm thử</h3>
+          <p>
+            Hệ thống được kiểm thử theo 3 cấp: kiểm thử đơn vị (unit test) cho các server actions, kiểm thử tích hợp (integration test) cho các luồng nghiệp vụ liên vai trò, và kiểm thử chấp nhận người dùng (UAT) với kịch bản vận hành thực tế.
+          </p>
+
+          <h3>5.2. Test cases theo module</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>ID</th><th>Module</th><th>Test Case</th><th>Expected Result</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>TC-01</td><td>Auth</td><td>Đăng nhập với email/password đúng vai trò</td><td>Điều hướng đúng dashboard theo role</td><td>✅ Pass</td></tr>
+                <tr><td>TC-02</td><td>Auth</td><td>Truy cập route không có quyền (student vào /admin)</td><td>Redirect về dashboard đúng role</td><td>✅ Pass</td></tr>
+                <tr><td>TC-03</td><td>Course</td><td>Admin tạo khóa học và lớp học mới</td><td>Lớp hiển thị đúng trong danh sách</td><td>✅ Pass</td></tr>
+                <tr><td>TC-04</td><td>Lesson</td><td>Teacher tạo lesson tree với nhiều cấp folder</td><td>Cây nội dung hiển thị đúng hierarchy</td><td>✅ Pass</td></tr>
+                <tr><td>TC-05</td><td>Quiz</td><td>Student làm quiz và nộp bài</td><td>Điểm được tính tự động, lưu quiz_attempts</td><td>✅ Pass</td></tr>
+                <tr><td>TC-06</td><td>Attendance</td><td>Teacher mở phiên và điểm danh</td><td>Bản ghi attendance lưu đúng, parent nhận realtime</td><td>✅ Pass</td></tr>
+                <tr><td>TC-07</td><td>Absence</td><td>Parent gửi đơn xin nghỉ</td><td>Teacher nhận notification và có thể duyệt/từ chối</td><td>✅ Pass</td></tr>
+                <tr><td>TC-08</td><td>Parent</td><td>Parent xem progress và attendance của con</td><td>Dữ liệu hiển thị đúng, realtime sync</td><td>✅ Pass</td></tr>
+                <tr><td>TC-09</td><td>AI</td><td>Teacher yêu cầu AI sinh quiz từ nội dung</td><td>Quiz được tạo với câu hỏi hợp lệ</td><td>✅ Pass</td></tr>
+                <tr><td>TC-10</td><td>Payment</td><td>Parent thanh toán hóa đơn qua VNPay</td><td>Invoice cập nhật trạng thái paid</td><td>✅ Pass</td></tr>
+                <tr><td>TC-11</td><td>Realtime</td><td>Notifications cập nhật realtime khi có sự kiện</td><td>Badge hiển thị đúng, không cần refresh</td><td>✅ Pass</td></tr>
+                <tr><td>TC-12</td><td>Behavior</td><td>Student có hành vi bất thường (rapid guess)</td><td>Activity log ghi nhận, behavior score cập nhật</td><td>✅ Pass</td></tr>
+                <tr><td>TC-13</td><td>RLS</td><td>Student cố truy vấn dữ liệu student khác</td><td>Truy vấn trả về empty, không lỗi</td><td>✅ Pass</td></tr>
+                <tr><td>TC-14</td><td>PWA</td><td>Cài đặt như app trên mobile</td><td>App icon, splash screen, offline banner</td><td>✅ Pass</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- ===== PHẦN VI: KẾT LUẬN ===== -->
+        <section class="section" id="ket-luan">
+          <h2>Phần VI — Kết luận và hướng phát triển</h2>
+          <h3>6.1. Kết luận</h3>
+          <p>
+            Tiểu luận đã trình bày quá trình nghiên cứu, thiết kế và xây dựng một nền tảng LMS đa vai trò hướng đến cá nhân hóa và can thiệp sớm cho trung tâm tiếng Anh. Hệ thống được biện minh học thuật bằng hệ cơ sở lý luận bao gồm constructivism, self-regulated learning, formative assessment, mastery learning, learning analytics, parental involvement, self-determination theory và các mô hình chấp nhận công nghệ.
+          </p>
+          <p>
+            Điểm mạnh nổi bật nằm ở việc kết hợp ba giá trị trong cùng một kiến trúc: <strong>hỗ trợ dạy–học số</strong>, <strong>tạo vòng phản hồi dữ liệu thời gian thực</strong>, và <strong>mở rộng phối hợp giáo viên–phụ huynh</strong>. Sản phẩm hiện phù hợp nhất với hướng tiếp cận <em>design research / system paper</em> kết hợp khung đánh giá mixed methods cho giai đoạn tiếp theo.
+          </p>
+
+          <h3>6.2. Hạn chế</h3>
+          <ul>
+            <li>Chưa có dữ liệu thực nghiệm để khẳng định hiệu quả bằng thống kê.</li>
+            <li>Một số tính năng ML còn ở giai đoạn đề xuất, chưa triển khai đầy đủ.</li>
+            <li>Cần thử nghiệm thực tế với nhóm người dùng cụ thể.</li>
+          </ul>
+
+          <h3>6.3. Hướng phát triển</h3>
+          <ul>
+            <li>Triển khai khảo sát thực nghiệm trên 1–2 khối lớp để thu thập dữ liệu.</li>
+            <li>Tích hợp machine learning cho early warning, knowledge tracing và recommender.</li>
+            <li>Mở rộng đa cơ sở, CRM tuyển sinh và quản lý tái ghi danh.</li>
+            <li>Chuẩn hóa KPI vận hành và tạo dashboard điều hành nâng cao.</li>
+          </ul>
+        </section>
+
+        <!-- ===== TÀI LIỆU THAM KHẢO ===== -->
+        <section class="section" id="tai-lieu">
+          <h2>Tài liệu tham khảo</h2>
+          <ol class="ref-list">
+            <li>Baker, R. S., &amp; Yacef, K. (2009). The state of educational data mining in 2009: A review and future visions. <em>Journal of Educational Data Mining, 1</em>(1), 3–17. <a href="https://doi.org/10.5281/zenodo.3554657">https://doi.org/10.5281/zenodo.3554657</a></li>
+            <li>Black, P., &amp; Wiliam, D. (1998). Assessment and classroom learning. <em>Assessment in Education: Principles, Policy &amp; Practice, 5</em>(1), 7–74. <a href="https://doi.org/10.1080/0969595980050102">https://doi.org/10.1080/0969595980050102</a></li>
+            <li>Bloom, B. S. (1968). Learning for mastery. <em>Evaluation Comment, 1</em>(2), 1–12.</li>
+            <li>Davis, F. D. (1989). Perceived usefulness, perceived ease of use, and user acceptance of information technology. <em>MIS Quarterly, 13</em>(3), 319–340. <a href="https://doi.org/10.2307/249008">https://doi.org/10.2307/249008</a></li>
+            <li>Deci, E. L., &amp; Ryan, R. M. (2000). The "what" and "why" of goal pursuits: Human needs and the self-determination of behavior. <em>Psychological Inquiry, 11</em>(4), 227–268. <a href="https://doi.org/10.1207/S15327965PLI1104_01">https://doi.org/10.1207/S15327965PLI1104_01</a></li>
+            <li>Epstein, J. L. (2018). School, family, and community partnerships in teachers' professional work. <em>Journal of Education for Teaching, 44</em>(3), 397–406. <a href="https://doi.org/10.1080/02607476.2018.1465669">https://doi.org/10.1080/02607476.2018.1465669</a></li>
+            <li>Ferguson, R. (2012). Learning analytics: Drivers, developments and challenges. <em>International Journal of Technology Enhanced Learning, 4</em>(5/6), 304–317. <a href="https://doi.org/10.1504/IJTEL.2012.051816">https://doi.org/10.1504/IJTEL.2012.051816</a></li>
+            <li>Global Education Monitoring Report Team. (2023). <em>Global education monitoring report 2023: Technology in education: A tool on whose terms?</em> UNESCO. <a href="https://gem-report-2023.unesco.org/">https://gem-report-2023.unesco.org/</a></li>
+            <li>Hamari, J., Koivisto, J., &amp; Sarsa, H. (2014). Does gamification work? A literature review of empirical studies on gamification. In <em>2014 47th Hawaii International Conference on System Sciences</em> (pp. 3025–3034). IEEE. <a href="https://doi.org/10.1109/HICSS.2014.377">https://doi.org/10.1109/HICSS.2014.377</a></li>
+            <li>Hattie, J., &amp; Timperley, H. (2007). The power of feedback. <em>Review of Educational Research, 77</em>(1), 81–112. <a href="https://doi.org/10.3102/003465430298487">https://doi.org/10.3102/003465430298487</a></li>
+            <li>Jeynes, W. H. (2005). A meta-analysis of the relation of parental involvement to urban elementary school student academic achievement. <em>Urban Education, 40</em>(3), 237–269. <a href="https://doi.org/10.1177/0042085905274540">https://doi.org/10.1177/0042085905274540</a></li>
+            <li>Loyens, S. M. M., &amp; Gijbels, D. (2008). Understanding the effects of constructivist learning environments: Introducing a multi-directional approach. <em>Instructional Science, 36</em>(5–6), 351–357. <a href="https://doi.org/10.1007/s11251-008-9059-4">https://doi.org/10.1007/s11251-008-9059-4</a></li>
+            <li>OECD. (2023). <em>OECD digital education outlook 2023: Towards an effective digital education ecosystem</em>. OECD Publishing. <a href="https://doi.org/10.1787/c74f03de-en">https://doi.org/10.1787/c74f03de-en</a></li>
+            <li>Romero, C., &amp; Ventura, S. (2007). Educational data mining: A survey from 1995 to 2005. <em>Expert Systems with Applications, 33</em>(1), 135–146. <a href="https://doi.org/10.1016/j.eswa.2006.04.005">https://doi.org/10.1016/j.eswa.2006.04.005</a></li>
+            <li>Siemens, G., &amp; Long, P. (2011). Penetrating the fog: Analytics in learning and education. <em>EDUCAUSE Review, 46</em>(5), 30–40. <a href="https://er.educause.edu/articles/2011/9/penetrating-the-fog-analytics-in-learning-and-education">https://er.educause.edu/articles/2011/9/penetrating-the-fog-analytics-in-learning-and-education</a></li>
+            <li>Thủ tướng Chính phủ. (2022, ngày 25 tháng 1). <em>Quyết định số 131/QĐ-TTg phê duyệt Đề án "Tăng cường ứng dụng công nghệ thông tin và chuyển đổi số trong giáo dục và đào tạo giai đoạn 2022–2025, định hướng đến năm 2030"</em>. <a href="https://vanban.chinhphu.vn/?classid=2&docid=205236&pageid=27160">https://vanban.chinhphu.vn</a></li>
+            <li>UNESCO. (n.d.). <em>Digital learning and transformation of education</em>. <a href="https://www.unesco.org/en/digital-education">https://www.unesco.org/en/digital-education</a></li>
+            <li>Venkatesh, V., Morris, M. G., Davis, G. B., &amp; Davis, F. D. (2003). User acceptance of information technology: Toward a unified view. <em>MIS Quarterly, 27</em>(3), 425–478. <a href="https://doi.org/10.2307/30036540">https://doi.org/10.2307/30036540</a></li>
+            <li>Vygotsky, L. S. (1978). <em>Mind in society: The development of higher psychological processes</em>. Harvard University Press.</li>
+            <li>Zimmerman, B. J. (2002). Becoming a self-regulated learner: An overview. <em>Theory Into Practice, 41</em>(2), 64–70. <a href="https://doi.org/10.1207/S15430421TIP4102_2">https://doi.org/10.1207/S15430421TIP4102_2</a></li>
+          </ol>
+          <p class="footnote">
+            Trích dẫn được chuẩn hóa theo APA 7th edition. Với phiên bản nộp chính thức, vui lòng rà soát yêu cầu riêng của giảng viên về cách trình bày.
+          </p>
+        </section>
+
+        <!-- ===== PHỤ LỤC ===== -->
+        <section class="section" id="phu-luc">
+          <h2>Phụ lục</h2>
+
+          <h3>Phụ lục A. Biến nghiên cứu và chỉ báo đo lường</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Biến</th><th>Mã</th><th>Gợi ý chỉ báo</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Cá nhân hóa học tập</td><td>PL</td><td>PL1 học liệu phù hợp; PL2 gợi ý hữu ích; PL3 lộ trình rõ ràng</td></tr>
+                <tr><td>Phản hồi liên tục</td><td>FB</td><td>FB1 nhanh; FB2 cụ thể; FB3 giúp biết bước tiếp theo</td></tr>
+                <tr><td>Minh bạch tiến độ</td><td>TR</td><td>TR1 dễ theo dõi; TR2 dễ biết việc cần làm; TR3 giảm quên deadline</td></tr>
+                <tr><td>Kết nối phụ huynh</td><td>PI</td><td>PI1 dễ theo dõi; PI2 dễ trao đổi; PI3 hỗ trợ can thiệp sớm</td></tr>
+                <tr><td>Engagement</td><td>EN</td><td>EN1 vào hệ thống thường xuyên; EN2 tham gia học đều; EN3 hoàn thành tác vụ</td></tr>
+                <tr><td>Chấp nhận công nghệ</td><td>TA</td><td>TA1 hữu ích; TA2 dễ dùng; TA3 muốn tiếp tục sử dụng</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <h3>Phụ lục B. Gợi ý quy trình nghiên cứu tiếp theo</h3>
+          <ol>
+            <li>Khóa phạm vi nghiên cứu vào 1–2 khối lớp để tránh dàn trải.</li>
+            <li>Xây dựng bảng hỏi dựa trên các biến PL, FB, TR, PI, EN, TA.</li>
+            <li>Thu log hệ thống trong ít nhất một chu kỳ học tập đủ dài.</li>
+            <li>Phỏng vấn giáo viên và phụ huynh để giải thích kết quả định lượng.</li>
+            <li>Đối chiếu mô hình nghiên cứu với dữ liệu thực để xác nhận hoặc bác bỏ giả thuyết.</li>
+          </ol>
+        </section>
+      </article>
+    </main>
+  </div>
+
+  <!-- Mermaid JS -->
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: "base",
+      securityLevel: "loose",
+      themeVariables: {
+        primaryColor: "#f7eee2",
+        primaryTextColor: "#1a1f26",
+        primaryBorderColor: "#8b3526",
+        lineColor: "#56606b",
+        secondaryColor: "#e8f4f7",
+        tertiaryColor: "#fff9f2",
+        fontFamily: "Segoe UI, Helvetica Neue, sans-serif"
+      },
+      flowchart: { htmlLabels: true, curve: "basis" }
+    });
+  </script>
+</body>
+</html>

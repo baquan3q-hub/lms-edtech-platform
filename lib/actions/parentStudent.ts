@@ -473,6 +473,20 @@ export async function fetchParentDashboardData(studentId: string) {
             }));
         }
 
+        // 3a. All-time attendance stats
+        let allTimeAttendance: any[] = [];
+        if (classIds.length > 0) {
+            const { data: allTimeData } = await supabase
+                .from("attendance_records")
+                .select(`
+                    status, 
+                    session:attendance_sessions!inner(class_id)
+                `)
+                .eq("student_id", studentId)
+                .in("session.class_id", classIds);
+            allTimeAttendance = allTimeData || [];
+        }
+
         // 3b. Lịch cố định hàng tuần (class_schedules)
         let upcomingSchedules: any[] = [];
         if (classIds.length > 0) {
@@ -694,7 +708,47 @@ export async function fetchParentDashboardData(studentId: string) {
             .order("created_at", { ascending: false })
             .limit(5);
         recentNotifications = notifs || [];
+        // 5.2 Enrich system notifications that have metadata.announcementId
+        const announcementIds = recentNotifications
+            .filter((n: any) => n.metadata?.announcementId)
+            .map((n: any) => n.metadata.announcementId);
 
+        let announcementMap = new Map<string, any>();
+        if (announcementIds.length > 0) {
+            const { data: annDetails } = await supabase
+                .from("announcements")
+                .select("id, attachments, file_url, video_url, link_url, content")
+                .in("id", announcementIds);
+
+            if (annDetails) {
+                annDetails.forEach((a: any) => announcementMap.set(a.id, a));
+            }
+        }
+
+        // Gắn dữ liệu announcement vào notification
+        recentNotifications = recentNotifications.map((n: any) => {
+            if (n.metadata?.announcementId && announcementMap.has(n.metadata.announcementId)) {
+                const ann = announcementMap.get(n.metadata.announcementId);
+                return {
+                    ...n,
+                    message: ann.content || n.message, // Gắn full content
+                    attachments: ann.attachments || [],
+                    file_url: ann.file_url,
+                    video_url: ann.video_url,
+                    link_url: ann.link_url,
+                    _announcementId: n.metadata.announcementId,
+                };
+            }
+            return n;
+        });
+
+        // Loại bỏ announcement trùng
+        const enrichedAnnIds = new Set(
+            recentNotifications.filter((n: any) => n._announcementId).map((n: any) => n._announcementId)
+        );
+        announcements = announcements.filter(
+            (a: any) => !enrichedAnnIds.has(a.id)
+        );
 
         // 6. Tính điểm trung bình và thống kê bài tập
         const { data: quizAttempts } = await supabase
@@ -759,15 +813,45 @@ export async function fetchParentDashboardData(studentId: string) {
         const totalAttendance = attendance.length;
         const presentDays = attendance.filter(a => a.status === 'present').length;
 
+        const allAnnIds = [...announcements, ...recentNotifications]
+            .filter((m: any) => m._announcementId || m.source === 'announcement' || m.id)
+            .map((m: any) => m._announcementId || m.id);
+
+        let confirmedAnnouncementIds: string[] = [];
+        if (allAnnIds.length > 0) {
+            const { data: reads } = await supabase
+                .from("announcement_reads")
+                .select("announcement_id")
+                .eq("user_id", user.id)
+                .in("announcement_id", allAnnIds)
+                .not("confirmed_at", "is", null);
+
+            confirmedAnnouncementIds = (reads || []).map((r: any) => r.announcement_id);
+        }
+
         return {
             data: {
                 student,
                 classes: (enrollments || []).map((e: any) => e.class),
                 attendance,
-                attendanceSummary: { total: totalAttendance, present: presentDays },
+                attendanceSummary: {
+                    total: totalAttendance,
+                    present: presentDays,
+                    absent: attendance.filter(a => a.status === 'absent').length,
+                    late: attendance.filter(a => a.status === 'late').length,
+                    excused: attendance.filter(a => a.status === 'excused').length,
+                    allTime: {
+                        total: allTimeAttendance.length,
+                        present: allTimeAttendance.filter((a: any) => a.status === 'present').length,
+                        absent: allTimeAttendance.filter((a: any) => a.status === 'absent').length,
+                        late: allTimeAttendance.filter((a: any) => a.status === 'late').length,
+                        excused: allTimeAttendance.filter((a: any) => a.status === 'excused').length,
+                    }
+                },
                 recentExams,
                 announcements,
                 recentNotifications,
+                confirmedAnnouncementIds,
                 upcomingSessions,
                 upcomingSchedules,
                 stats: {
@@ -788,7 +872,7 @@ export async function fetchParentDashboardData(studentId: string) {
 // ============================================================
 export async function fetchParentNotifications(
     studentId: string,
-    options: { limit?: number; offset?: number; filter?: 'all' | 'announcement' | 'system' } = {}
+    options: { limit?: number; offset?: number; filter?: 'all' | 'announcement' | 'system' | 'survey' } = {}
 ) {
     const { limit = 30, offset = 0, filter = 'all' } = options;
 
@@ -821,13 +905,18 @@ export async function fetchParentNotifications(
         let announcements: any[] = [];
 
         // 1. System notifications for the parent
-        if (filter === 'all' || filter === 'system') {
-            const { data: notifData } = await adminSupabase
+        if (filter === 'all' || filter === 'system' || filter === 'survey') {
+            let nQuery = adminSupabase
                 .from("notifications")
                 .select("*")
                 .eq("user_id", user.id)
-                .order("created_at", { ascending: false })
-                .range(offset, offset + limit - 1);
+                .order("created_at", { ascending: false });
+            
+            if (filter === 'survey') {
+                nQuery = nQuery.eq("type", "survey");
+            }
+
+            const { data: notifData } = await nQuery.range(offset, offset + limit - 1);
             notifications = (notifData || []).map((n: any) => ({
                 ...n,
                 source: 'notification' as const,
@@ -836,18 +925,23 @@ export async function fetchParentNotifications(
         }
 
         // 2. Class & System announcements
-        if ((filter === 'all' || filter === 'announcement')) {
+        if ((filter === 'all' || filter === 'announcement' || filter === 'survey')) {
             let queryStr = "scope.eq.system";
             if (classIds.length > 0) {
                 queryStr = `class_id.in.(${classIds.join(',')}),scope.eq.system`;
             }
 
-            const { data: annData } = await adminSupabase
+            let aQuery = adminSupabase
                 .from("announcements")
-                .select("id, title, content, file_url, video_url, link_url, resource_type, created_at, class_id, scope, teacher:users!announcements_teacher_id_fkey(full_name)")
+                .select("id, title, content, file_url, video_url, link_url, attachments, resource_type, created_at, class_id, scope, teacher:users!announcements_teacher_id_fkey(full_name)")
                 .or(queryStr)
-                .order("created_at", { ascending: false })
-                .range(offset, offset + limit - 1);
+                .order("created_at", { ascending: false });
+
+            if (filter === 'survey') {
+                aQuery = aQuery.eq("resource_type", "survey");
+            }
+
+            const { data: annData } = await aQuery.range(offset, offset + limit - 1);
 
             // Get class names
             const { data: classes } = await adminSupabase
@@ -865,8 +959,54 @@ export async function fetchParentNotifications(
             }));
         }
 
+        // Enrich system notifications that have metadata.announcementId
+        // để hiển thị file đính kèm và link giống thông báo lớp học
+        const announcementIds = notifications
+            .filter((n: any) => n.metadata?.announcementId)
+            .map((n: any) => n.metadata.announcementId);
+
+        let announcementMap = new Map<string, any>();
+        if (announcementIds.length > 0) {
+            const { data: annDetails } = await adminSupabase
+                .from("announcements")
+                .select("id, attachments, file_url, video_url, link_url, content")
+                .in("id", announcementIds);
+
+            if (annDetails) {
+                annDetails.forEach((a: any) => announcementMap.set(a.id, a));
+            }
+        }
+
+        // Gắn dữ liệu announcement vào notification
+        notifications = notifications.map((n: any) => {
+            if (n.metadata?.announcementId && announcementMap.has(n.metadata.announcementId)) {
+                const ann = announcementMap.get(n.metadata.announcementId);
+                return {
+                    ...n,
+                    // Gắn full content nếu notification message bị cắt ngắn
+                    message: ann.content || n.message,
+                    // Gắn file đính kèm từ announcement
+                    attachments: ann.attachments || [],
+                    file_url: ann.file_url,
+                    video_url: ann.video_url,
+                    link_url: ann.link_url,
+                    // Đánh dấu đây là notification có announcement gốc
+                    _announcementId: n.metadata.announcementId,
+                };
+            }
+            return n;
+        });
+
+        // Loại bỏ announcement trùng lặp — nếu notification đã link tới announcement đó
+        const enrichedAnnIds = new Set(
+            notifications.filter((n: any) => n._announcementId).map((n: any) => n._announcementId)
+        );
+        const dedupedAnnouncements = announcements.filter(
+            (a: any) => !enrichedAnnIds.has(a.id)
+        );
+
         // Merge and sort
-        const merged = [...notifications, ...announcements]
+        const merged = [...notifications, ...dedupedAnnouncements]
             .sort((a, b) => new Date(b.sort_date).getTime() - new Date(a.sort_date).getTime())
             .slice(0, limit);
 
@@ -877,11 +1017,29 @@ export async function fetchParentNotifications(
             .eq("user_id", user.id)
             .eq("is_read", false);
 
+        // Lấy danh sách announcement đã xác nhận xem
+        const allAnnIds = merged
+            .filter((m: any) => m._announcementId || m.source === 'announcement')
+            .map((m: any) => m._announcementId || m.id);
+
+        let confirmedAnnouncementIds: string[] = [];
+        if (allAnnIds.length > 0) {
+            const { data: reads } = await adminSupabase
+                .from("announcement_reads")
+                .select("announcement_id")
+                .eq("user_id", user.id)
+                .in("announcement_id", allAnnIds)
+                .not("confirmed_at", "is", null);
+
+            confirmedAnnouncementIds = (reads || []).map((r: any) => r.announcement_id);
+        }
+
         return {
             data: {
                 items: merged,
                 unreadCount: unreadCount || 0,
                 classIds,
+                confirmedAnnouncementIds,
             },
             error: null,
         };

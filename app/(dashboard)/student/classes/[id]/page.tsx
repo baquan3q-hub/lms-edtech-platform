@@ -7,7 +7,7 @@ import {
     Monitor, FolderPlus, Folder, CheckCircle2, Circle, Music, ClipboardList,
     MessageSquare, Calendar, Bell, BarChart3, Clock, MapPin, Users, Trophy, Home,
     ExternalLink, Download, Link as LinkIcon, Medal, Target, Star, TrendingUp,
-    PlusCircle, MinusCircle
+    PlusCircle, MinusCircle, Zap, History, ChevronRight
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -432,57 +432,78 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
                     <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
                         <div className="px-5 py-4 border-b border-slate-200 bg-white">
                             <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                <ClipboardList className="w-5 h-5 text-indigo-500" /> Bài tập & Kiểm tra
+                                <ClipboardList className="w-5 h-5 text-indigo-500" /> Bài kiểm tra
                             </h2>
                             <p className="text-sm text-slate-500 mt-1">{exams.length} bài kiểm tra đã giao</p>
                         </div>
 
-                        {exams.length > 0 ? (
-                            <div className="divide-y divide-slate-100">
-                                {exams.map((exam: any) => {
-                                    const isDone = !!exam.submission;
-                                    const score = exam.submission?.score;
-                                    const total = exam.submission?.total_points || exam.total_points;
-                                    const percent = total > 0 && score !== undefined ? Math.round((score / total) * 100) : null;
+                        {exams.length > 0 ? (() => {
+                            const pendingExams = exams.filter((e: any) => !e.submission);
+                            const doneExams = exams.filter((e: any) => !!e.submission);
 
-                                    return (
-                                        <Link key={exam.id} href={`/student/classes/${id}/exams/${exam.id}`} className="block">
-                                            <div className="flex items-center gap-4 px-5 py-4 hover:bg-indigo-50/50 transition-colors cursor-pointer">
-                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isDone ? 'bg-emerald-50 text-emerald-500' : 'bg-indigo-50 text-indigo-500'}`}>
-                                                    {isDone ? <Trophy className="w-5 h-5" /> : <ClipboardList className="w-5 h-5" />}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className={`font-semibold text-sm ${isDone ? 'text-slate-500' : 'text-slate-800'}`}>
-                                                        {exam.title}
-                                                    </p>
-                                                    <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
-                                                        <span className="font-medium text-indigo-500">Trắc nghiệm</span>
-                                                        <span className="flex items-center gap-1">
-                                                            <Clock className="w-3 h-3" /> {exam.duration_minutes} phút
-                                                        </span>
-                                                        <span>{exam.total_points} điểm</span>
-                                                    </div>
-                                                </div>
-                                                {isDone ? (
-                                                    <div className="text-right">
-                                                        <p className={`text-sm font-bold ${percent !== null && percent >= 50 ? 'text-emerald-600' : 'text-red-500'}`}>
-                                                            {score}/{total}
-                                                        </p>
-                                                        <Badge className={`text-[10px] ${percent !== null && percent >= 50 ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`} variant="outline">
-                                                            {percent !== null && percent >= 50 ? 'Đạt' : 'Chưa đạt'}
-                                                        </Badge>
-                                                    </div>
-                                                ) : (
-                                                    <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 h-8 rounded-lg text-xs">
-                                                        Làm bài
-                                                    </Button>
-                                                )}
+                            const renderExamItem = (exam: any) => {
+                                const isDone = !!exam.submission;
+                                const score = exam.submission?.score;
+                                const total = exam.submission?.total_points || exam.total_points;
+                                const percent = total > 0 && score !== undefined ? Math.round((score / total) * 100) : null;
+                                return (
+                                    <Link key={exam.id} href={`/student/classes/${id}/exams/${exam.id}`} className="block">
+                                        <div className="flex items-center gap-4 px-5 py-4 hover:bg-indigo-50/50 transition-colors cursor-pointer">
+                                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isDone ? 'bg-emerald-50 text-emerald-500' : 'bg-indigo-50 text-indigo-500'}`}>
+                                                {isDone ? <Trophy className="w-5 h-5" /> : <ClipboardList className="w-5 h-5" />}
                                             </div>
-                                        </Link>
-                                    );
-                                })}
-                            </div>
-                        ) : (
+                                            <div className="flex-1 min-w-0">
+                                                <p className={`font-semibold text-sm ${isDone ? 'text-slate-500' : 'text-slate-800'}`}>
+                                                    {exam.title}
+                                                </p>
+                                                <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
+                                                    <span className="font-medium text-indigo-500">Trắc nghiệm</span>
+                                                    <span className="flex items-center gap-1">
+                                                        <Clock className="w-3 h-3" /> {exam.duration_minutes} phút
+                                                    </span>
+                                                    <span>{exam.total_points} điểm</span>
+                                                </div>
+                                            </div>
+                                            {isDone ? (
+                                                <div className="text-right">
+                                                    <p className={`text-sm font-bold ${percent !== null && percent >= 50 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                                        {score}/{total}
+                                                    </p>
+                                                    <Badge className={`text-[10px] ${percent !== null && percent >= 50 ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`} variant="outline">
+                                                        {percent !== null && percent >= 50 ? 'Đạt' : 'Chưa đạt'}
+                                                    </Badge>
+                                                </div>
+                                            ) : (
+                                                <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold px-4 h-8 rounded-lg text-xs">
+                                                    Làm bài
+                                                </Button>
+                                            )}
+                                        </div>
+                                    </Link>
+                                );
+                            };
+
+                            return (
+                                <>
+                                    {pendingExams.length > 0 && (
+                                        <div className="divide-y divide-slate-100">
+                                            {pendingExams.map(renderExamItem)}
+                                        </div>
+                                    )}
+                                    {doneExams.length > 0 && (
+                                        <details className="group">
+                                            <summary className="px-5 py-3 bg-slate-50 text-xs font-bold text-slate-500 cursor-pointer hover:bg-slate-100 flex items-center gap-2 select-none border-t border-slate-100">
+                                                <History className="w-3.5 h-3.5" /> Đã hoàn thành ({doneExams.length})
+                                                <ChevronRight className="w-3.5 h-3.5 ml-auto transition-transform group-open:rotate-90" />
+                                            </summary>
+                                            <div className="divide-y divide-slate-100 bg-slate-50/50">
+                                                {doneExams.map(renderExamItem)}
+                                            </div>
+                                        </details>
+                                    )}
+                                </>
+                            );
+                        })() : (
                             <div className="text-center py-12 px-6">
                                 <ClipboardList className="w-12 h-12 text-slate-200 mx-auto mb-3" />
                                 <p className="text-slate-500 font-medium">Chưa có bài kiểm tra nào.</p>
@@ -492,78 +513,142 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
                     </div>
                 </TabsContent>
 
-                {/* ===== TAB: BÀI TẬP VỀ NHÀ ===== */}
                 <TabsContent value="homework">
-                    <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
-                        <div className="px-5 py-4 border-b border-slate-200 bg-white">
-                            <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                                <Home className="w-5 h-5 text-emerald-500" /> Bài tập về nhà
-                            </h2>
-                            <p className="text-sm text-slate-500 mt-1">{homeworkList.length} bài tập đã giao</p>
-                        </div>
+                    {(() => {
+                        const regularHw = homeworkList.filter((hw: any) => !hw.title.startsWith('[Cải thiện]'));
+                        const improvHw = homeworkList.filter((hw: any) => hw.title.startsWith('[Cải thiện]'));
 
-                        {homeworkList.length > 0 ? (
-                            <div className="divide-y divide-slate-100">
-                                {homeworkList.map((hw: any) => {
-                                    const sub = hw.submission;
-                                    const isSubmitted = sub?.status === 'submitted';
-                                    const isGraded = sub?.status === 'graded';
-                                    const isDue = hw.due_date && new Date(hw.due_date) < new Date();
-
-                                    return (
-                                        <Link key={hw.id} href={`/student/classes/${id}/homework/${hw.id}`} className="block">
-                                            <div className="flex items-center gap-4 px-5 py-4 hover:bg-emerald-50/50 transition-colors cursor-pointer">
-                                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isGraded ? 'bg-emerald-50 text-emerald-500' :
-                                                    isSubmitted ? 'bg-amber-50 text-amber-500' :
-                                                        'bg-slate-100 text-slate-400'
-                                                    }`}>
-                                                    {isGraded ? <Trophy className="w-5 h-5" /> :
-                                                        isSubmitted ? <Clock className="w-5 h-5" /> :
-                                                            <Home className="w-5 h-5" />}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className={`font-semibold text-sm ${isGraded ? 'text-slate-500' : 'text-slate-800'}`}>
-                                                        {hw.title}
-                                                    </p>
-                                                    <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
-                                                        <span>{hw.total_points} điểm</span>
-                                                        <span>{(hw.questions as any[] || []).length} câu</span>
-                                                        {sub?.attempts > 1 && (
-                                                            <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px]" variant="outline">{sub.attempts} lần nộp</Badge>
-                                                        )}
-                                                        {hw.due_date && (
-                                                            <span className={`flex items-center gap-1 ${isDue && !isSubmitted && !isGraded ? 'text-red-500 font-semibold' : ''}`}>
-                                                                <Clock className="w-3 h-3" />
-                                                                Hạn: {new Date(hw.due_date).toLocaleDateString('vi-VN')}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                                {isGraded ? (
-                                                    <div className="text-right">
-                                                        <p className="text-sm font-bold text-emerald-600">{sub.score}/{hw.total_points}</p>
-                                                        <Badge className="bg-emerald-50 text-emerald-600 border-emerald-200 text-[10px]" variant="outline">Đã chấm</Badge>
-                                                    </div>
-                                                ) : isSubmitted ? (
-                                                    <Badge className="bg-amber-50 text-amber-600 border-amber-200 text-[10px]" variant="outline">Đã nộp</Badge>
-                                                ) : (
-                                                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 h-8 rounded-lg text-xs">
-                                                        Làm bài
-                                                    </Button>
+                        const renderHwItem = (hw: any) => {
+                            const sub = hw.submission;
+                            const isSubmitted = sub?.status === 'submitted';
+                            const isGraded = sub?.status === 'graded';
+                            const isDue = hw.due_date && new Date(hw.due_date) < new Date();
+                            return (
+                                <Link key={hw.id} href={`/student/classes/${id}/homework/${hw.id}`} className="block">
+                                    <div className="flex items-center gap-4 px-5 py-4 hover:bg-emerald-50/50 transition-colors cursor-pointer">
+                                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${isGraded ? 'bg-emerald-50 text-emerald-500' :
+                                            isSubmitted ? 'bg-amber-50 text-amber-500' :
+                                                'bg-slate-100 text-slate-400'
+                                            }`}>
+                                            {isGraded ? <Trophy className="w-5 h-5" /> :
+                                                isSubmitted ? <Clock className="w-5 h-5" /> :
+                                                    <Home className="w-5 h-5" />}
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className={`font-semibold text-sm ${isGraded ? 'text-slate-500' : 'text-slate-800'}`}>
+                                                {hw.title.replace('[Cải thiện] ', '')}
+                                            </p>
+                                            <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-500">
+                                                <span>{hw.total_points} điểm</span>
+                                                <span>{(hw.questions as any[] || []).length} câu</span>
+                                                {sub?.attempts > 1 && (
+                                                    <Badge className="bg-slate-100 text-slate-600 border-slate-200 text-[10px]" variant="outline">{sub.attempts} lần nộp</Badge>
+                                                )}
+                                                {hw.due_date && (
+                                                    <span className={`flex items-center gap-1 ${isDue && !isSubmitted && !isGraded ? 'text-red-500 font-semibold' : ''}`}>
+                                                        <Clock className="w-3 h-3" />
+                                                        Hạn: {new Date(hw.due_date).toLocaleDateString('vi-VN')}
+                                                    </span>
                                                 )}
                                             </div>
-                                        </Link>
-                                    );
-                                })}
+                                        </div>
+                                        {isGraded ? (
+                                            <div className="text-right">
+                                                <p className="text-sm font-bold text-emerald-600">{sub.score}/{hw.total_points}</p>
+                                                <Badge className="bg-emerald-50 text-emerald-600 border-emerald-200 text-[10px]" variant="outline">Đã chấm</Badge>
+                                            </div>
+                                        ) : isSubmitted ? (
+                                            <Badge className="bg-amber-50 text-amber-600 border-amber-200 text-[10px]" variant="outline">Đã nộp</Badge>
+                                        ) : (
+                                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-4 h-8 rounded-lg text-xs">
+                                                Làm bài
+                                            </Button>
+                                        )}
+                                    </div>
+                                </Link>
+                            );
+                        };
+
+                        const activeRegular = regularHw.filter((hw: any) => !hw.submission || hw.submission?.status !== 'graded');
+                        const doneRegular = regularHw.filter((hw: any) => hw.submission?.status === 'graded');
+                        const activeImprov = improvHw.filter((hw: any) => !hw.submission || hw.submission?.status !== 'graded');
+                        const doneImprov = improvHw.filter((hw: any) => hw.submission?.status === 'graded');
+
+                        return (
+                            <div className="space-y-6">
+                                {/* BÀI TẬP VỀ NHÀ */}
+                                <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                                    <div className="px-5 py-4 border-b border-slate-200 bg-white flex items-center gap-3">
+                                        <div className="w-9 h-9 bg-emerald-100 rounded-lg flex items-center justify-center">
+                                            <Home className="w-5 h-5 text-emerald-600" />
+                                        </div>
+                                        <div>
+                                            <h2 className="text-lg font-bold text-slate-900">Bài tập về nhà</h2>
+                                            <p className="text-xs text-slate-500">{regularHw.length} bài tập đã giao</p>
+                                        </div>
+                                    </div>
+
+                                    {regularHw.length > 0 ? (
+                                        <>
+                                            {activeRegular.length > 0 && (
+                                                <div className="divide-y divide-slate-100">
+                                                    {activeRegular.map(renderHwItem)}
+                                                </div>
+                                            )}
+                                            {doneRegular.length > 0 && (
+                                                <details className="group">
+                                                    <summary className="px-5 py-3 bg-slate-50 text-xs font-bold text-slate-500 cursor-pointer hover:bg-slate-100 flex items-center gap-2 select-none border-t border-slate-100">
+                                                        <History className="w-3.5 h-3.5" /> Đã hoàn thành ({doneRegular.length})
+                                                        <ChevronRight className="w-3.5 h-3.5 ml-auto transition-transform group-open:rotate-90" />
+                                                    </summary>
+                                                    <div className="divide-y divide-slate-100 bg-slate-50/50">
+                                                        {doneRegular.map(renderHwItem)}
+                                                    </div>
+                                                </details>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <div className="text-center py-12 px-6">
+                                            <Home className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                                            <p className="text-slate-500 font-medium">Chưa có bài tập nào.</p>
+                                            <p className="text-sm text-slate-400 mt-1">Giáo viên sẽ giao bài tập sớm nhất.</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* BÀI TẬP CẢI THIỆN */}
+                                {improvHw.length > 0 && (
+                                    <div className="bg-white border border-amber-200 rounded-xl shadow-sm overflow-hidden">
+                                        <div className="px-5 py-4 border-b border-amber-100 bg-amber-50/30 flex items-center gap-3">
+                                            <div className="w-9 h-9 bg-amber-100 rounded-lg flex items-center justify-center">
+                                                <Zap className="w-5 h-5 text-amber-600" />
+                                            </div>
+                                            <div>
+                                                <h2 className="text-lg font-bold text-slate-900">Bài tập cải thiện</h2>
+                                                <p className="text-xs text-slate-500">Bài bổ trợ giúp bạn nâng cao điểm số</p>
+                                            </div>
+                                        </div>
+                                        {activeImprov.length > 0 && (
+                                            <div className="divide-y divide-amber-100">
+                                                {activeImprov.map(renderHwItem)}
+                                            </div>
+                                        )}
+                                        {doneImprov.length > 0 && (
+                                            <details className="group">
+                                                <summary className="px-5 py-3 bg-amber-50/50 text-xs font-bold text-slate-500 cursor-pointer hover:bg-amber-50 flex items-center gap-2 select-none border-t border-amber-100">
+                                                    <History className="w-3.5 h-3.5" /> Đã hoàn thành ({doneImprov.length})
+                                                    <ChevronRight className="w-3.5 h-3.5 ml-auto transition-transform group-open:rotate-90" />
+                                                </summary>
+                                                <div className="divide-y divide-amber-100 bg-amber-50/20">
+                                                    {doneImprov.map(renderHwItem)}
+                                                </div>
+                                            </details>
+                                        )}
+                                    </div>
+                                )}
                             </div>
-                        ) : (
-                            <div className="text-center py-12 px-6">
-                                <Home className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                                <p className="text-slate-500 font-medium">Chưa có bài tập nào.</p>
-                                <p className="text-sm text-slate-400 mt-1">Giáo viên sẽ giao bài tập sớm nhất.</p>
-                            </div>
-                        )}
-                    </div>
+                        );
+                    })()}
                 </TabsContent>
 
                 {/* ===== TAB: KẾT QUẢ HỌC TẬP (PERFORMANCE) ===== */}

@@ -303,3 +303,44 @@ QUAN TRỌNG: Dùng **in đậm** cho tên bài tập và tiêu đề. Dùng emo
     }
 }
 
+// =====================================================
+// GỬI THÔNG BÁO NHẮC NHỞ HỌC SINH VÀ PHỤ HUYNH
+// =====================================================
+export async function sendReminderAction(studentId: string, classId: string, className: string, itemName: string, itemType: "homework" | "exam") {
+    try {
+        const adminSupabase = createAdminClient();
+
+        // 1. Get parents
+        const { data: parentLinks } = await adminSupabase
+            .from("parent_students")
+            .select("parent_id")
+            .eq("student_id", studentId);
+
+        const targetUserIds = [studentId];
+        if (parentLinks) {
+            parentLinks.forEach(link => targetUserIds.push(link.parent_id));
+        }
+
+        // 2. Prepare message
+        const typeLabel = itemType === "homework" ? "Bài tập" : "Bài kiểm tra";
+        const title = `⚠️ Nhắc nhở: Chưa hoàn thành ${typeLabel}`;
+        const message = `Học sinh chưa hoàn thành ${typeLabel} "${itemName}" của lớp ${className}. Vui lòng kiểm tra và hoàn thành sớm.`;
+
+        // 3. Insert notifications
+        const notifications = targetUserIds.map(uid => ({
+            user_id: uid,
+            title,
+            message,
+            type: "warning",
+            link: `/parent`,
+        }));
+
+        const { error } = await adminSupabase.from("notifications").insert(notifications);
+        if (error) throw error;
+
+        return { success: true, error: null };
+    } catch (error: any) {
+        console.error("Error sendReminderAction:", error);
+        return { success: false, error: error.message };
+    }
+}

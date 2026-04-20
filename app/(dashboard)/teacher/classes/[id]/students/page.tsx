@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 import { createAdminClient } from "@/lib/supabase/admin";
 import TeacherClassStudentsClient from "./TeacherClassStudentsClient";
 import { getClassStudentsWithStats, fetchClassScoreReport } from "@/lib/actions/class-students";
+import { Suspense } from "react";
 
 export const dynamic = "force-dynamic";
 
@@ -69,12 +70,14 @@ export default async function TeacherClassStudentsPage({
                 </div>
             </div>
 
-            <TeacherClassStudentsClient
-                classId={id}
-                className={classData.name}
-                students={studentsData || []}
-                reportData={reportData}
-            />
+            <Suspense fallback={<div className="p-12 text-center text-slate-500">Đang tải biểu mẫu dữ liệu...</div>}>
+                <TeacherClassStudentsClient
+                    classId={id}
+                    className={classData.name}
+                    students={studentsData || []}
+                    reportData={reportData}
+                />
+            </Suspense>
         </div>
     );
 }

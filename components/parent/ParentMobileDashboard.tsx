@@ -65,7 +65,7 @@ export default function ParentMobileDashboard({
                 <div className="space-y-3">
                     {recentAnnouncements.length > 0 ? (
                         recentAnnouncements.map((ann: any) => (
-                            <Link href={`/parent/announcements/${ann.id}`} key={ann.id} className="block">
+                            <Link href="/parent/notifications" key={ann.id} className="block">
                                 <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex items-center gap-4 active:scale-95 transition-transform">
                                     <div className="w-10 h-10 rounded-xl bg-orange-50 flex items-center justify-center shrink-0">
                                         <Bell className="w-5 h-5 text-orange-500" />
@@ -128,12 +128,16 @@ export default function ParentMobileDashboard({
 
             {/* 4. CHỨC NĂNG NHANH */}
             <div className="grid grid-cols-2 gap-4 px-1 pb-10">
-                <Button className="h-14 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-none font-bold text-sm shadow-none">
-                    <GraduationCap className="mr-2 w-4 h-4" /> Bảng điểm
-                </Button>
-                <Button className="h-14 rounded-2xl bg-blue-50 text-indigo-700 hover:bg-blue-100 border-none font-bold text-sm shadow-none">
-                    <Calendar className="mr-2 w-4 h-4" /> Đơn nghỉ học
-                </Button>
+                <Link href="/parent/progress">
+                    <Button className="w-full h-14 rounded-2xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-none font-bold text-sm shadow-none">
+                        <GraduationCap className="mr-2 w-4 h-4" /> Bảng điểm
+                    </Button>
+                </Link>
+                <Link href="/parent/schedule">
+                    <Button className="w-full h-14 rounded-2xl bg-blue-50 text-indigo-700 hover:bg-blue-100 border-none font-bold text-sm shadow-none">
+                        <Calendar className="mr-2 w-4 h-4" /> Đơn nghỉ học
+                    </Button>
+                </Link>
             </div>
         </div>
     );

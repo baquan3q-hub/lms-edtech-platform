@@ -126,6 +126,43 @@ export async function fetchClassExams(classId: string) {
     }
 }
 
+/**
+ * Đếm số bài nộp đang chờ chấm (grading_status = 'pending') cho từng exam trong lớp.
+ * Trả về Map<exam_id, pending_count>
+ */
+export async function fetchPendingExamGradingStats(classId: string) {
+    try {
+        const adminSupabase = createAdminClient();
+
+        const { data: examList } = await adminSupabase
+            .from("exams")
+            .select("id")
+            .eq("class_id", classId);
+
+        if (!examList || examList.length === 0) return { data: {}, error: null };
+
+        const examIds = examList.map(e => e.id);
+
+        const { data: pendingSubs, error } = await adminSupabase
+            .from("exam_submissions")
+            .select("exam_id")
+            .in("exam_id", examIds)
+            .eq("grading_status", "pending");
+
+        if (error) throw error;
+
+        const countMap: Record<string, number> = {};
+        (pendingSubs || []).forEach(s => {
+            countMap[s.exam_id] = (countMap[s.exam_id] || 0) + 1;
+        });
+
+        return { data: countMap, error: null };
+    } catch (error: any) {
+        console.error("fetchPendingExamGradingStats error:", error);
+        return { data: {}, error: error.message };
+    }
+}
+
 // ============================================================
 // TEACHER: Analytics — Phân tích kết quả bài kiểm tra
 // ============================================================
@@ -367,7 +404,7 @@ export async function submitExamAnswers(examId: string, classId: string, answers
         // Lấy đề để chấm
         const { data: exam } = await adminSupabase
             .from("exams")
-            .select("questions, total_points")
+            .select("questions, total_points, title")
             .eq("id", examId)
             .single();
 
@@ -412,6 +449,35 @@ export async function submitExamAnswers(examId: string, classId: string, answers
 
         revalidatePath(`/student/classes/${classId}`);
         revalidatePath(`/teacher/classes/${classId}`);
+
+        // Gửi notification cho GV nếu có câu tự luận cần chấm
+        if (hasEssay) {
+            try {
+                const { data: classData } = await adminSupabase
+                    .from("classes")
+                    .select("teacher_id")
+                    .eq("id", classId)
+                    .single();
+
+                const { data: studentData } = await adminSupabase
+                    .from("users")
+                    .select("full_name")
+                    .eq("id", user.id)
+                    .single();
+
+                if (classData?.teacher_id) {
+                    await adminSupabase.from("notifications").insert({
+                        user_id: classData.teacher_id,
+                        title: `📚 Bài KT cần chấm: ${exam.title || 'Bài kiểm tra'}`,
+                        message: `Học sinh ${studentData?.full_name || 'N/A'} đã nộp bài kiểm tra "${exam.title}" có câu tự luận cần giáo viên chấm điểm thủ công.`,
+                        type: "warning",
+                        read: false,
+                    });
+                }
+            } catch (notifErr) {
+                console.error("Lỗi gửi notification cho GV (exam):", notifErr);
+            }
+        }
 
         return { data: { submission, score, totalPoints: exam.total_points }, error: null };
     } catch (error: any) {

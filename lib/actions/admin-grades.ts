@@ -272,3 +272,93 @@ export async function fetchAdminGradeOverview() {
         return { data: null, error: error.message };
     }
 }
+
+// ============================================================
+// Fetch dữ liệu chi tiết để xuất Excel
+// ============================================================
+export async function fetchGradeExportData(filters?: { courseId?: string; classId?: string }) {
+    try {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { data: null, error: "Unauthorized" };
+
+        const adminSupabase = createAdminClient();
+
+        // Xây dựng query conditions
+        let classIds: string[] = [];
+        
+        if (filters?.classId && filters.classId !== "all") {
+            classIds = [filters.classId];
+        } else if (filters?.courseId && filters.courseId !== "all") {
+            const { data: courseClasses } = await adminSupabase
+                .from("classes")
+                .select("id")
+                .eq("course_id", filters.courseId);
+            classIds = (courseClasses || []).map(c => c.id);
+        } else {
+            // All classes
+            const { data: allClasses } = await adminSupabase.from("classes").select("id");
+            classIds = (allClasses || []).map(c => c.id);
+        }
+
+        if (classIds.length === 0) return { data: null, error: "Không tìm thấy lớp học phù hợp" };
+
+        // 1. Fetch Exam Submissions cho các lớp này
+        const { data: examSubs } = await adminSupabase
+            .from("exam_submissions")
+            .select(`
+                id, student_id, score, total_points, submitted_at,
+                exams!inner(id, title, class_id)
+            `)
+            .in("exams.class_id", classIds);
+
+        // 2. Fetch Homework Submissions cho các lớp này
+        const { data: hwSubs } = await adminSupabase
+            .from("homework_submissions")
+            .select(`
+                id, student_id, score, status, updated_at,
+                homework!inner(id, title, class_id, total_points)
+            `)
+            .eq("status", "graded")
+            .in("homework.class_id", classIds);
+
+        // Gom nhóm submissions theo student_id
+        const submissionsByStudent: Record<string, any[]> = {};
+        
+        (examSubs || []).forEach((sub: any) => {
+            if (!submissionsByStudent[sub.student_id]) submissionsByStudent[sub.student_id] = [];
+            const normalizedScore = sub.total_points > 0 ? (sub.score / sub.total_points) * 10 : 0;
+            submissionsByStudent[sub.student_id].push({
+                type: "Kiểm tra",
+                title: sub.exams.title,
+                score: sub.score,
+                totalPoints: sub.total_points,
+                normalizedScore: Number(normalizedScore.toFixed(1)),
+                submittedAt: sub.submitted_at // iso string
+            });
+        });
+
+        (hwSubs || []).forEach((sub: any) => {
+            if (!submissionsByStudent[sub.student_id]) submissionsByStudent[sub.student_id] = [];
+            const tp = sub.homework.total_points || 10;
+            const normalizedScore = tp > 0 ? (sub.score / tp) * 10 : 0;
+            submissionsByStudent[sub.student_id].push({
+                type: "Bài tập",
+                title: sub.homework.title,
+                score: sub.score,
+                totalPoints: tp,
+                normalizedScore: Number(normalizedScore.toFixed(1)),
+                submittedAt: sub.updated_at
+            });
+        });
+
+        return {
+            data: submissionsByStudent,
+            error: null
+        };
+
+    } catch (error: any) {
+        console.error("Error fetchGradeExportData:", error);
+        return { data: null, error: error.message };
+    }
+}

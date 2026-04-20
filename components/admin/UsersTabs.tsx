@@ -1,6 +1,7 @@
 "use client";
 
-import { Search, Users as UsersIcon } from "lucide-react";
+import { useState } from "react";
+import { Search, Users as UsersIcon, X, Link2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -12,9 +13,35 @@ import {
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { MoreVertical, Eye, Edit, Trash } from "lucide-react";
 import ViewProfileDialog from "./ViewProfileDialog";
 import Link from "next/link";
+
+// Lazy wrapper for the Link Parent tab — renders inline
+function LinkParentTabContent() {
+    return (
+        <div className="p-6">
+            <div className="text-center py-4 mb-4">
+                <h3 className="text-lg font-bold text-slate-900 flex items-center justify-center gap-2">
+                    👨‍👩‍👧 Liên kết Phụ huynh - Học sinh
+                </h3>
+                <p className="text-sm text-slate-500 mt-1">
+                    Quản lý liên kết giữa phụ huynh và học sinh. Tạo mã liên kết hoặc ghép thủ công.
+                </p>
+            </div>
+            <div className="flex justify-center">
+                <Link
+                    href="/admin/students/link-parent"
+                    className="inline-flex items-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-semibold transition-all shadow-sm hover:shadow-md"
+                >
+                    <Link2 className="w-4 h-4" />
+                    Mở trang Liên kết PH-HS
+                </Link>
+            </div>
+        </div>
+    );
+}
 
 const roleBadgeConfig: Record<string, { label: string; className: string }> = {
     admin: { label: "Admin", className: "bg-red-50 text-red-600 border-red-200" },
@@ -50,6 +77,8 @@ interface UsersTabsProps {
 }
 
 export default function UsersTabs({ users, error, linkData }: UsersTabsProps) {
+    const [searchQuery, setSearchQuery] = useState("");
+
     if (error) {
         return (
             <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm p-8 text-center">
@@ -68,11 +97,21 @@ export default function UsersTabs({ users, error, linkData }: UsersTabsProps) {
         );
     }
 
-    // Phân loại
-    const admins = users.filter((u) => u.role === "admin");
-    const teachers = users.filter((u) => u.role === "teacher");
-    const students = users.filter((u) => u.role === "student");
-    const parents = users.filter((u) => u.role === "parent");
+    // Filter theo search query
+    const q = searchQuery.toLowerCase().trim();
+    const filteredUsers = q
+        ? users.filter((u) =>
+            u.full_name?.toLowerCase().includes(q) ||
+            u.email?.toLowerCase().includes(q) ||
+            u.phone?.toLowerCase().includes(q)
+        )
+        : users;
+
+    // Phân loại (từ filtered list)
+    const admins = filteredUsers.filter((u) => u.role === "admin");
+    const teachers = filteredUsers.filter((u) => u.role === "teacher");
+    const students = filteredUsers.filter((u) => u.role === "student");
+    const parents = filteredUsers.filter((u) => u.role === "parent");
 
     // Helper: count linked parents for a student
     const getLinkedParents = (studentId: string) => {
@@ -294,10 +333,39 @@ export default function UsersTabs({ users, error, linkData }: UsersTabsProps) {
 
     return (
         <Tabs defaultValue="all" className="w-full">
+            {/* Search bar */}
+            <div className="mb-4">
+                <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <Input
+                        placeholder="Tìm kiếm theo tên, email, SĐT..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="pl-10 pr-10 h-11 bg-white border-gray-200 rounded-xl shadow-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-300 transition-all"
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery("")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
+                        >
+                            <X className="w-3 h-3 text-gray-500" />
+                        </button>
+                    )}
+                </div>
+                {q && (
+                    <p className="text-xs text-gray-500 mt-2 ml-1">
+                        Tìm thấy <span className="font-bold text-gray-700">{filteredUsers.length}</span> kết quả
+                        {filteredUsers.length !== users.length && (
+                            <span> / {users.length} người dùng</span>
+                        )}
+                    </p>
+                )}
+            </div>
+
             <div className="overflow-x-auto pb-2 -mx-4 px-4 sm:mx-0 sm:px-0">
                 <TabsList className="mb-4 bg-white border border-gray-200 shadow-sm rounded-xl p-1 min-w-max">
                     <TabsTrigger value="all" className="rounded-lg data-[state=active]:bg-gray-100 data-[state=active]:text-gray-900 min-h-[44px]">
-                        Tất cả ({users.length})
+                        Tất cả ({filteredUsers.length})
                     </TabsTrigger>
                     <TabsTrigger value="teachers" className="rounded-lg data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700 min-h-[44px]">
                         Giáo viên ({teachers.length})
@@ -311,12 +379,15 @@ export default function UsersTabs({ users, error, linkData }: UsersTabsProps) {
                     <TabsTrigger value="parents" className="rounded-lg data-[state=active]:bg-amber-50 data-[state=active]:text-amber-700 min-h-[44px]">
                         Phụ huynh ({parents.length})
                     </TabsTrigger>
+                    <TabsTrigger value="link-parent" className="rounded-lg data-[state=active]:bg-violet-50 data-[state=active]:text-violet-700 min-h-[44px]">
+                        <Link2 className="w-3.5 h-3.5 mr-1.5" /> Liên kết PH-HS
+                    </TabsTrigger>
                 </TabsList>
             </div>
 
             <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-sm">
                 <TabsContent value="all" className="m-0 border-none outline-none">
-                    {renderBaseTable(users)}
+                    {renderBaseTable(filteredUsers)}
                 </TabsContent>
                 <TabsContent value="teachers" className="m-0 border-none outline-none">
                     {renderBaseTable(teachers)}
@@ -329,6 +400,9 @@ export default function UsersTabs({ users, error, linkData }: UsersTabsProps) {
                 </TabsContent>
                 <TabsContent value="parents" className="m-0 border-none outline-none">
                     {renderParentsTable()}
+                </TabsContent>
+                <TabsContent value="link-parent" className="m-0 border-none outline-none">
+                    <LinkParentTabContent />
                 </TabsContent>
             </div>
         </Tabs>

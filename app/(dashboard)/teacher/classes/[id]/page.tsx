@@ -1,10 +1,10 @@
-import { ArrowLeft, BookOpen, Calendar, Users, MapPin, Bell, FileText, MessageSquare, Video, PlusCircle, Clock, ChevronDown, Monitor, Building2, Folder, CheckSquare, Music, ClipboardList, VideoIcon, Eye, EyeOff, ExternalLink, BarChart3, CheckCircle2, Circle, Trophy, Activity, Pencil, Trash2, Home, ShieldAlert } from "lucide-react";
+import { ArrowLeft, BookOpen, Calendar, Users, MapPin, Bell, FileText, MessageSquare, Video, PlusCircle, Clock, ChevronDown, Monitor, Building2, Folder, CheckSquare, Music, ClipboardList, VideoIcon, Eye, EyeOff, ExternalLink, BarChart3, CheckCircle2, Circle, Trophy, Activity, Pencil, Trash2, Home, ShieldAlert, AlertCircle, Zap, ChevronRight, History } from "lucide-react";
 import Link from "next/link";
 import { fetchClassDetails, fetchClassStudents, fetchStudentProgressForClass } from "./actions";
 import { fetchClassBehaviorScores } from "@/lib/actions/behavior-analysis";
 import { fetchCourseItems } from "@/lib/actions/courseBuilder";
-import { fetchClassExams } from "@/lib/actions/exam";
-import { fetchClassHomework } from "@/lib/actions/homework";
+import { fetchClassExams, fetchPendingExamGradingStats } from "@/lib/actions/exam";
+import { fetchClassHomework, fetchPendingHomeworkGradingStats } from "@/lib/actions/homework";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ import DeleteHomeworkButton from "@/components/teacher/DeleteHomeworkButton";
 import AnnouncementComposer from "@/components/teacher/AnnouncementComposer";
 import { fetchClassAnnouncements } from "@/lib/actions/announcement";
 import StudentBehaviorPanel from "@/components/teacher/StudentBehaviorPanel";
+import { fetchClassScoreReport } from "@/lib/actions/class-students";
+import ClassOverviewAnalyticsClient from "@/components/teacher/ClassOverviewAnalyticsClient";
 
 export default async function ClassDetailPage({ 
     params,
@@ -254,40 +256,9 @@ export default async function ClassDetailPage({
 
                 {/* ===== TAB: TỔNG QUAN ===== */}
                 <TabsContent value="overview" className="mt-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                            <h4 className="font-bold text-slate-900 mb-4 flex items-center">
-                                <Users className="w-5 h-5 mr-2 text-blue-500" /> Học viên
-                            </h4>
-                            <p className="text-4xl font-black text-slate-900">{students?.length || 0}</p>
-                            <p className="text-sm text-slate-500 mt-1">/ {classInfo.max_students} suất</p>
-                            <div className="w-full bg-slate-100 rounded-full h-2 mt-3 overflow-hidden">
-                                <div
-                                    className="bg-blue-500 h-2 rounded-full transition-all"
-                                    style={{ width: `${Math.min(((students?.length || 0) / (classInfo.max_students || 1)) * 100, 100)}%` }}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                            <h4 className="font-bold text-slate-900 mb-4 flex items-center">
-                                <FileText className="w-5 h-5 mr-2 text-indigo-500" /> Bài giảng
-                            </h4>
-                            <p className="text-4xl font-black text-slate-900">{lessonCount}</p>
-                            <p className="text-sm text-slate-500 mt-1">{publishedCount} đã xuất bản</p>
-                        </div>
-
-                        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                            <h4 className="font-bold text-slate-900 mb-4 flex items-center">
-                                <Calendar className="w-5 h-5 mr-2 text-emerald-500" /> Lịch dạy
-                            </h4>
-                            <p className="text-base text-slate-700 font-semibold whitespace-pre-wrap leading-relaxed">
-                                {classInfo.schedule
-                                    ? (typeof classInfo.schedule === 'string' ? classInfo.schedule : JSON.stringify(classInfo.schedule, null, 2))
-                                    : "Chưa sắp xếp lịch dạy"}
-                            </p>
-                        </div>
-                    </div>
+                    <Suspense fallback={<div className="p-12 text-center text-slate-500 text-sm mt-6"><div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>Đang tải phân tích lớp học...</div>}>
+                        <OverviewAnalyticsTabData classId={id} className={classInfo.name} />
+                    </Suspense>
                 </TabsContent>
 
 
@@ -580,7 +551,7 @@ async function ProgressTabData({ classId }: { classId: string }) {
                                 />
                             </div>
                             <span className="text-xs font-bold text-slate-500 mb-3">{percent}% Hoàn thành</span>
-                            <Link href={`/teacher/classes/${classId}/students/${p.studentId}/progress`} className="w-full mt-auto">
+                            <Link href={`/teacher/classes/${classId}/students?studentId=${p.studentId}`} className="w-full mt-auto">
                                 <Button variant="outline" size="sm" className="w-full">Xem chi tiết</Button>
                             </Link>
                         </div>
@@ -594,19 +565,128 @@ async function ProgressTabData({ classId }: { classId: string }) {
 }
 
 async function ExamsHomeworkTabData({ classId }: { classId: string }) {
-    const [{ data: classExams }, { data: classHomework }] = await Promise.all([
+    const [{ data: classExams }, { data: classHomework }, { data: examPending }, { data: hwPending }] = await Promise.all([
         fetchClassExams(classId),
-        fetchClassHomework(classId)
+        fetchClassHomework(classId),
+        fetchPendingExamGradingStats(classId),
+        fetchPendingHomeworkGradingStats(classId),
     ]);
+
+    const examPendingMap: Record<string, number> = (examPending || {}) as Record<string, number>;
+    const hwPendingMap: Record<string, number> = (hwPending || {}) as Record<string, number>;
+
+    // Phân loại homework: bình thường vs cải thiện
+    const regularHomework = (classHomework || []).filter((hw: any) => !hw.title.startsWith('[Cải thiện]'));
+    const improvementHomework = (classHomework || []).filter((hw: any) => hw.title.startsWith('[Cải thiện]'));
+
+    // Phân Active vs History:
+    // Active = còn submission pending HOẶC chưa ai nộp
+    // History = tất cả submission đã graded (hoặc không có pending)
+    const activeExams = (classExams || []).filter((e: any) => (examPendingMap[e.id] || 0) > 0 || !e.is_published);
+    const historyExams = (classExams || []).filter((e: any) => (examPendingMap[e.id] || 0) === 0 && e.is_published);
+
+    const activeHw = regularHomework.filter((hw: any) => (hwPendingMap[hw.id] || 0) > 0);
+    const historyHw = regularHomework.filter((hw: any) => (hwPendingMap[hw.id] || 0) === 0);
+
+    const activeImprov = improvementHomework.filter((hw: any) => (hwPendingMap[hw.id] || 0) > 0);
+    const historyImprov = improvementHomework.filter((hw: any) => (hwPendingMap[hw.id] || 0) === 0);
+
+    const totalPending = (Object.values(examPendingMap) as number[]).reduce((a, b) => a + b, 0) + (Object.values(hwPendingMap) as number[]).reduce((a, b) => a + b, 0);
+
+    // Helper render function for a single exam row
+    const renderExamRow = (exam: any) => {
+        const pending = examPendingMap[exam.id] || 0;
+        return (
+            <div key={exam.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-bold text-slate-800 text-base">{exam.title}</h4>
+                        {pending > 0 && (
+                            <Badge className="bg-red-500 text-white border-0 text-[10px] px-2 py-0.5 animate-pulse">
+                                <AlertCircle className="w-3 h-3 mr-1" /> {pending} bài cần chấm
+                            </Badge>
+                        )}
+                    </div>
+                    <div className="flex gap-4 mt-2 text-xs font-medium text-slate-500">
+                        <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Dài: {exam.duration_minutes || exam.duration}p</span>
+                        <span>Tổng: {exam.total_points} điểm</span>
+                        <span>{((exam.questions as any[]) || []).length} câu hỏi</span>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                    <Link href={`/teacher/classes/${classId}/exams/${exam.id}/analytics`}>
+                        <Button size="sm" variant="outline" className="border-emerald-200 text-emerald-600 hover:bg-emerald-50"><BarChart3 className="w-4 h-4 mr-1.5" /> Thống kê</Button>
+                    </Link>
+                    <Link href={`/teacher/classes/${classId}/exams/${exam.id}/edit`}>
+                        <Button variant="outline" size="sm"><Pencil className="w-4 h-4 text-slate-500"/></Button>
+                    </Link>
+                    <DeleteExamButton examId={exam.id} classId={classId} />
+                </div>
+            </div>
+        );
+    };
+
+    // Helper render function for a single homework row
+    const renderHwRow = (hw: any) => {
+        const pending = hwPendingMap[hw.id] || 0;
+        return (
+            <div key={hw.id} className="p-5 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <h4 className="font-bold text-slate-800">{hw.title.replace('[Cải thiện] ', '')}</h4>
+                        {pending > 0 && (
+                            <Badge className="bg-red-500 text-white border-0 text-[10px] px-2 py-0.5 animate-pulse">
+                                <AlertCircle className="w-3 h-3 mr-1" /> {pending} bài cần chấm
+                            </Badge>
+                        )}
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">
+                        <span>{hw.total_points || 0} điểm</span> • <span>Hạn: {hw.due_date ? new Date(hw.due_date).toLocaleDateString('vi-VN') : 'Không có'}</span>
+                    </div>
+                </div>
+                <div className="flex gap-2 items-center shrink-0">
+                    <Link href={`/teacher/classes/${classId}/homework/${hw.id}/submissions`}>
+                        <Button size="sm" variant={pending > 0 ? "default" : "outline"} className={pending > 0 ? "bg-red-600 hover:bg-red-700 text-white" : ""}>
+                            {pending > 0 ? "Chấm ngay" : "Chấm điểm"}
+                        </Button>
+                    </Link>
+                    <Link href={`/teacher/classes/${classId}/homework/${hw.id}/edit`}>
+                        <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Sửa bài tập">
+                            <Pencil className="w-4 h-4 text-slate-500" />
+                        </Button>
+                    </Link>
+                    <DeleteHomeworkButton homeworkId={hw.id} classId={classId} />
+                </div>
+            </div>
+        );
+    };
+
     return (
         <>
+            {/* TỔNG KẾT NHANH */}
+            {totalPending > 0 && (
+                <div className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-center gap-3">
+                    <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center shrink-0">
+                        <AlertCircle className="w-5 h-5 text-red-600" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-bold text-red-800">Bạn có <span className="text-red-600">{totalPending}</span> bài nộp đang chờ chấm điểm thủ công</p>
+                        <p className="text-xs text-red-600/70 mt-0.5">Bao gồm các bài có câu tự luận, video hoặc file đính kèm cần giáo viên xem xét.</p>
+                    </div>
+                </div>
+            )}
+
+            {/* === SECTION 1: BÀI KIỂM TRA === */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-                    <div>
-                        <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                            <FileText className="w-5 h-5 text-orange-500" /> Bài kiểm tra
-                        </h3>
-                        <p className="text-sm text-slate-500 mt-1">Danh sách đề thi và điểm số.</p>
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 bg-orange-100 rounded-lg flex items-center justify-center">
+                            <FileText className="w-5 h-5 text-orange-600" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-slate-900">Bài kiểm tra</h3>
+                            <p className="text-xs text-slate-500 mt-0.5">Đề thi trắc nghiệm, tự luận, tổng hợp</p>
+                        </div>
                     </div>
                     <Link href={`/teacher/classes/${classId}/exams/create`}>
                         <Button size="sm" className="bg-orange-600 hover:bg-orange-700 text-white font-semibold rounded-xl">
@@ -614,30 +694,25 @@ async function ExamsHomeworkTabData({ classId }: { classId: string }) {
                         </Button>
                     </Link>
                 </div>
-                {classExams && classExams.length > 0 ? (
-                    <div className="divide-y divide-slate-100">
-                        {classExams.map((exam: any) => (
-                            <div key={exam.id} className="p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-slate-50 transition-colors">
-                                <div>
-                                    <h4 className="font-bold text-slate-800 text-base">{exam.title}</h4>
-                                    <div className="flex gap-4 mt-2 text-xs font-medium text-slate-500">
-                                        <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Dài: {exam.duration_minutes || exam.duration}p</span>
-                                        <span>Tổng: {exam.total_points} điểm</span>
-                                        <span>{((exam.questions as any[]) || []).length} câu hỏi</span>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Link href={`/teacher/classes/${classId}/exams/${exam.id}/analytics`}>
-                                        <Button size="sm" variant="outline" className="border-emerald-200 text-emerald-600 hover:bg-emerald-50"><BarChart3 className="w-4 h-4 mr-1.5" /> Thống kê</Button>
-                                    </Link>
-                                    <Link href={`/teacher/classes/${classId}/exams/${exam.id}/edit`}>
-                                        <Button variant="outline" size="sm"><Pencil className="w-4 h-4 text-slate-500"/></Button>
-                                    </Link>
-                                    <DeleteExamButton examId={exam.id} classId={classId} />
-                                </div>
+                {(classExams || []).length > 0 ? (
+                    <>
+                        {activeExams.length > 0 && (
+                            <div className="divide-y divide-slate-100">
+                                {activeExams.map(renderExamRow)}
                             </div>
-                        ))}
-                    </div>
+                        )}
+                        {historyExams.length > 0 && (
+                            <details className="group">
+                                <summary className="px-6 py-3 bg-slate-50 text-xs font-bold text-slate-500 cursor-pointer hover:bg-slate-100 flex items-center gap-2 select-none border-t border-slate-100">
+                                    <History className="w-3.5 h-3.5" /> Đã hoàn thành ({historyExams.length})
+                                    <ChevronRight className="w-3.5 h-3.5 ml-auto transition-transform group-open:rotate-90" />
+                                </summary>
+                                <div className="divide-y divide-slate-100 bg-slate-50/50">
+                                    {historyExams.map(renderExamRow)}
+                                </div>
+                            </details>
+                        )}
+                    </>
                 ) : (
                     <div className="p-8 text-center text-slate-500">
                         <FileText className="w-12 h-12 text-slate-200 mx-auto mb-3" />
@@ -646,13 +721,17 @@ async function ExamsHomeworkTabData({ classId }: { classId: string }) {
                 )}
             </div>
 
+            {/* === SECTION 2: BÀI TẬP VỀ NHÀ === */}
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                 <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
-                    <div>
-                        <h3 className="font-bold text-slate-900 flex items-center gap-2">
-                            <Home className="w-5 h-5 text-indigo-500" /> Bài tập về nhà
-                        </h3>
-                        <p className="text-sm text-slate-500 mt-1">Giao bài tập chụp ảnh / file về nhà.</p>
+                    <div className="flex items-center gap-3">
+                        <div className="w-9 h-9 bg-indigo-100 rounded-lg flex items-center justify-center">
+                            <Home className="w-5 h-5 text-indigo-600" />
+                        </div>
+                        <div>
+                            <h3 className="font-bold text-slate-900">Bài tập về nhà</h3>
+                            <p className="text-xs text-slate-500 mt-0.5">Bài tập trắc nghiệm, tự luận, nộp file</p>
+                        </div>
                     </div>
                     <Link href={`/teacher/classes/${classId}/homework/create`}>
                         <Button size="sm" className="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl">
@@ -660,30 +739,25 @@ async function ExamsHomeworkTabData({ classId }: { classId: string }) {
                         </Button>
                     </Link>
                 </div>
-                {classHomework && classHomework.length > 0 ? (
-                    <div className="divide-y divide-slate-100">
-                        {classHomework.map((hw: any) => (
-                            <div key={hw.id} className="p-5 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                                <div>
-                                    <h4 className="font-bold text-slate-800">{hw.title}</h4>
-                                    <div className="text-xs text-slate-500 mt-1">
-                                        <span>{hw.total_points || 0} điểm</span> • <span>Hạn: {hw.due_date ? new Date(hw.due_date).toLocaleDateString('vi-VN') : 'Không có'}</span> 
-                                    </div>
-                                </div>
-                                <div className="flex gap-2 text-indigo-500 items-center">
-                                    <Link href={`/teacher/classes/${classId}/homework/${hw.id}/submissions`}>
-                                        <Button size="sm" variant="outline">Chấm điểm</Button>
-                                    </Link>
-                                    <Link href={`/teacher/classes/${classId}/homework/${hw.id}/edit`}>
-                                        <Button variant="outline" size="sm" className="h-8 w-8 p-0" title="Sửa bài tập">
-                                            <Pencil className="w-4 h-4 text-slate-500" />
-                                        </Button>
-                                    </Link>
-                                    <DeleteHomeworkButton homeworkId={hw.id} classId={classId} />
-                                </div>
+                {regularHomework.length > 0 ? (
+                    <>
+                        {activeHw.length > 0 && (
+                            <div className="divide-y divide-slate-100">
+                                {activeHw.map(renderHwRow)}
                             </div>
-                        ))}
-                    </div>
+                        )}
+                        {historyHw.length > 0 && (
+                            <details className="group">
+                                <summary className="px-6 py-3 bg-slate-50 text-xs font-bold text-slate-500 cursor-pointer hover:bg-slate-100 flex items-center gap-2 select-none border-t border-slate-100">
+                                    <History className="w-3.5 h-3.5" /> Đã hoàn thành ({historyHw.length})
+                                    <ChevronRight className="w-3.5 h-3.5 ml-auto transition-transform group-open:rotate-90" />
+                                </summary>
+                                <div className="divide-y divide-slate-100 bg-slate-50/50">
+                                    {historyHw.map(renderHwRow)}
+                                </div>
+                            </details>
+                        )}
+                    </>
                 ) : (
                     <div className="p-8 text-center text-slate-500">
                         <Home className="w-12 h-12 text-slate-200 mx-auto mb-3" />
@@ -691,6 +765,39 @@ async function ExamsHomeworkTabData({ classId }: { classId: string }) {
                     </div>
                 )}
             </div>
+
+            {/* === SECTION 3: BÀI TẬP CẢI THIỆN === */}
+            {improvementHomework.length > 0 && (
+                <div className="bg-white rounded-2xl border border-amber-200 shadow-sm overflow-hidden">
+                    <div className="px-6 py-5 border-b border-amber-100 flex items-center justify-between bg-amber-50/30">
+                        <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 bg-amber-100 rounded-lg flex items-center justify-center">
+                                <Zap className="w-5 h-5 text-amber-600" />
+                            </div>
+                            <div>
+                                <h3 className="font-bold text-slate-900">Bài tập cải thiện</h3>
+                                <p className="text-xs text-slate-500 mt-0.5">Bài tập bổ trợ cho học sinh cần cải thiện điểm số</p>
+                            </div>
+                        </div>
+                    </div>
+                    {activeImprov.length > 0 && (
+                        <div className="divide-y divide-amber-100">
+                            {activeImprov.map(renderHwRow)}
+                        </div>
+                    )}
+                    {historyImprov.length > 0 && (
+                        <details className="group">
+                            <summary className="px-6 py-3 bg-amber-50/50 text-xs font-bold text-slate-500 cursor-pointer hover:bg-amber-50 flex items-center gap-2 select-none border-t border-amber-100">
+                                <History className="w-3.5 h-3.5" /> Đã hoàn thành ({historyImprov.length})
+                                <ChevronRight className="w-3.5 h-3.5 ml-auto transition-transform group-open:rotate-90" />
+                            </summary>
+                            <div className="divide-y divide-amber-100 bg-amber-50/20">
+                                {historyImprov.map(renderHwRow)}
+                            </div>
+                        </details>
+                    )}
+                </div>
+            )}
         </>
     );
 }
@@ -699,4 +806,9 @@ async function BehaviorTabData({ classId }: { classId: string }) {
     const behaviorResult = await fetchClassBehaviorScores(classId);
     const behaviorData = (behaviorResult as any)?.data || [];
     return <StudentBehaviorPanel data={behaviorData} />;
+}
+
+async function OverviewAnalyticsTabData({ classId, className }: { classId: string; className: string }) {
+    const reportData = await fetchClassScoreReport(classId);
+    return <ClassOverviewAnalyticsClient classId={classId} className={className} reportData={reportData?.data} />;
 }

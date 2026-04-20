@@ -39,24 +39,44 @@ export default async function TeacherClassesPage() {
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {classesData.map((cls: any) => (
+                    {classesData.map((cls: any) => {
+                        const enrolledCount = cls.enrollments?.[0]?.count || 0;
+                        
+                        const formatAllSchedules = (schedules: any[]) => {
+                            if (!schedules || schedules.length === 0) return "Chưa có lịch";
+                            const dayMap: Record<number, string> = {
+                                1: "T2", 2: "T3", 3: "T4", 4: "T5", 5: "T6", 6: "T7", 7: "CN"
+                            };
+
+                            return schedules.map((s: any) => {
+                                const dayStr = dayMap[s.day_of_week] || `Ngày ${s.day_of_week}`;
+                                const start = s.start_time?.slice(0, 5) || "?";
+                                const end = s.end_time?.slice(0, 5) || "?";
+                                const room = s.room?.name ? ` (${s.room.name})` : "";
+                                return `${dayStr} ${start}-${end}${room}`;
+                            }).join(", ");
+                        };
+
+                        const formattedSchedule = formatAllSchedules(cls.schedules);
+
+                        return (
                         <div key={cls.id} className="rounded-2xl border border-gray-200 bg-white overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col">
                             {/* Card Header (Subject style pattern) */}
-                            <div className="h-32 bg-gradient-to-br from-emerald-500 to-teal-700 relative p-5 flex flex-col justify-between overflow-hidden">
+                            <div className="min-h-[8rem] w-full bg-slate-900 relative p-5 flex flex-col justify-between overflow-hidden shrink-0">
                                 {/* Decorative circle */}
-                                <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-colors"></div>
+                                <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/5 rounded-full blur-2xl transition-colors group-hover:bg-white/10"></div>
 
-                                <div className="relative z-10 flex justify-between items-start">
-                                    <Badge className="bg-white/20 hover:bg-white/30 text-white border-0 backdrop-blur-sm shadow-none font-medium">
+                                <div className="relative z-10 flex justify-between items-start mb-4">
+                                    <Badge className="bg-white/10 hover:bg-white/20 text-white border-white/10 backdrop-blur-sm shadow-none font-medium">
                                         {cls.status === 'active' ? 'Đang hoạt động' : cls.status === 'completed' ? 'Đã kết thúc' : 'Đã hủy'}
                                     </Badge>
                                 </div>
 
-                                <div className="relative z-10">
-                                    <h3 className="text-xl font-bold text-white mb-1 drop-shadow-sm line-clamp-1">
+                                <div className="relative z-10 mt-auto">
+                                    <h3 className="text-xl font-bold text-white mb-1 drop-shadow-sm">
                                         {cls.name ? `${cls.name} - ` : ""}{cls.course?.name || "Lớp học chưa đặt tên"}
                                     </h3>
-                                    <p className="text-emerald-100 text-sm font-medium drop-shadow-sm line-clamp-1">
+                                    <p className="text-slate-300 text-sm font-medium drop-shadow-sm">
                                         {cls.course?.description || "Không có mô tả khóa học"}
                                     </p>
                                 </div>
@@ -65,20 +85,20 @@ export default async function TeacherClassesPage() {
                             {/* Card Body */}
                             <div className="p-5 flex-1 flex flex-col">
                                 <div className="space-y-4 mb-6 flex-1">
-                                    <div className="flex items-center text-sm">
-                                        <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center mr-3 shrink-0">
+                                    <div className="flex items-start text-sm">
+                                        <div className="w-8 h-8 rounded-full bg-indigo-50 flex items-center justify-center mr-3 mt-0.5 shrink-0">
                                             <Calendar className="w-4 h-4 text-indigo-600" />
                                         </div>
                                         <div>
                                             <p className="text-xs text-gray-500 font-medium">Lịch dạy</p>
-                                            <p className="text-gray-900 font-medium">{cls.schedule ? JSON.stringify(cls.schedule) : "Đang cập nhật lịch"}</p>
+                                            <p className="text-gray-900 font-medium leading-relaxed mt-0.5">{formattedSchedule}</p>
                                         </div>
                                     </div>
 
                                     <div className="flex items-center text-sm">
                                         <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center mr-3 shrink-0">
                                             {cls.course?.mode === "online" ? (
-                                                <Monitor className="w-4 h-4 text-emerald-600" />
+                                                <Monitor className="w-4 h-4 text-amber-600" />
                                             ) : (
                                                 <Building2 className="w-4 h-4 text-blue-600" />
                                             )}
@@ -97,7 +117,7 @@ export default async function TeacherClassesPage() {
                                         </div>
                                         <div>
                                             <p className="text-xs text-gray-500 font-medium">Sĩ số (Đang học / Tối đa)</p>
-                                            <p className="text-gray-900 font-medium">0 / {cls.max_students}</p>
+                                            <p className="text-gray-900 font-medium">{enrolledCount} / {cls.max_students}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -106,7 +126,7 @@ export default async function TeacherClassesPage() {
                                 <div className="h-px w-full bg-gray-100 mb-4"></div>
 
                                 {/* Actions */}
-                                <Button className="w-full bg-white hover:bg-gray-50 text-gray-900 border border-gray-200 shadow-sm transition-all group-hover:border-emerald-200 group-hover:bg-emerald-50 group-hover:text-emerald-700">
+                                <Button asChild className="w-full bg-white hover:bg-gray-50 text-gray-900 border border-gray-200 shadow-sm transition-all group-hover:border-emerald-200 group-hover:bg-emerald-50 group-hover:text-emerald-700">
                                     <Link href={`/teacher/classes/${cls.id}`} className="flex w-full items-center justify-center">
                                         Vào lớp
                                         <ArrowRight className="w-4 h-4 ml-2 transition-transform group-hover:translate-x-1" />
@@ -114,7 +134,7 @@ export default async function TeacherClassesPage() {
                                 </Button>
                             </div>
                         </div>
-                    ))}
+                    )})}
                 </div>
             )}
         </div>

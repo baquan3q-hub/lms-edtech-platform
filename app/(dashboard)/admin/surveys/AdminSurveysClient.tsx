@@ -20,8 +20,10 @@ import {
     GripVertical, Globe, GraduationCap, BookOpen,
     BarChart3, ChevronDown, Star,
     CheckCircle2, ListChecks, Minus,
-    CalendarClock, Power, PowerOff, Type, Edit2, Clock
+    CalendarClock, Power, PowerOff, Type, Edit2, Clock,
+    Download, Users
 } from "lucide-react";
+import * as XLSX from "xlsx";
 
 type ScopeType = "system" | "course" | "class";
 type QuestionType = "single_choice" | "multiple_choice" | "text" | "rating";
@@ -76,6 +78,7 @@ export default function AdminSurveysClient() {
     const [analyticsData, setAnalyticsData] = useState<any>(null);
     const [analyticsLoading, setAnalyticsLoading] = useState(false);
     const [analyticsTitle, setAnalyticsTitle] = useState("");
+    const [analyticsTab, setAnalyticsTab] = useState<"results" | "respondents">("results");
 
     useEffect(() => { loadData(); }, [scopeFilter]);
 
@@ -215,9 +218,75 @@ export default function AdminSurveysClient() {
         setAnalyticsOpen(true);
         setAnalyticsTitle(survey.title);
         setAnalyticsLoading(true);
+        setAnalyticsTab("results");
         const res = await fetchSurveyAnalytics(survey.id);
         setAnalyticsData(res.data || null);
         setAnalyticsLoading(false);
+    };
+
+    // === Export Excel ===
+    const handleExportSurvey = () => {
+        if (!analyticsData) return;
+
+        const wb = XLSX.utils.book_new();
+
+        // Sheet 1: Kết quả thống kê
+        const resultRows: any[] = [];
+        analyticsData.questions?.forEach((q: any, idx: number) => {
+            if (q.question_type === "single_choice" || q.question_type === "multiple_choice") {
+                Object.entries(q.option_counts || {}).forEach(([opt, count]) => {
+                    const pct = q.total_responses > 0 ? Math.round(((count as number) / q.total_responses) * 100) : 0;
+                    resultRows.push({
+                        "Câu hỏi": q.question_text,
+                        "Loại": q.question_type === "single_choice" ? "Một đáp án" : "Nhiều đáp án",
+                        "Lựa chọn": opt,
+                        "Số lượng": count as number,
+                        "Tỷ lệ (%)": pct,
+                    });
+                });
+            } else if (q.question_type === "rating") {
+                resultRows.push({
+                    "Câu hỏi": q.question_text,
+                    "Loại": "Đánh giá sao",
+                    "Lựa chọn": `Trung bình: ${q.average_rating}/5`,
+                    "Số lượng": q.total_responses,
+                    "Tỷ lệ (%)": "",
+                });
+            } else if (q.question_type === "text") {
+                (q.text_answers || []).forEach((text: string) => {
+                    resultRows.push({
+                        "Câu hỏi": q.question_text,
+                        "Loại": "Văn bản",
+                        "Lựa chọn": text,
+                        "Số lượng": "",
+                        "Tỷ lệ (%)": "",
+                    });
+                });
+            }
+        });
+
+        const ws1 = XLSX.utils.json_to_sheet(resultRows.length > 0 ? resultRows : [{ "Thông báo": "Chưa có dữ liệu" }]);
+        XLSX.utils.book_append_sheet(wb, ws1, "Kết quả");
+
+        // Sheet 2: Danh sách người tham gia
+        const roleLabel: Record<string, string> = {
+            parent: "Phụ huynh", student: "Học sinh",
+            teacher: "Giáo viên", admin: "Admin"
+        };
+        const respondentRows = (analyticsData.respondents || []).map((r: any, idx: number) => ({
+            "STT": idx + 1,
+            "Họ và tên": r.full_name,
+            "Email": r.email,
+            "Vai trò": roleLabel[r.role] || r.role,
+            "Thời gian nộp": r.submitted_at ? new Date(r.submitted_at).toLocaleString("vi-VN") : "",
+        }));
+
+        const ws2 = XLSX.utils.json_to_sheet(respondentRows.length > 0 ? respondentRows : [{ "Thông báo": "Chưa có ai tham gia" }]);
+        XLSX.utils.book_append_sheet(wb, ws2, "Người tham gia");
+
+        const safeName = analyticsTitle.replace(/[^a-zA-Z0-9\u00C0-\u024F\u1E00-\u1EFF ]/g, "").trim().substring(0, 50);
+        XLSX.writeFile(wb, `Khao_sat_${safeName || "export"}.xlsx`);
+        toast.success("Đã xuất file Excel thành công!");
     };
 
     const handleToggle = async (survey: any) => {
@@ -541,8 +610,46 @@ export default function AdminSurveysClient() {
                         <DialogTitle className="flex items-center gap-2">
                             <BarChart3 className="w-5 h-5 text-indigo-600" /> Kết quả khảo sát
                         </DialogTitle>
-                        <p className="text-xs text-slate-500 truncate mt-1">{analyticsTitle}</p>
+                        <div className="flex items-center justify-between mt-1">
+                            <p className="text-xs text-slate-500 truncate">{analyticsTitle}</p>
+                            {analyticsData && (
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleExportSurvey()}
+                                    className="text-xs h-7 text-emerald-600 border-emerald-200 hover:bg-emerald-50 shrink-0 ml-2"
+                                >
+                                    <Download className="w-3 h-3 mr-1" /> Xuất Excel
+                                </Button>
+                            )}
+                        </div>
                     </DialogHeader>
+
+                    {/* Analytics Tabs */}
+                    {!analyticsLoading && analyticsData && (
+                        <div className="flex gap-1 bg-slate-100 p-0.5 rounded-lg mb-2">
+                            <button
+                                onClick={() => setAnalyticsTab("results")}
+                                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                    analyticsTab === "results"
+                                        ? "bg-white text-slate-900 shadow-sm"
+                                        : "text-slate-500 hover:text-slate-700"
+                                }`}
+                            >
+                                <BarChart3 className="w-3 h-3" /> Kết quả thống kê
+                            </button>
+                            <button
+                                onClick={() => setAnalyticsTab("respondents")}
+                                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                                    analyticsTab === "respondents"
+                                        ? "bg-white text-slate-900 shadow-sm"
+                                        : "text-slate-500 hover:text-slate-700"
+                                }`}
+                            >
+                                <Users className="w-3 h-3" /> Người tham gia ({analyticsData.total_respondents})
+                            </button>
+                        </div>
+                    )}
 
                     <div className="flex-1 overflow-y-auto min-h-0 max-h-[500px] space-y-4 py-2">
                         {analyticsLoading ? (
@@ -551,7 +658,7 @@ export default function AdminSurveysClient() {
                             </div>
                         ) : !analyticsData ? (
                             <p className="text-center text-slate-400 py-12">Không có dữ liệu</p>
-                        ) : (
+                        ) : analyticsTab === "results" ? (
                             <>
                                 <div className="bg-indigo-50 rounded-xl p-4 border border-indigo-100 text-center">
                                     <p className="text-3xl font-black text-indigo-600">{analyticsData.total_respondents}</p>
@@ -627,6 +734,68 @@ export default function AdminSurveysClient() {
                                         )}
                                     </div>
                                 ))}
+                            </>
+                        ) : (
+                            /* Tab: Người tham gia */
+                            <>
+                                <div className="bg-violet-50 rounded-xl p-4 border border-violet-100 text-center">
+                                    <p className="text-3xl font-black text-violet-600">{analyticsData.total_respondents}</p>
+                                    <p className="text-xs text-violet-400 font-semibold">Người đã tham gia</p>
+                                </div>
+
+                                {analyticsData.respondents?.length === 0 ? (
+                                    <div className="text-center py-8 text-slate-400">
+                                        <Users className="w-8 h-8 mx-auto mb-2 text-slate-200" />
+                                        <p className="text-sm">Chưa có ai tham gia khảo sát này.</p>
+                                    </div>
+                                ) : (
+                                    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-slate-50 border-b border-slate-200">
+                                                <tr>
+                                                    <th className="text-left px-4 py-2.5 font-semibold text-slate-600 text-xs">#</th>
+                                                    <th className="text-left px-4 py-2.5 font-semibold text-slate-600 text-xs">Họ và tên</th>
+                                                    <th className="text-left px-4 py-2.5 font-semibold text-slate-600 text-xs">Email</th>
+                                                    <th className="text-left px-4 py-2.5 font-semibold text-slate-600 text-xs">Vai trò</th>
+                                                    <th className="text-left px-4 py-2.5 font-semibold text-slate-600 text-xs">Thời gian nộp</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {analyticsData.respondents?.map((r: any, idx: number) => {
+                                                    const roleLabel: Record<string, string> = {
+                                                        parent: "Phụ huynh",
+                                                        student: "Học sinh",
+                                                        teacher: "Giáo viên",
+                                                        admin: "Admin",
+                                                    };
+                                                    return (
+                                                        <tr key={r.id} className="border-b border-slate-100 hover:bg-slate-50/50">
+                                                            <td className="px-4 py-2.5 text-slate-400 text-xs">{idx + 1}</td>
+                                                            <td className="px-4 py-2.5 font-medium text-slate-800">{r.full_name}</td>
+                                                            <td className="px-4 py-2.5 text-slate-500 text-xs">{r.email}</td>
+                                                            <td className="px-4 py-2.5">
+                                                                <Badge variant="outline" className={`text-[10px] ${
+                                                                    r.role === "parent" ? "bg-amber-50 text-amber-600 border-amber-200" :
+                                                                    r.role === "student" ? "bg-blue-50 text-blue-600 border-blue-200" :
+                                                                    r.role === "teacher" ? "bg-emerald-50 text-emerald-600 border-emerald-200" :
+                                                                    "bg-red-50 text-red-600 border-red-200"
+                                                                }`}>
+                                                                    {roleLabel[r.role] || r.role}
+                                                                </Badge>
+                                                            </td>
+                                                            <td className="px-4 py-2.5 text-slate-400 text-xs">
+                                                                {r.submitted_at ? new Date(r.submitted_at).toLocaleString("vi-VN", {
+                                                                    day: "2-digit", month: "2-digit", year: "numeric",
+                                                                    hour: "2-digit", minute: "2-digit"
+                                                                }) : "—"}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
                             </>
                         )}
                     </div>

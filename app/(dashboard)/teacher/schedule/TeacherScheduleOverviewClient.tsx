@@ -425,35 +425,35 @@ export default function TeacherScheduleOverviewClient({
 
             {/* ===== TODAY BANNER ===== */}
             {todaySessions.length > 0 && (
-                <div className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 rounded-2xl p-5 text-white shadow-lg shadow-indigo-200/50 relative overflow-hidden">
-                    <div className="absolute -top-16 -right-16 w-48 h-48 bg-white/10 rounded-full blur-3xl" />
+                <div className="bg-slate-900 rounded-2xl p-5 text-slate-50 shadow-md relative overflow-hidden">
+                    <div className="absolute -top-16 -right-16 w-48 h-48 bg-white/5 rounded-full blur-3xl" />
                     <div className="relative z-10">
                         <div className="flex items-center gap-2 mb-3">
-                            <Sparkles className="w-5 h-5 text-yellow-300" />
-                            <span className="font-bold text-lg">Hôm nay — {formatDateVN(today).full}</span>
+                            <Sparkles className="w-5 h-5 text-yellow-500" />
+                            <span className="font-bold text-lg text-white">Hôm nay — {formatDateVN(today).full}</span>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                             {todaySessions.map(session => (
                                 <Link key={session.id} href={`/teacher/classes/${session.class_id}`}>
-                                    <div className="bg-white/15 backdrop-blur-sm rounded-xl p-3.5 hover:bg-white/25 transition-all cursor-pointer border border-white/10">
+                                    <div className="bg-slate-800 rounded-xl p-3.5 hover:bg-slate-700 hover:border-slate-600 transition-all cursor-pointer border border-slate-700/50">
                                         <div className="flex items-start justify-between mb-1.5">
-                                            <span className="font-bold text-sm">{session.class_name}</span>
-                                            <span className="text-xs opacity-80">Buổi {session.session_number}</span>
+                                            <span className="font-bold text-sm text-white">{session.class_name}</span>
+                                            <span className="text-xs text-slate-400 font-medium">Buổi {session.session_number}</span>
                                         </div>
-                                        <div className="flex items-center gap-3 text-xs opacity-90">
-                                            <span className="flex items-center gap-1">
-                                                <Clock className="w-3 h-3" />
+                                        <div className="flex items-center gap-3 text-xs text-slate-300">
+                                            <span className="flex items-center gap-1 font-medium">
+                                                <Clock className="w-3 h-3 text-slate-400" />
                                                 {(session.start_time || "00:00:00").substring(0, 5)} - {(session.end_time || "00:00:00").substring(0, 5)}
                                             </span>
                                             {session.room_name && (
-                                                <span className="flex items-center gap-1">
-                                                    <MapPin className="w-3 h-3" />
+                                                <span className="flex items-center gap-1 font-medium">
+                                                    <MapPin className="w-3 h-3 text-slate-400" />
                                                     {session.room_name}
                                                 </span>
                                             )}
                                         </div>
                                         {session.lesson_title && (
-                                            <p className="text-xs mt-2 opacity-80 line-clamp-1 border-t border-white/10 pt-1.5">
+                                            <p className="text-xs mt-2 text-slate-400 line-clamp-1 border-t border-slate-700 pt-1.5 font-medium">
                                                 📝 {session.lesson_title}
                                             </p>
                                         )}

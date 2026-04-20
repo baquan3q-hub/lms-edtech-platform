@@ -272,7 +272,7 @@ export default async function TeacherDashboardPage() {
                                                 icon={<Bell className="w-5 h-5 text-amber-600" />}
                                                 title={ann.title}
                                                 content={ann.content}
-                                                detailUrl={`/teacher/announcements/${ann.id}`}
+                                                detailUrl="/teacher/notifications"
                                                 headerAction={
                                                     <Badge variant="outline" className="text-[10px] bg-white border-amber-200 text-amber-600 px-1 py-0 shadow-sm">
                                                         {ann.teacher?.full_name || "Hệ thống"}

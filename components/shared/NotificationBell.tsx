@@ -3,11 +3,10 @@
 import { useEffect, useState } from "react";
 import { useNotifications } from "@/hooks/useNotifications";
 import { createClient } from "@/lib/supabase/client";
-import { Bell, Check, Calendar, FileText, Info, BookOpen, BarChart3, ClipboardCheck } from "lucide-react";
+import { Bell, Check, Calendar, FileText, Info, BookOpen, BarChart3, ClipboardCheck, ChevronDown, ChevronUp, X } from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
@@ -25,6 +24,7 @@ const ICONS: Record<string, React.ElementType> = {
     quiz_feedback: BookOpen,
     child_quiz_feedback: BarChart3,
     teacher_review: ClipboardCheck,
+    feedback: BookOpen,
     system: Info,
 };
 
@@ -34,11 +34,24 @@ const COLORS: Record<string, string> = {
     quiz_feedback: "text-purple-500 bg-purple-50",
     child_quiz_feedback: "text-indigo-500 bg-indigo-50",
     teacher_review: "text-teal-500 bg-teal-50",
+    feedback: "text-indigo-500 bg-indigo-50",
     system: "text-blue-500 bg-blue-50",
 };
 
+// Chuyển bất kỳ giá trị nào về string an toàn để render
+function safeString(value: any): string {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+    if (typeof value === 'object') {
+        return value.explanation || value.tip || value.message || value.title || value.content || value.text || JSON.stringify(value);
+    }
+    return String(value);
+}
+
 export default function NotificationBell() {
     const [userId, setUserId] = useState<string | undefined>();
+    const [expandedId, setExpandedId] = useState<string | null>(null);
     const supabase = createClient();
     const router = useRouter();
 
@@ -48,9 +61,13 @@ export default function NotificationBell() {
 
     const { notifications, unreadCount } = useNotifications(userId);
 
-    const handleRead = async (id: string, link?: string) => {
-        await markNotificationAsRead(id);
-        if (link) router.push(link);
+    const handleClick = async (n: any) => {
+        // Đánh dấu đã đọc
+        if (!n.is_read) {
+            await markNotificationAsRead(n.id);
+        }
+        // Toggle expand — hiện nội dung đầy đủ ngay trong dropdown
+        setExpandedId(prev => prev === n.id ? null : n.id);
     };
 
     const handleReadAll = async () => {
@@ -71,7 +88,7 @@ export default function NotificationBell() {
                     )}
                 </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80 sm:w-96 rounded-2xl shadow-xl border-slate-200">
+            <DropdownMenuContent align="end" className="w-80 sm:w-96 rounded-2xl shadow-xl border-slate-200 p-0">
                 <div className="flex items-center justify-between p-4 pb-2">
                     <DropdownMenuLabel className="font-bold text-base p-0 flex items-center gap-2">
                         Thông báo mới
@@ -85,39 +102,64 @@ export default function NotificationBell() {
                 </div>
                 <DropdownMenuSeparator className="bg-slate-100 mx-2" />
 
-                <div className="max-h-[400px] overflow-y-auto px-2 py-1">
+                <div className="max-h-[450px] overflow-y-auto px-2 py-1">
                     {notifications.length === 0 ? (
                         <div className="text-center py-8">
                             <Bell className="w-8 h-8 text-slate-200 mx-auto mb-3" />
                             <p className="text-sm text-slate-500 font-medium">Bạn chưa có thông báo nào</p>
                         </div>
                     ) : (
-                        notifications.map((n) => {
+                        notifications.map((n: any) => {
                             const Icon = ICONS[n.type] || ICONS.system;
                             const colorClass = COLORS[n.type] || COLORS.system;
+                            const isExpanded = expandedId === n.id;
+                            const title = safeString(n.title);
+                            const message = safeString(n.message);
 
                             return (
-                                <DropdownMenuItem
+                                <div
                                     key={n.id}
-                                    className={`mb-1 p-3 rounded-xl cursor-pointer flex items-start gap-4 transition-colors ${n.is_read ? "opacity-75 focus:bg-slate-50" : "bg-blue-50/50 focus:bg-blue-50"}`}
-                                    onClick={() => handleRead(n.id, n.link)}
+                                    className={`mb-1.5 p-3 rounded-xl cursor-pointer transition-all border ${
+                                        isExpanded
+                                            ? "bg-white border-slate-200 shadow-sm"
+                                            : n.is_read
+                                                ? "opacity-75 hover:bg-slate-50 border-transparent"
+                                                : "bg-blue-50/50 hover:bg-blue-50 border-blue-100"
+                                    }`}
+                                    onClick={() => handleClick(n)}
                                 >
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${colorClass}`}>
-                                        <Icon className="w-5 h-5" />
+                                    <div className="flex items-start gap-3">
+                                        <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${colorClass}`}>
+                                            <Icon className="w-4 h-4" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-start justify-between gap-2">
+                                                <p className={`text-sm leading-tight ${n.is_read ? "font-medium text-slate-700" : "font-bold text-slate-900"}`}>
+                                                    {title}
+                                                </p>
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    {!n.is_read && (
+                                                        <div className="w-2 h-2 rounded-full bg-blue-500" />
+                                                    )}
+                                                    {isExpanded ? (
+                                                        <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                                                    ) : (
+                                                        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Nội dung: collapsed = 2 dòng, expanded = full */}
+                                            <p className={`text-xs text-slate-500 mt-1 leading-relaxed whitespace-pre-wrap transition-all ${isExpanded ? '' : 'line-clamp-2'}`}>
+                                                {message}
+                                            </p>
+
+                                            <p className="text-[10px] text-slate-400 font-medium mt-1">
+                                                {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: vi })}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="flex-1 space-y-1 min-w-0">
-                                        <p className={`text-sm leading-tight ${n.is_read ? "font-medium text-slate-700" : "font-bold text-slate-900"}`}>
-                                            {n.title}
-                                        </p>
-                                        <p className="text-xs text-slate-500 line-clamp-2">{n.message}</p>
-                                        <p className="text-[10px] text-slate-400 font-medium">
-                                            {formatDistanceToNow(new Date(n.created_at), { addSuffix: true, locale: vi })}
-                                        </p>
-                                    </div>
-                                    {!n.is_read && (
-                                        <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0 mt-2" />
-                                    )}
-                                </DropdownMenuItem>
+                                </div>
                             );
                         })
                     )}

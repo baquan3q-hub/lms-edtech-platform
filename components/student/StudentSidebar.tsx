@@ -10,12 +10,14 @@ import {
     TrendingUp,
     GraduationCap,
     PanelLeftClose,
-    PanelLeftOpen
+    PanelLeftOpen,
+    Target
 } from "lucide-react";
 import UserAvatarMenu from "@/components/shared/UserAvatarMenu";
 
 const navigation = [
     { name: "Tổng quan", href: "/student", icon: LayoutDashboard },
+    { name: "Mục tiêu & Thói quen", href: "/student/goals", icon: Target },
     { name: "Lớp học", href: "/student/classes", icon: BookOpen },
     { name: "Bài tập", href: "/student/assignments", icon: FileText },
     { name: "Kết quả học tập", href: "/student/grades", icon: TrendingUp },

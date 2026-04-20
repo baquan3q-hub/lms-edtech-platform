@@ -200,7 +200,7 @@ export async function fetchStudentAssignments() {
 
         const adminSupabase = createAdminClient();
 
-        // Lấy danh sách class_ids mà học sinh đang học
+        // 1. Lấy danh sách lớp đang học
         const { data: enrollments } = await adminSupabase
             .from("enrollments")
             .select("class_id, class:classes(name, course:courses(name))")
@@ -212,144 +212,134 @@ export async function fetchStudentAssignments() {
         }
 
         const classIds = enrollments.map(e => e.class_id);
+        const classInfoMap = new Map(enrollments.map(e => [e.class_id, e.class as any]));
 
-        // Lấy các course_items là quiz hoặc assignment trong các lớp này
-        const { data: assignments, error: itemsError } = await adminSupabase
-            .from("course_items")
-            .select(`
-                id, class_id, title, type,
-                contents:item_contents(deadline, max_attempts)
-            `)
-            .in("class_id", classIds)
-            .in("type", ["quiz", "assignment"]);
+        // 2. Lấy TẤT CẢ submissions của student (không cần filter theo ID)
+        const [examSubsRes, hwSubsRes, quizAttemptsRes] = await Promise.all([
+            adminSupabase.from("exam_submissions").select("exam_id, score, total_points, created_at").eq("student_id", user.id),
+            adminSupabase.from("homework_submissions").select("homework_id, score, status, submitted_at, attempts").eq("student_id", user.id),
+            adminSupabase.from("quiz_attempts").select("item_id, score, submitted_at").eq("student_id", user.id),
+        ]);
 
-        if (itemsError) throw itemsError;
+        // Build submission Maps
+        const examSubMap = new Map<string, any>();
+        (examSubsRes.data || []).forEach((s: any) => examSubMap.set(s.exam_id, s));
 
-        // Lấy các bài exam thuộc classIds này
-        const { data: exams, error: examsError } = await adminSupabase
+        const hwSubMap = new Map<string, any>();
+        (hwSubsRes.data || []).forEach((s: any) => hwSubMap.set(s.homework_id, s));
+
+        const quizSubMap = new Map<string, any>();
+        (quizAttemptsRes.data || []).forEach((s: any) => {
+            // Lưu điểm cao nhất
+            const existing = quizSubMap.get(s.item_id);
+            if (!existing || (s.score || 0) > (existing.score || 0)) {
+                quizSubMap.set(s.item_id, s);
+            }
+        });
+
+        // 3. Lấy danh sách Exams
+        const { data: exams } = await adminSupabase
             .from("exams")
-            .select("id, class_id, title, due_date, duration_minutes")
+            .select("id, class_id, title, due_date, duration_minutes, total_points")
             .in("class_id", classIds)
             .eq("is_published", true);
 
-        // Lấy tiến độ của học sinh cho các items này
-        const itemIds = assignments?.map(a => a.id) || [];
-        const { data: progress } = await adminSupabase
-            .from("student_progress")
-            .select("item_id, status, attempts, score, completed_at")
-            .eq("student_id", user.id)
-            .in("item_id", itemIds);
-
-        const { data: quizAttempts } = await adminSupabase
-            .from("quiz_attempts")
-            .select("item_id, score, submitted_at")
-            .eq("student_id", user.id)
-            .in("item_id", itemIds);
-
-        const examIds = exams?.map(e => e.id) || [];
-        const { data: examSubmissions } = await adminSupabase
-            .from("exam_submissions")
-            .select("exam_id, score, time_taken_seconds, created_at")
-            .eq("student_id", user.id)
-            .in("exam_id", examIds);
-
-        // Lấy thêm Bài tập về nhà (Homework) thuộc các classIds này — chỉ lấy đã publish
-        const { data: homeworks, error: hwError } = await adminSupabase
+        // 4. Lấy danh sách Homework
+        const { data: homeworks } = await adminSupabase
             .from("homework")
             .select("id, class_id, title, due_date, total_points")
             .in("class_id", classIds)
             .eq("is_published", true);
 
-        const hwIds = homeworks?.map(h => h.id) || [];
-        const { data: hwSubmissions } = await adminSupabase
-            .from("homework_submissions")
-            .select("homework_id, score, status, submitted_at, attempts")
-            .eq("student_id", user.id)
-            .in("homework_id", hwIds);
+        // 5. Lấy course_items (quiz/assignment)
+        const { data: courseItems } = await adminSupabase
+            .from("course_items")
+            .select("id, class_id, title, type, contents:item_contents(deadline, max_attempts)")
+            .in("class_id", classIds)
+            .in("type", ["quiz", "assignment"]);
 
-        // Trộn dữ liệu course_items
-        const enrichedAssignments = assignments?.map(assignment => {
-            const classInfo = enrollments.find(e => e.class_id === assignment.class_id)?.class;
-            let prog = progress?.find(p => p.item_id === assignment.id) || null;
-            const content = Array.isArray(assignment.contents) ? assignment.contents[0] : assignment.contents;
+        // 6. Trộn tất cả thành 1 danh sách
+        const result: any[] = [];
 
-            // Nếu là bài quiz mà đã có quiz_attempts, coi như completed dù bảng student_progress chưa update
-            if (assignment.type === 'quiz') {
-                const qAttempt = quizAttempts?.find(q => q.item_id === assignment.id);
-                if (qAttempt && (!prog || prog.status !== 'completed')) {
-                    prog = {
-                        item_id: assignment.id,
-                        ...prog,
-                        status: 'completed',
-                        score: qAttempt.score,
-                        completed_at: qAttempt.submitted_at,
-                        attempts: (prog?.attempts || 0) > 0 ? prog?.attempts : 1
-                    };
-                }
-            }
-
-            return {
-                id: assignment.id,
-                class_id: assignment.class_id,
-                title: assignment.title,
-                type: assignment.type,
-                className: (classInfo as any)?.name || "Lớp học chưa rõ",
-                courseName: (classInfo as any)?.course?.name || "Khóa học",
-                deadline: content?.deadline,
-                maxAttempts: content?.max_attempts,
-                progress: prog || null
-            };
-        }) || [];
-
-        // Trộn dữ liệu exams
-        const enrichedExams = exams?.map(exam => {
-            const classInfo = enrollments.find(e => e.class_id === exam.class_id)?.class;
-            const sub = examSubmissions?.find(s => s.exam_id === exam.id);
-
-            return {
+        // -- Exams --
+        (exams || []).forEach((exam: any) => {
+            const cls = classInfoMap.get(exam.class_id);
+            const sub = examSubMap.get(exam.id);
+            result.push({
                 id: exam.id,
                 class_id: exam.class_id,
                 title: exam.title,
                 type: "exam",
-                className: (classInfo as any)?.name || "Lớp học chưa rõ",
-                courseName: (classInfo as any)?.course?.name || "Khóa học",
+                className: cls?.name || "Lớp học",
+                courseName: cls?.course?.name || "Khóa học",
                 deadline: exam.due_date,
-                duration: exam.duration_minutes,
-                progress: sub ? { status: "completed", score: sub.score, completed_at: sub.created_at } : null
-            };
-        }) || [];
+                isDone: !!sub, // ĐÃ CÓ SUBMISSION = ĐÃ LÀM
+                progress: sub ? {
+                    status: "completed",
+                    score: sub.score,
+                    total_points: sub.total_points || exam.total_points,
+                    completed_at: sub.created_at,
+                } : null,
+            });
+        });
 
-        // Trộn dữ liệu Homework
-        const enrichedHomeworks = homeworks?.map(hw => {
-            const classInfo = enrollments.find(e => e.class_id === hw.class_id)?.class;
-            const sub = hwSubmissions?.find(s => s.homework_id === hw.id);
-
-            return {
+        // -- Homework --
+        (homeworks || []).forEach((hw: any) => {
+            const cls = classInfoMap.get(hw.class_id);
+            const sub = hwSubMap.get(hw.id);
+            result.push({
                 id: hw.id,
                 class_id: hw.class_id,
                 title: hw.title,
                 type: "homework",
-                className: (classInfo as any)?.name || "Lớp học chưa rõ",
-                courseName: (classInfo as any)?.course?.name || "Khóa học",
+                className: cls?.name || "Lớp học",
+                courseName: cls?.course?.name || "Khóa học",
                 deadline: hw.due_date,
-                maxAttempts: null, // Homework uses soft limit usually or we rely on 'attempts' count
-                progress: sub ? { status: sub.status === 'graded' ? 'completed' : 'submitted', score: sub.score, completed_at: sub.submitted_at, attempts: sub.attempts } : null
-            };
-        }) || [];
+                isDone: !!sub, // ĐÃ CÓ SUBMISSION = ĐÃ LÀM
+                progress: sub ? {
+                    status: sub.status === 'graded' ? 'completed' : 'submitted',
+                    score: sub.score,
+                    total_points: hw.total_points,
+                    completed_at: sub.submitted_at,
+                    attempts: sub.attempts,
+                } : null,
+            });
+        });
 
-        const allAssignments = [...enrichedAssignments, ...enrichedExams, ...enrichedHomeworks];
+        // -- Quizzes / Assignments (course_items) --
+        (courseItems || []).forEach((item: any) => {
+            const cls = classInfoMap.get(item.class_id);
+            const sub = quizSubMap.get(item.id);
+            const content = Array.isArray(item.contents) ? item.contents[0] : item.contents;
+            result.push({
+                id: item.id,
+                class_id: item.class_id,
+                title: item.title,
+                type: item.type,
+                className: cls?.name || "Lớp học",
+                courseName: cls?.course?.name || "Khóa học",
+                deadline: content?.deadline,
+                maxAttempts: content?.max_attempts,
+                isDone: !!sub, // ĐÃ CÓ ATTEMPT = ĐÃ LÀM
+                progress: sub ? {
+                    status: "completed",
+                    score: sub.score,
+                    completed_at: sub.submitted_at,
+                } : null,
+            });
+        });
 
-        // Sắp xếp: Hạn chót gần nhất lên trước NULL (không có hạn)
-        allAssignments.sort((a, b) => {
-            if (a.deadline && b.deadline) {
-                return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
-            }
+        // Sắp xếp: hạn gần nhất trước
+        result.sort((a, b) => {
+            if (a.deadline && b.deadline) return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
             if (a.deadline) return -1;
             if (b.deadline) return 1;
             return 0;
         });
 
-        return { data: allAssignments, error: null };
+        console.log(`[fetchStudentAssignments] Total: ${result.length}, Done: ${result.filter(r => r.isDone).length}, Pending: ${result.filter(r => !r.isDone).length}`);
+
+        return { data: result, error: null };
     } catch (error: any) {
         console.error("Lỗi lấy danh sách bài tập:", error);
         return { data: null, error: error.message };
@@ -393,6 +383,7 @@ export async function fetchStudentGrades() {
                         className: clsInfo?.name || "Lớp học chưa rõ",
                         courseName: clsInfo?.course?.name || "Khóa học",
                         score: record.score,
+                        totalPoints: 100, // Quizzes typically default to 100% scale
                         passed: record.passed,
                         submittedAt: record.submitted_at
                     };
@@ -434,6 +425,7 @@ export async function fetchStudentGrades() {
                         className: clsInfo?.name || "Lớp học chưa rõ",
                         courseName: courseInfo?.name || "Khóa học",
                         score: record.score,
+                        totalPoints: record.total_points || 100,
                         passed: passed,
                         submittedAt: record.created_at
                     };
@@ -443,7 +435,51 @@ export async function fetchStudentGrades() {
             console.warn("exam_submissions query skipped:", e);
         }
 
-        const formattedGrades = [...formattedAttempts, ...formattedExams].sort(
+        // 3. Lấy homework_submissions
+        let formattedHomework: any[] = [];
+        try {
+            const { data: hwSubmissions, error: hwError } = await adminSupabase
+                .from("homework_submissions")
+                .select(`
+                    id, homework_id, score, status, submitted_at,
+                    homework(
+                        title, class_id, total_points,
+                        class:classes(name, course:courses(name))
+                    )
+                `)
+                .eq("student_id", user.id)
+                .order("submitted_at", { ascending: false });
+
+            if (!hwError && hwSubmissions) {
+                formattedHomework = hwSubmissions.map(record => {
+                    const hwInfo = Array.isArray(record.homework) ? record.homework[0] : record.homework;
+                    const clsInfo = Array.isArray(hwInfo?.class) ? hwInfo?.class[0] : hwInfo?.class;
+                    const courseInfo = Array.isArray(clsInfo?.course) ? clsInfo?.course[0] : clsInfo?.course;
+                    
+                    const scoreNum = Number(record.score) || 0;
+                    const totalPointsNum = Number(hwInfo?.total_points) || 100;
+                    const percent = totalPointsNum > 0 ? (scoreNum / totalPointsNum) * 100 : 0;
+                    const passed = record.status === 'graded' ? percent >= 50 : false;
+
+                    return {
+                        id: record.id,
+                        itemId: record.homework_id,
+                        title: hwInfo?.title || "Bài tập về nhà",
+                        type: "homework",
+                        className: clsInfo?.name || "Lớp học chưa rõ",
+                        courseName: courseInfo?.name || "Khóa học",
+                        score: record.score,
+                        totalPoints: totalPointsNum,
+                        passed: passed,
+                        submittedAt: record.submitted_at
+                    };
+                });
+            }
+        } catch (e) {
+            console.warn("homework_submissions query skipped:", e);
+        }
+
+        const formattedGrades = [...formattedAttempts, ...formattedExams, ...formattedHomework].sort(
             (a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime()
         );
 
@@ -652,6 +688,110 @@ export async function fetchStudentAnnouncements() {
         return { data: data || [], error: null };
     } catch (error: any) {
         console.error("fetchStudentAnnouncements error:", error);
+        return { data: [], error: error.message };
+    }
+}
+
+/**
+ * Lấy Bảng xếp hạng Điểm Học Lực của Lớp
+ */
+export async function getClassScoreLeaderboard(classId: string) {
+    try {
+        const supabase = await createClient();
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return { data: [], error: "Unauthorized" };
+
+        const adminSupabase = createAdminClient();
+
+        // 1. Fetch all enrolled students in the class
+        const { data: enrollments, error: enrollError } = await adminSupabase
+            .from("enrollments")
+            .select("student_id, users:users!student_id(id, full_name, email, avatar_url)")
+            .eq("class_id", classId)
+            .eq("status", "active");
+
+        if (enrollError) throw enrollError;
+        if (!enrollments || enrollments.length === 0) return { data: [], error: null };
+
+        const studentIds = enrollments.map(e => e.student_id);
+
+        // 2. Fetch all assignments, exams, homeworks for the class
+        const { data: assignments } = await adminSupabase.from("course_items").select("id").eq("class_id", classId).in("type", ["quiz", "assignment"]);
+        const { data: exams } = await adminSupabase.from("exams").select("id").eq("class_id", classId);
+        const { data: homeworks } = await adminSupabase.from("homework").select("id").eq("class_id", classId);
+
+        const quizIds = assignments?.map(a => a.id) || [];
+        const examIds = exams?.map(e => e.id) || [];
+        const hwIds = homeworks?.map(h => h.id) || [];
+
+        // 3. Fetch submissions for these students and items
+        const { data: quizAttempts } = await adminSupabase.from("quiz_attempts").select("student_id, item_id, score").in("student_id", studentIds).in("item_id", quizIds).not('score', 'is', null);
+        const { data: examSubmissions } = await adminSupabase.from("exam_submissions").select("student_id, exam_id, score").in("student_id", studentIds).in("exam_id", examIds).not('score', 'is', null);
+        const { data: hwSubmissions } = await adminSupabase.from("homework_submissions").select("student_id, homework_id, score").in("student_id", studentIds).in("homework_id", hwIds).not('score', 'is', null);
+
+        // 4. Aggregate scores per student (using average)
+        const studentScoresMap: Record<string, { total: number, count: number }> = {};
+        studentIds.forEach(id => studentScoresMap[id] = { total: 0, count: 0 });
+
+        // Handle Quizzes (max score per item)
+        const quizMaxMap: Record<string, Record<string, number>> = {}; // student_id -> item_id -> max_score
+        (quizAttempts || []).forEach(attempt => {
+            if (!quizMaxMap[attempt.student_id]) quizMaxMap[attempt.student_id] = {};
+            const current = quizMaxMap[attempt.student_id][attempt.item_id] || 0;
+            const score = Number(attempt.score) || 0;
+            quizMaxMap[attempt.student_id][attempt.item_id] = Math.max(current, score);
+        });
+
+        // Add quizzes to students
+        for (const [sId, items] of Object.entries(quizMaxMap)) {
+            for (const score of Object.values(items)) {
+                if (studentScoresMap[sId]) {
+                    studentScoresMap[sId].total += score;
+                    studentScoresMap[sId].count++;
+                }
+            }
+        }
+
+        // Add exams
+        (examSubmissions || []).forEach(sub => {
+            if (studentScoresMap[sub.student_id]) {
+                studentScoresMap[sub.student_id].total += Number(sub.score) || 0;
+                studentScoresMap[sub.student_id].count++;
+            }
+        });
+
+        // Add homework
+        (hwSubmissions || []).forEach(sub => {
+            if (studentScoresMap[sub.student_id]) {
+                studentScoresMap[sub.student_id].total += Number(sub.score) || 0;
+                studentScoresMap[sub.student_id].count++;
+            }
+        });
+
+        // 5. Combine and sort
+        const leaderboard = enrollments.map((en: any) => {
+            const studentUser = Array.isArray(en.users) ? en.users[0] : en.users;
+            const stats = studentScoresMap[en.student_id];
+            let avgScore = 0;
+            if (stats && stats.count > 0) {
+                avgScore = stats.total / stats.count;
+            }
+
+            return {
+                student_id: en.student_id,
+                full_name: studentUser?.full_name || "Unknown Student",
+                email: studentUser?.email || "",
+                avatar_url: studentUser?.avatar_url || null,
+                avg_score: Number(avgScore.toFixed(1)),
+                total_submissions: stats?.count || 0
+            };
+        });
+
+        leaderboard.sort((a, b) => b.avg_score - a.avg_score);
+
+        return { data: leaderboard, error: null };
+    } catch (error: any) {
+        console.error("Error fetching class score leaderboard:", error);
         return { data: [], error: error.message };
     }
 }

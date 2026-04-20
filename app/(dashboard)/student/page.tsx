@@ -15,13 +15,17 @@ import {
     CalendarDays,
     MapPin,
     Bell,
-    Star
+    Star,
+    Check,
+    Rocket
 } from "lucide-react";
 import LottieAnimation from "@/components/shared/LottieAnimation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { fetchStudentEnrolledClasses, fetchStudentDashboardStats, fetchSuggestedLessons, fetchStudentAnnouncements } from "@/lib/actions/student";
 import { getOwnStudentSchedule } from "@/lib/actions/schedule";
+import { fetchStudentHabits, fetchStudentGoals } from "@/lib/actions/goals-habits";
+import { createClient } from "@/lib/supabase/server";
 import Link from "next/link";
 import { format, parseISO } from "date-fns";
 import UpcomingSessionsWidget from "@/components/shared/UpcomingSessionsWidget";
@@ -40,44 +44,53 @@ const typeMeta: Record<string, { icon: any; label: string; color: string; bg: st
 const dayNames = ["Chủ nhật", "Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
 
 export default async function StudentDashboardPage() {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
     const [
         { data: myClasses },
         { data: statsData },
         { data: suggestions },
         { data: upcomingSessions },
-        { data: announcements }
+        { data: announcements },
+        { data: habits },
+        { data: goals }
     ] = await Promise.all([
         fetchStudentEnrolledClasses(),
         fetchStudentDashboardStats(),
         fetchSuggestedLessons(),
         getOwnStudentSchedule(),
-        fetchStudentAnnouncements()
+        fetchStudentAnnouncements(),
+        fetchStudentHabits(user?.id || ""),
+        fetchStudentGoals(user?.id || "")
     ]);
 
     const dynamicStats = [
         {
-            title: "Khóa học đang học",
-            value: statsData?.enrolledCount?.toString() || "0",
-            icon: BookOpen,
+            title: "Mục tiêu",
+            value: (goals || []).filter((g: any) => g.status === "in_progress" && g.created_by_role === "parent").length.toString(),
+            icon: Target,
             color: "text-blue-500",
             bg: "bg-blue-500/10",
-            border: "border-blue-500/20"
+            border: "border-blue-500/20",
+            goals: (goals || []).filter((g: any) => g.status === "in_progress" && g.created_by_role === "parent")
+        },
+        {
+            title: "Nhiệm vụ (To-Do)",
+            value: habits && habits.length > 0 ? `${habits.filter((h: any) => h.completedToday).length}/${habits.length}` : "0/0",
+            icon: CheckSquare,
+            color: "text-indigo-500",
+            bg: "bg-indigo-500/10",
+            border: "border-indigo-500/20",
+            habits: habits || []
         },
         {
             title: "Bài đã hoàn thành",
             value: (statsData?.completedCount || 0).toString(),
-            icon: Target,
+            icon: Zap,
             color: "text-emerald-500",
             bg: "bg-emerald-500/10",
             border: "border-emerald-500/20"
-        },
-        {
-            title: "Bài kiểm tra đã làm",
-            value: (statsData?.assignmentsCount || 0).toString(),
-            icon: CheckSquare,
-            color: "text-indigo-500",
-            bg: "bg-indigo-500/10",
-            border: "border-indigo-500/20"
         },
         {
             title: "Điểm trung bình",
@@ -119,15 +132,69 @@ export default async function StudentDashboardPage() {
                 {dynamicStats.map((stat, idx) => {
                     const Icon = stat.icon;
                     return (
-                        <div key={idx} className={`relative overflow-hidden group ${stat.bg} ${stat.border} border-2 rounded-3xl p-5 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 flex flex-col gap-3`}>
-                            <div className={`w-12 h-12 rounded-2xl bg-white flex items-center justify-center shrink-0 shadow-sm ${stat.color} group-hover:scale-110 transition-transform`}>
-                                <Icon className="w-6 h-6" strokeWidth={2.5} />
+                        <Link href={(stat.goals !== undefined || stat.habits !== undefined) ? "/student/goals" : "#"} key={idx} className={`relative overflow-hidden group ${stat.bg} ${stat.border} border-2 rounded-3xl p-5 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300 flex flex-col min-h-[130px]`}>
+                            <div className="flex gap-3 relative z-10">
+                                <div className={`w-12 h-12 rounded-2xl bg-white flex items-center justify-center shrink-0 shadow-sm ${stat.color} group-hover:scale-110 transition-transform`}>
+                                    <Icon className="w-6 h-6" strokeWidth={2.5} />
+                                </div>
+                                <div className="flex-1">
+                                    <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-0.5 opacity-80 leading-none mt-1">{stat.title}</p>
+                                    <p className={`text-2xl sm:text-3xl font-black ${stat.color} tracking-tight`}>{stat.value}</p>
+                                </div>
                             </div>
-                            <div>
-                                <p className="text-[11px] font-bold text-slate-500 uppercase tracking-widest mb-0.5 opacity-80">{stat.title}</p>
-                                <p className={`text-2xl sm:text-3xl font-black ${stat.color} tracking-tight`}>{stat.value}</p>
-                            </div>
-                        </div>
+
+                            {/* Rendering Goals for index 0 card */}
+                            {stat.goals !== undefined && (
+                                <div className="mt-4 pt-4 border-t border-blue-500/10 flex flex-col gap-2 relative z-10">
+                                    {stat.goals.length > 0 ? (
+                                        <>
+                                            {stat.goals.slice(0, 2).map((g: any, i: number) => {
+                                                const diff = g.target_date ? new Date(g.target_date).getTime() - new Date().getTime() : null;
+                                                const daysLeft = diff ? Math.ceil(diff / (1000 * 3600 * 24)) : null;
+                                                return (
+                                                    <div key={i} className="flex justify-between items-center text-xs bg-white/50 border border-blue-100 rounded-md p-1.5">
+                                                        <span className="truncate font-medium text-blue-900 pr-2">{g.title}</span>
+                                                        {daysLeft !== null && (
+                                                            <Badge variant="outline" className={`shrink-0 text-[9px] px-1.5 py-0 border-none ${daysLeft < 0 ? "bg-red-50 text-red-600" : "bg-blue-100 text-blue-700"}`}>
+                                                                {Math.abs(daysLeft)} ngày {daysLeft < 0 ? "trễ" : "tới"}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                            {stat.goals.length > 2 && (
+                                                <p className="text-[10px] text-blue-500 font-bold ml-1">+ {stat.goals.length - 2} mục tiêu khác</p>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <div className="text-xs text-blue-500/60 italic">Chưa có mục tiêu...</div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Rendering Todolist tasks for Habits card */}
+                            {stat.habits !== undefined && (
+                                <div className="mt-4 pt-4 border-t border-indigo-500/10 flex flex-col gap-2 relative z-10">
+                                    {stat.habits.length > 0 ? (
+                                        <>
+                                            {stat.habits.slice(0, 2).map((h: any, i: number) => (
+                                                <div key={i} className="flex items-start gap-2 text-xs">
+                                                    <div className={`mt-0.5 w-3.5 h-3.5 rounded-[4px] border shrink-0 flex items-center justify-center ${h.completedToday ? "bg-indigo-500 border-indigo-500" : "bg-white border-indigo-300"}`}>
+                                                        {h.completedToday && <Check className="w-2.5 h-2.5 text-white" strokeWidth={4} />}
+                                                    </div>
+                                                    <span className={`truncate leading-snug font-medium ${h.completedToday ? "text-indigo-600/50 line-through" : "text-indigo-900"}`}>{h.title}</span>
+                                                </div>
+                                            ))}
+                                            {stat.habits.length > 2 && (
+                                                <p className="text-[10px] text-indigo-500 font-bold ml-5">+ {stat.habits.length - 2} nhiệm vụ</p>
+                                            )}
+                                        </>
+                                    ) : (
+                                        <div className="text-xs text-indigo-500/60 italic">Chưa có nhiệm vụ...</div>
+                                    )}
+                                </div>
+                            )}
+                        </Link>
                     );
                 })}
             </div>
@@ -143,18 +210,18 @@ export default async function StudentDashboardPage() {
                                 Đề xuất cho bạn
                             </h3>
                         </div>
-                        
+
                         {suggestions && suggestions.length > 0 ? (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                 {suggestions.slice(0, 4).map((s: any, idx: number) => {
                                     const isHomework = s.type === "homework";
                                     const isExam = s.type === "exam";
                                     const accentColor = isHomework ? "rose" : isExam ? "purple" : "blue";
-                                    
+
                                     return (
-                                        <Link 
-                                            href={isHomework ? `/student/classes/${s.classId}/homework/${s.nextItem.id}` : isExam ? `/student/classes/${s.classId}/exams/${s.nextItem.id}` : `/student/classes/${s.classId}/learn/${s.nextItem.id}`} 
-                                            key={idx} 
+                                        <Link
+                                            href={isHomework ? `/student/classes/${s.classId}/homework/${s.nextItem.id}` : isExam ? `/student/classes/${s.classId}/exams/${s.nextItem.id}` : `/student/classes/${s.classId}/learn/${s.nextItem.id}`}
+                                            key={idx}
                                             className="block group"
                                         >
                                             <div className="h-full bg-white rounded-3xl border-2 border-slate-100 p-6 hover:border-blue-500 hover:shadow-2xl hover:shadow-blue-500/10 transition-all duration-300 flex flex-col justify-between">
@@ -254,7 +321,7 @@ export default async function StudentDashboardPage() {
                                     icon={<Bell className="w-5 h-5 text-amber-600" />}
                                     title={ann.title}
                                     content={ann.content}
-                                    detailUrl={`/student/announcements/${ann.id}`}
+                                    detailUrl="/student/notifications"
                                     timestamp={new Date(ann.created_at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })}
                                 />
                             ))}

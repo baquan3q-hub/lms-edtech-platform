@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import {
     Users, Trophy, Download, Search, Eye, Star,
     BarChart3, Target, Award, BookOpen, ClipboardList, AlertTriangle, Sparkles, Loader2,
@@ -14,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import TeacherPointsTab from "./TeacherPointsTab";
-import { generateClassAIReport, generateImprovementTasks } from "@/lib/actions/class-students";
+import { generateClassAIReport, generateImprovementTasks, sendReminderAction } from "@/lib/actions/class-students";
 
 interface StudentData {
     id: string;
@@ -53,15 +54,40 @@ export default function TeacherClassStudentsClient({ classId, className, student
     const [loadingAI, setLoadingAI] = useState(false);
     const [improvementResult, setImprovementResult] = useState<{ [key: string]: string }>({});
     const [loadingImprovement, setLoadingImprovement] = useState<string | null>(null);
+    const [sendingReminder, setSendingReminder] = useState<string | null>(null);
+    const searchParams = useSearchParams();
 
     const report = reportData;
     const reportStudents: any[] = report?.students || [];
     const summary = report?.summary || {};
 
+    useEffect(() => {
+        const studentId = searchParams?.get("studentId");
+        if (studentId && reportStudents.length > 0) {
+            const student = reportStudents.find(s => s.id === studentId);
+            if (student) {
+                setSelectedStudent(student);
+            }
+        }
+    }, [searchParams, reportStudents]);
+
     const filteredReport = reportStudents.filter((s: any) =>
         s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.email.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    const handleSendReminder = async (studentId: string, itemName: string, itemType: "homework" | "exam") => {
+        const key = `${studentId}-${itemName}`;
+        setSendingReminder(key);
+        try {
+            await sendReminderAction(studentId, classId, className, itemName, itemType);
+            // Optionally show a toast here
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setSendingReminder(null);
+        }
+    };
 
     const getScore10Color = (score: number) => {
         if (score >= 8) return "text-emerald-600";
@@ -572,48 +598,114 @@ export default function TeacherClassStudentsClient({ classId, className, student
                                 </div>
                             </div>
 
-                            {/* Exam scores */}
-                            <div>
-                                <h4 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-1.5"><ClipboardList className="w-4 h-4 text-indigo-500" /> Bài kiểm tra ({selectedStudent.exams.completed}/{selectedStudent.exams.total})</h4>
-                                {selectedStudent.exams.scores.length > 0 ? (
-                                    <div className="space-y-1.5">
-                                        {selectedStudent.exams.scores.map((e: any) => (
-                                            <div key={e.examId} className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg">
-                                                <div className="flex-1">
-                                                    <span className="text-xs font-medium text-slate-700">{e.title}</span>
-                                                    {e.date && <span className="text-[10px] text-slate-400 ml-2">{new Date(e.date).toLocaleDateString("vi-VN")}</span>}
+                            {/* Exam scores & Missed Exams */}
+                            {(() => {
+                                const examList = reportData?.examList || [];
+                                const missedExams = examList.filter((e: any) => !selectedStudent.exams.scores.find((s: any) => s.examId === e.id));
+                                return (
+                                    <div className="space-y-3">
+                                        <div>
+                                            <h4 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-1.5"><ClipboardList className="w-4 h-4 text-indigo-500" /> Bài kiểm tra đã nộp ({selectedStudent.exams.completed}/{selectedStudent.exams.total})</h4>
+                                            {selectedStudent.exams.scores.length > 0 ? (
+                                                <div className="space-y-1.5">
+                                                    {selectedStudent.exams.scores.map((e: any) => (
+                                                        <div key={e.examId} className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg">
+                                                            <div className="flex-1">
+                                                                <span className="text-xs font-medium text-slate-700">{e.title}</span>
+                                                                {e.date && <span className="text-[10px] text-slate-400 ml-2">{new Date(e.date).toLocaleDateString("vi-VN")}</span>}
+                                                            </div>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xs text-slate-500">{e.score}/{e.total}</span>
+                                                                <Badge className={`text-[10px] ${e.score10 >= 5 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`} variant="outline">
+                                                                    {e.score10}/10
+                                                                </Badge>
+                                                            </div>
+                                                        </div>
+                                                    ))}
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs text-slate-500">{e.score}/{e.total}</span>
-                                                    <Badge className={`text-[10px] ${e.score10 >= 5 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`} variant="outline">
-                                                        {e.score10}/10
-                                                    </Badge>
+                                            ) : <p className="text-xs text-slate-400 italic">Chưa nộp bài kiểm tra nào</p>}
+                                        </div>
+                                        {missedExams.length > 0 && (
+                                            <div>
+                                                <h4 className="text-sm font-bold text-red-600 mb-2 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> Bài kiểm tra chưa nộp</h4>
+                                                <div className="space-y-1.5">
+                                                    {missedExams.map((e: any) => {
+                                                        const isSending = sendingReminder === `${selectedStudent.id}-${e.title}`;
+                                                        return (
+                                                            <div key={e.id} className="flex items-center justify-between px-3 py-2 bg-red-50/50 rounded-lg border border-red-100">
+                                                                <span className="text-xs font-medium text-red-700">{e.title}</span>
+                                                                <Button 
+                                                                    size="sm" 
+                                                                    variant="outline" 
+                                                                    className="h-6 text-[10px] bg-white border-red-200 text-red-600 hover:bg-red-50"
+                                                                    disabled={isSending}
+                                                                    onClick={() => handleSendReminder(selectedStudent.id, e.title, 'exam')}
+                                                                >
+                                                                    {isSending ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : null}
+                                                                    Nhắc nhở
+                                                                </Button>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
-                                        ))}
+                                        )}
                                     </div>
-                                ) : <p className="text-xs text-slate-400 italic">Chưa nộp bài kiểm tra nào</p>}
-                            </div>
+                                );
+                            })()}
 
-                            {/* Homework scores */}
-                            <div>
-                                <h4 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-1.5"><BookOpen className="w-4 h-4 text-emerald-500" /> Bài tập ({selectedStudent.homework.completed}/{selectedStudent.homework.total})</h4>
-                                {selectedStudent.homework.scores.length > 0 ? (
-                                    <div className="space-y-1.5">
-                                        {selectedStudent.homework.scores.map((h: any) => (
-                                            <div key={h.hwId} className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg">
-                                                <span className="text-xs font-medium text-slate-700 truncate flex-1">{h.title}</span>
-                                                <div className="flex items-center gap-2">
-                                                    <span className="text-xs text-slate-500">{h.score}/{h.total}</span>
-                                                    <Badge className={`text-[10px] ${h.score10 >= 5 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`} variant="outline">
-                                                        {h.score10}/10
-                                                    </Badge>
+                            {/* Homework scores & Missed Homework */}
+                            {(() => {
+                                const homeworkList = reportData?.homeworkList || [];
+                                const missedHomework = homeworkList.filter((h: any) => !selectedStudent.homework.scores.find((s: any) => s.hwId === h.id));
+                                return (
+                                    <div className="space-y-3">
+                                        <div>
+                                            <h4 className="text-sm font-bold text-slate-700 mb-2 flex items-center gap-1.5"><BookOpen className="w-4 h-4 text-emerald-500" /> Bài tập đã nộp ({selectedStudent.homework.completed}/{selectedStudent.homework.total})</h4>
+                                            {selectedStudent.homework.scores.length > 0 ? (
+                                                <div className="space-y-1.5">
+                                                    {selectedStudent.homework.scores.map((h: any) => (
+                                                        <div key={h.hwId} className="flex items-center justify-between px-3 py-2 bg-slate-50 rounded-lg">
+                                                            <span className="text-xs font-medium text-slate-700 truncate flex-1">{h.title}</span>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-xs text-slate-500">{h.score}/{h.total}</span>
+                                                                <Badge className={`text-[10px] ${h.score10 >= 5 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-red-50 text-red-700 border-red-200'}`} variant="outline">
+                                                                    {h.score10}/10
+                                                                </Badge>
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : <p className="text-xs text-slate-400 italic">Chưa có bài tập được chấm</p>}
+                                        </div>
+                                        {missedHomework.length > 0 && (
+                                            <div>
+                                                <h4 className="text-sm font-bold text-red-600 mb-2 flex items-center gap-1.5"><AlertTriangle className="w-4 h-4" /> Bài tập chưa nộp</h4>
+                                                <div className="space-y-1.5">
+                                                    {missedHomework.map((h: any) => {
+                                                        const isSending = sendingReminder === `${selectedStudent.id}-${h.title}`;
+                                                        return (
+                                                            <div key={h.id} className="flex items-center justify-between px-3 py-2 bg-red-50/50 rounded-lg border border-red-100">
+                                                                <span className="text-xs font-medium text-red-700 truncate flex-1 pr-2">{h.title}</span>
+                                                                <Button 
+                                                                    size="sm" 
+                                                                    variant="outline" 
+                                                                    className="h-6 text-[10px] bg-white border-red-200 text-red-600 hover:bg-red-50 shrink-0"
+                                                                    disabled={isSending}
+                                                                    onClick={() => handleSendReminder(selectedStudent.id, h.title, 'homework')}
+                                                                >
+                                                                    {isSending ? <Loader2 className="w-3 h-3 animate-spin mr-1"/> : null}
+                                                                    Nhắc nhở
+                                                                </Button>
+                                                            </div>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
-                                        ))}
+                                        )}
                                     </div>
-                                ) : <p className="text-xs text-slate-400 italic">Chưa có bài tập được chấm</p>}
-                            </div>
+                                );
+                            })()}
 
                             {/* Quiz History */}
                             <div>

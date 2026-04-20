@@ -109,9 +109,9 @@ async function sendAdminNotifications(adminSupabase: any, data: any, announcemen
             notifications.push({
                 user_id: u.id,
                 title: `📢 ${data.title}`,
-                message: data.content?.substring(0, 150) || "Có thông báo mới từ Ban quản lý",
+                message: data.content || "Có thông báo mới từ Ban quản lý",
                 type: "announcement",
-                link: `/${rolePath}/announcements/${announcementId}`,
+                link: `/${rolePath}/notifications`,
                 metadata: { announcementId, scope: "system" },
                 is_read: false,
             });
@@ -167,9 +167,9 @@ async function buildClassNotifications(
             notifications.push({
                 user_id: s.student_id,
                 title: `📢 ${data.title}`,
-                message: data.content?.substring(0, 150) || "Có thông báo mới",
+                message: data.content || "Có thông báo mới",
                 type: "announcement",
-                link: `/student/announcements/${announcementId}`,
+                link: `/student/notifications`,
                 metadata: { announcementId, scope: data.scope },
                 is_read: false,
             });
@@ -195,9 +195,9 @@ async function buildClassNotifications(
                 notifications.push({
                     user_id: parentId,
                     title: `📢 ${data.title}`,
-                    message: data.content?.substring(0, 150) || "Có thông báo mới từ nhà trường",
+                    message: data.content || "Có thông báo mới từ nhà trường",
                     type: "announcement",
-                    link: `/parent/announcements/${announcementId}`,
+                    link: `/parent/notifications`,
                     metadata: { announcementId, scope: data.scope },
                     is_read: false,
                 });
@@ -216,9 +216,9 @@ async function buildClassNotifications(
             notifications.push({
                 user_id: cls.teacher_id,
                 title: `📢 ${data.title}`,
-                message: data.content?.substring(0, 150) || "Có thông báo mới",
+                message: data.content || "Có thông báo mới",
                 type: "announcement",
-                link: `/teacher/announcements/${announcementId}`,
+                link: `/teacher/notifications`,
                 metadata: { announcementId, scope: data.scope },
                 is_read: false,
             });

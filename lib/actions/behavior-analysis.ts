@@ -865,3 +865,254 @@ export async function notifyParentAboutBehavior(studentId: string, customMessage
         return { error: error.message };
     }
 }
+
+// ============================================================
+// Admin Dashboard — Behavior Analytics toàn diện
+// ============================================================
+
+export async function fetchAdminBehaviorDashboard(filters?: {
+    courseId?: string;
+    classId?: string;
+}) {
+    try {
+        const supabase = createAdminClient();
+
+        // 1. Lấy classes + courses + teachers
+        const { data: allClasses } = await supabase
+            .from("classes")
+            .select("id, name, course_id, teacher_id, course:courses(id, name), teacher:users!teacher_id(id, full_name)")
+            .order("name");
+
+        const { data: allCourses } = await supabase
+            .from("courses")
+            .select("id, name")
+            .order("name");
+
+        // Áp dụng filter
+        let targetClassIds: string[] = [];
+        if (filters?.classId && filters.classId !== "all") {
+            targetClassIds = [filters.classId];
+        } else if (filters?.courseId && filters.courseId !== "all") {
+            targetClassIds = (allClasses || [])
+                .filter((c: any) => c.course_id === filters!.courseId)
+                .map((c: any) => c.id);
+        } else {
+            targetClassIds = (allClasses || []).map((c: any) => c.id);
+        }
+
+        // 2. Lấy behavior scores cho targeted classes
+        let scoresQuery = supabase
+            .from("student_behavior_scores")
+            .select("*")
+            .order("gaming_score", { ascending: false });
+
+        if (targetClassIds.length > 0 && targetClassIds.length < (allClasses || []).length) {
+            scoresQuery = scoresQuery.in("class_id", targetClassIds);
+        }
+
+        const { data: allScores } = await scoresQuery;
+        const scores = allScores || [];
+
+        // Deduplicate: mỗi student_id + class_id chỉ lấy record mới nhất
+        const uniqueScoreMap = new Map<string, any>();
+        scores.forEach((s: any) => {
+            const key = `${s.student_id}_${s.class_id}`;
+            if (!uniqueScoreMap.has(key)) {
+                uniqueScoreMap.set(key, s);
+            }
+        });
+        const uniqueScores = Array.from(uniqueScoreMap.values());
+
+        // 3. Lấy alerts
+        let alertsQuery = supabase
+            .from("behavior_alerts")
+            .select("*", { count: "exact" })
+            .order("created_at", { ascending: false })
+            .limit(200);
+
+        if (targetClassIds.length > 0 && targetClassIds.length < (allClasses || []).length) {
+            alertsQuery = alertsQuery.in("class_id", targetClassIds);
+        }
+
+        const { data: allAlerts, count: totalAlertCount } = await alertsQuery;
+        const alerts = allAlerts || [];
+
+        // 4. Lấy thông tin students
+        const studentIds = [...new Set(uniqueScores.map((s: any) => s.student_id))];
+        let studentsMap: Record<string, any> = {};
+        if (studentIds.length > 0) {
+            const { data: students } = await supabase
+                .from("users")
+                .select("id, full_name, email, avatar_url")
+                .in("id", studentIds);
+            (students || []).forEach((s: any) => { studentsMap[s.id] = s; });
+        }
+
+        // === OVERVIEW CARDS ===
+        const highRiskCount = uniqueScores.filter((s: any) => s.risk_level === "high_risk").length;
+        const warningCount = uniqueScores.filter((s: any) => s.risk_level === "warning").length;
+        const normalCount = uniqueScores.filter((s: any) => s.risk_level === "normal").length;
+
+        const gamingScores = uniqueScores.map((s: any) => s.gaming_score || 0);
+        const avgGamingScore = gamingScores.length > 0
+            ? Number((gamingScores.reduce((a: number, b: number) => a + b, 0) / gamingScores.length).toFixed(2))
+            : 0;
+
+        const unresolvedAlerts = alerts.filter((a: any) => !a.is_resolved).length;
+
+        const overviewCards = {
+            totalStudentsTracked: uniqueScores.length,
+            highRiskCount,
+            warningCount,
+            normalCount,
+            avgGamingScore,
+            totalAlerts: totalAlertCount || alerts.length,
+            unresolvedAlerts,
+        };
+
+        // === PIE CHART: Risk Distribution ===
+        const riskDistribution = [
+            { name: "Bình thường", value: normalCount, fill: "#10b981" },
+            { name: "Cần theo dõi", value: warningCount, fill: "#f59e0b" },
+            { name: "Nguy cơ cao", value: highRiskCount, fill: "#ef4444" },
+        ].filter(d => d.value > 0);
+
+        // === LINE CHART: Alert trend 14 ngày ===
+        const alertsByDay = new Map<string, number>();
+        for (let i = 13; i >= 0; i--) {
+            const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+            alertsByDay.set(d.toISOString().split("T")[0], 0);
+        }
+        alerts.forEach((a: any) => {
+            const day = a.created_at?.split("T")[0];
+            if (day && alertsByDay.has(day)) {
+                alertsByDay.set(day, (alertsByDay.get(day) || 0) + 1);
+            }
+        });
+        const alertTrend = Array.from(alertsByDay.entries()).map(([date, count]) => ({
+            date: date.slice(5), // mm-dd
+            alerts: count,
+        }));
+
+        // === BAR CHART: So sánh lớp ===
+        const classMap = new Map<string, any>();
+        (allClasses || []).forEach((c: any) => {
+            if (targetClassIds.includes(c.id)) {
+                const courseData = Array.isArray(c.course) ? c.course[0] : c.course;
+                const teacherData = Array.isArray(c.teacher) ? c.teacher[0] : c.teacher;
+                classMap.set(c.id, {
+                    classId: c.id,
+                    className: c.name,
+                    courseName: courseData?.name || "",
+                    teacherName: teacherData?.full_name || "N/A",
+                });
+            }
+        });
+
+        const classStatsMap: Record<string, {
+            gamingScores: number[]; activeTimes: number[]; idleTimes: number[];
+            highRisk: number; warning: number; total: number;
+        }> = {};
+
+        uniqueScores.forEach((s: any) => {
+            if (!classStatsMap[s.class_id]) {
+                classStatsMap[s.class_id] = {
+                    gamingScores: [], activeTimes: [], idleTimes: [],
+                    highRisk: 0, warning: 0, total: 0,
+                };
+            }
+            const stats = classStatsMap[s.class_id];
+            stats.gamingScores.push(s.gaming_score || 0);
+            stats.activeTimes.push(s.total_active_time_s || 0);
+            stats.idleTimes.push(s.total_idle_time_s || 0);
+            stats.total++;
+            if (s.risk_level === "high_risk") stats.highRisk++;
+            if (s.risk_level === "warning") stats.warning++;
+        });
+
+        const classComparison = Object.entries(classStatsMap)
+            .map(([classId, stats]) => {
+                const info = classMap.get(classId);
+                if (!info) return null;
+                const avg = (arr: number[]) =>
+                    arr.length > 0 ? Number((arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(1)) : 0;
+                return {
+                    ...info,
+                    avgGamingScore: avg(stats.gamingScores),
+                    avgActiveTimeMin: Number((avg(stats.activeTimes) / 60).toFixed(1)),
+                    avgIdleTimeMin: Number((avg(stats.idleTimes) / 60).toFixed(1)),
+                    studentCount: stats.total,
+                    highRiskCount: stats.highRisk,
+                    warningCount: stats.warning,
+                };
+            })
+            .filter(Boolean)
+            .sort((a: any, b: any) => b.avgGamingScore - a.avgGamingScore);
+
+        // === BẢNG CHI TIẾT HS ===
+        const studentDetails = uniqueScores.map((s: any) => {
+            const student = studentsMap[s.student_id];
+            const classInfo = classMap.get(s.class_id);
+            const studentAlertCount = alerts.filter(
+                (a: any) => a.student_id === s.student_id && a.class_id === s.class_id
+            ).length;
+
+            return {
+                studentId: s.student_id,
+                studentName: student?.full_name || "N/A",
+                email: student?.email || "",
+                avatarUrl: student?.avatar_url || null,
+                classId: s.class_id,
+                className: classInfo?.className || "N/A",
+                courseName: classInfo?.courseName || "",
+                teacherName: classInfo?.teacherName || "",
+                gamingScore: s.gaming_score || 0,
+                riskLevel: s.risk_level || "normal",
+                tabSwitchCount: s.tab_switch_count || 0,
+                rapidGuessCount: s.rapid_guess_count || 0,
+                avgAnswerSpeedMs: s.avg_answer_speed_ms || 0,
+                activeTimeS: s.total_active_time_s || 0,
+                idleTimeS: s.total_idle_time_s || 0,
+                scoreTrend: s.score_trend || "stable",
+                avgScoreRecent: s.avg_score_recent || 0,
+                anomalyDetected: s.anomaly_detected || false,
+                alertCount: studentAlertCount,
+                aiAnalysis: s.ai_analysis_json || null,
+                updatedAt: s.updated_at,
+            };
+        });
+
+        // Sort: high_risk → warning → normal
+        studentDetails.sort((a: any, b: any) => {
+            const riskOrder: Record<string, number> = { high_risk: 0, warning: 1, normal: 2 };
+            const diff = (riskOrder[a.riskLevel] ?? 3) - (riskOrder[b.riskLevel] ?? 3);
+            if (diff !== 0) return diff;
+            return b.gamingScore - a.gamingScore;
+        });
+
+        return {
+            data: {
+                overviewCards,
+                riskDistribution,
+                alertTrend,
+                classComparison,
+                studentDetails,
+                // Dropdown filters
+                courses: allCourses || [],
+                classes: (allClasses || []).map((c: any) => {
+                    const courseData = Array.isArray(c.course) ? c.course[0] : c.course;
+                    return {
+                        id: c.id,
+                        name: c.name,
+                        courseId: c.course_id,
+                        courseName: courseData?.name || "",
+                    };
+                }),
+            },
+            error: null,
+        };
+    } catch (error: any) {
+        console.error("Error fetchAdminBehaviorDashboard:", error);
+        return { data: null, error: error.message };
+    }
+}

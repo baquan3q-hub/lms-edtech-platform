@@ -107,6 +107,46 @@ export async function fetchClassHomework(classId: string) {
     }
 }
 
+/**
+ * Đếm số bài nộp đang chờ chấm (status = 'submitted') cho từng homework trong lớp.
+ * Trả về Map<homework_id, pending_count>
+ */
+export async function fetchPendingHomeworkGradingStats(classId: string) {
+    try {
+        const adminSupabase = createAdminClient();
+
+        // Lấy danh sách homework_id của lớp
+        const { data: hwList } = await adminSupabase
+            .from("homework")
+            .select("id")
+            .eq("class_id", classId);
+
+        if (!hwList || hwList.length === 0) return { data: {}, error: null };
+
+        const hwIds = hwList.map(h => h.id);
+
+        // Lấy submissions status = 'submitted' (chờ chấm thủ công)
+        const { data: pendingSubs, error } = await adminSupabase
+            .from("homework_submissions")
+            .select("homework_id")
+            .in("homework_id", hwIds)
+            .eq("status", "submitted");
+
+        if (error) throw error;
+
+        // Đếm theo homework_id
+        const countMap: Record<string, number> = {};
+        (pendingSubs || []).forEach(s => {
+            countMap[s.homework_id] = (countMap[s.homework_id] || 0) + 1;
+        });
+
+        return { data: countMap, error: null };
+    } catch (error: any) {
+        console.error("fetchPendingHomeworkGradingStats error:", error);
+        return { data: {}, error: error.message };
+    }
+}
+
 export async function fetchHomeworkDetail(homeworkId: string) {
     try {
         const adminSupabase = createAdminClient();
@@ -241,7 +281,7 @@ export async function submitHomework(homeworkId: string, answers: any[]) {
         // 1. Fetch homework details for auto-grading
         const { data: homework, error: hwError } = await adminSupabase
             .from("homework")
-            .select("questions")
+            .select("questions, class_id, title")
             .eq("id", homeworkId)
             .single();
 
@@ -346,6 +386,37 @@ export async function submitHomework(homeworkId: string, answers: any[]) {
 
             if (error) throw error;
             return { data, error: null };
+        }
+
+        // 5. Notify teacher if manual grading is needed
+        if (requiresManualGrading && homework?.class_id) {
+            try {
+                // Lấy teacher_id từ class
+                const { data: classData } = await adminSupabase
+                    .from("classes")
+                    .select("teacher_id")
+                    .eq("id", homework!.class_id)
+                    .single();
+
+                // Lấy tên học sinh
+                const { data: studentData } = await adminSupabase
+                    .from("users")
+                    .select("full_name")
+                    .eq("id", user!.id)
+                    .single();
+
+                if (classData?.teacher_id) {
+                    await adminSupabase.from("notifications").insert({
+                        user_id: classData!.teacher_id,
+                        title: `📝 Bài nộp cần chấm: ${homework?.title || 'Bài tập'}`,
+                        message: `Học sinh ${studentData?.full_name || 'N/A'} đã nộp bài tập "${homework?.title || ''}" có câu tự luận/video cần giáo viên chấm điểm thủ công.`,
+                        type: "warning",
+                        read: false,
+                    });
+                }
+            } catch (notifErr) {
+                console.error("Lỗi gửi notification cho GV:", notifErr);
+            }
         }
 
     } catch (error: any) {

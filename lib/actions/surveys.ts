@@ -414,6 +414,37 @@ export async function fetchSurveyAnalytics(surveyId: string) {
         // Đếm unique respondents
         const uniqueRespondents = new Set(responses?.map((r) => r.user_id) || []);
 
+        // Lấy thông tin user cho từng respondent
+        const respondentIds = Array.from(uniqueRespondents);
+        let respondentsList: { id: string; full_name: string; email: string; role: string; submitted_at: string }[] = [];
+
+        if (respondentIds.length > 0) {
+            const { data: users } = await adminSupabase
+                .from("users")
+                .select("id, full_name, email, role")
+                .in("id", respondentIds);
+
+            if (users) {
+                // Tìm submitted_at sớm nhất của mỗi user
+                const userSubmitTime: Record<string, string> = {};
+                for (const r of (responses || [])) {
+                    if (!userSubmitTime[r.user_id] || r.submitted_at < userSubmitTime[r.user_id]) {
+                        userSubmitTime[r.user_id] = r.submitted_at;
+                    }
+                }
+
+                respondentsList = users.map((u) => ({
+                    id: u.id,
+                    full_name: u.full_name || "Không rõ",
+                    email: u.email || "",
+                    role: u.role || "",
+                    submitted_at: userSubmitTime[u.id] || "",
+                })).sort((a, b) =>
+                    new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime()
+                );
+            }
+        }
+
         // Tổng hợp per question
         const analytics = (questions || []).map((q: any) => {
             const qResponses = (responses || []).filter((r) => r.question_id === q.id);
@@ -461,6 +492,7 @@ export async function fetchSurveyAnalytics(surveyId: string) {
         return {
             data: {
                 total_respondents: uniqueRespondents.size,
+                respondents: respondentsList,
                 questions: analytics,
             },
         };
