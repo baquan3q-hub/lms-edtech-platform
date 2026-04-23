@@ -408,7 +408,7 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                                         const examObj = Array.isArray(analysis.exam) ? analysis.exam[0] : analysis.exam;
                                         const progress = analysis.improvement_progress || [];
                                         const totalTasks = progress.length;
-                                        const completedTasks = progress.filter((p) => p.status === 'completed').length;
+                                        const completedTasks = progress.filter((p: any) => p.status === 'completed').length;
                                         const progressPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
                                         const feedbackText = analysis.teacher_edited_feedback || analysis.ai_feedback || "";
 
@@ -422,7 +422,7 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                                                             <span className="text-[10px] font-semibold text-slate-500">Khắc phục lỗ hổng: {completedTasks}/{totalTasks} nhiệm vụ</span>
                                                             <span className="text-[10px] font-bold text-purple-600">{progressPercent}%</span>
                                                         </div>
-                                                        <Progress value={progressPercent} className="h-1.5 bg-slate-200" indicatorClassName="bg-purple-500" />
+                                                        <Progress value={progressPercent} className="h-1.5 bg-slate-200" indicatorColor="bg-purple-500" />
                                                     </div>
                                                 </div>
                                             </div>
