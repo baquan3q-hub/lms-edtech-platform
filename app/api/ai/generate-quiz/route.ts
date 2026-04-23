@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getGeminiModel } from "@/lib/gemini";
+import { getRotatingGeminiModel } from "@/lib/gemini";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(req: Request) {
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
         }
 
         // 3. Khởi tạo Gemini Model
-        const model = getGeminiModel("gemini-2.5-flash");
+        const model = getRotatingGeminiModel("gemini-2.5-flash");
 
         // 4. Định nghĩa System Prompt ép kiểu Output JSON
         const systemPrompt = `

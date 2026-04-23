@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getGeminiModel } from "@/lib/gemini";
+import { getRotatingGeminiModel } from "@/lib/gemini";
 
 export async function POST(req: NextRequest) {
     try {
@@ -153,7 +153,7 @@ Trả về JSON thuần túy với cấu trúc:
 }
 `;
 
-        const model = getGeminiModel("gemini-2.5-flash");
+        const model = getRotatingGeminiModel("gemini-2.5-flash");
         let aiResult: any = null;
 
         // Xử lý Gọi AI có Retry khi Quá tải 429 / 503

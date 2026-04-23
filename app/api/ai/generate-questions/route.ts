@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getGeminiModel, callGeminiWithRetry } from "@/lib/gemini";
+import { callGeminiWithRetry } from "@/lib/gemini";
 
 export const maxDuration = 60; // Allow more time for AI processing
 
@@ -14,8 +14,6 @@ export async function POST(req: NextRequest) {
                 { status: 400 }
             );
         }
-
-        const model = getGeminiModel("gemini-2.5-flash"); // Flash is fast and supports doc parsing
 
         const systemPrompt = `
 You are an expert educational assistant specializing in creating multiple-choice questions.

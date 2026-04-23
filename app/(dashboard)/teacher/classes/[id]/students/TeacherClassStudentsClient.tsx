@@ -15,7 +15,9 @@ import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import TeacherPointsTab from "./TeacherPointsTab";
-import { generateClassAIReport, generateImprovementTasks, sendReminderAction } from "@/lib/actions/class-students";
+import { generateClassAIReport, generateImprovementTasks, sendReminderAction, loadSavedAIReport } from "@/lib/actions/class-students";
+import { toast } from "sonner";
+import * as XLSX from "xlsx";
 
 interface StudentData {
     id: string;
@@ -71,6 +73,18 @@ export default function TeacherClassStudentsClient({ classId, className, student
         }
     }, [searchParams, reportStudents]);
 
+    // Auto-load saved AI report from DB on mount
+    useEffect(() => {
+        if (!classId) return;
+        const loadReport = async () => {
+            const res = await loadSavedAIReport(classId);
+            if (res.data?.report_text) {
+                setAiReport(res.data.report_text);
+            }
+        };
+        loadReport();
+    }, [classId]);
+
     const filteredReport = reportStudents.filter((s: any) =>
         s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         s.email.toLowerCase().includes(searchQuery.toLowerCase())
@@ -102,44 +116,43 @@ export default function TeacherClassStudentsClient({ classId, className, student
         return "bg-red-50 border-red-200";
     };
 
-    const exportCSV = (filter: string) => {
+    const exportExcel = (filter: string) => {
         let headers = ["STT", "Họ tên", "Email"];
-        let rows: string[][] = [];
+        let rows: any[][] = [];
 
         if (filter === "ranking") {
             headers.push("ĐTB (thang 10)", "KT (thang 10)", "BT (thang 10)", "CC%", "Tiến trình%", "Điểm TL");
             rows = filteredReport.map((s: any, i: number) => [
-                String(i + 1), s.name, s.email,
-                String(s.avgScore10), String(s.exams.avg10), String(s.homework.avg10),
-                String(s.attendance.rate), String(s.progress.percent), String(s.points.total),
+                i + 1, s.name, s.email,
+                s.avgScore10, s.exams.avg10, s.homework.avg10,
+                s.attendance.rate, s.progress.percent, s.points.total,
             ]);
         } else if (filter === "attendance") {
             headers.push("CC%", "Có mặt", "Đi muộn", "Có phép", "Vắng", "Tổng buổi");
             rows = filteredReport.map((s: any, i: number) => [
-                String(i + 1), s.name, s.email,
-                String(s.attendance.rate), String(s.attendance.present), String(s.attendance.late),
-                String(s.attendance.excused), String(s.attendance.absent), String(s.attendance.total),
+                i + 1, s.name, s.email,
+                s.attendance.rate, s.attendance.present, s.attendance.late,
+                s.attendance.excused, s.attendance.absent, s.attendance.total,
             ]);
         } else if (filter === "exams") {
             headers.push("ĐTB KT (thang 10)", "Số bài nộp", "Tổng bài");
             rows = filteredReport.map((s: any, i: number) => [
-                String(i + 1), s.name, s.email,
-                String(s.exams.avg10), String(s.exams.completed), String(s.exams.total),
+                i + 1, s.name, s.email,
+                s.exams.avg10, s.exams.completed, s.exams.total,
             ]);
         } else if (filter === "homework") {
             headers.push("ĐTB BT (thang 10)", "Số bài nộp", "Tổng bài");
             rows = filteredReport.map((s: any, i: number) => [
-                String(i + 1), s.name, s.email,
-                String(s.homework.avg10), String(s.homework.completed), String(s.homework.total),
+                i + 1, s.name, s.email,
+                s.homework.avg10, s.homework.completed, s.homework.total,
             ]);
         }
 
-        const csv = [headers.join(","), ...rows.map(r => r.join(","))].join("\n");
-        const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(blob);
-        link.download = `bao_cao_${filter}_${className}.csv`;
-        link.click();
+        const worksheetData = [headers, ...rows];
+        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Report");
+        XLSX.writeFile(workbook, `bao_cao_${filter}_${className}.xlsx`);
     };
 
     const exportAIReport = () => {
@@ -417,9 +430,15 @@ export default function TeacherClassStudentsClient({ classId, className, student
                                         onClick={async () => {
                                             setLoadingAI(true);
                                             try {
-                                                const result = await generateClassAIReport(className, report);
-                                                setAiReport(result.data || "Không thể tạo phân tích.");
-                                            } catch { setAiReport("Đã xảy ra lỗi."); } finally { setLoadingAI(false); }
+                                                const result = await generateClassAIReport(className, report, classId);
+                                                if (result.error) {
+                                                    toast.error(result.error);
+                                                    setAiReport(null);
+                                                } else {
+                                                    setAiReport(result.data || "Không thể tạo phân tích.");
+                                                    toast.success("Đã phân tích và lưu báo cáo!");
+                                                }
+                                            } catch { toast.error("Đã xảy ra lỗi khi gọi AI."); setAiReport(null); } finally { setLoadingAI(false); }
                                         }}
                                     >
                                         {loadingAI ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Đang phân tích...</> : <><Sparkles className="w-4 h-4 mr-2" /> {aiReport ? 'Phân tích lại' : 'Tạo báo cáo AI'}</>}
@@ -525,37 +544,37 @@ export default function TeacherClassStudentsClient({ classId, className, student
                     <Card className="shadow-sm">
                         <CardHeader className="border-b">
                             <CardTitle className="flex items-center gap-2"><Download className="w-5 h-5 text-indigo-500" /> Xuất báo cáo dữ liệu</CardTitle>
-                            <CardDescription>Chọn loại báo cáo để xuất file CSV (mở được bằng Excel)</CardDescription>
+                            <CardDescription>Chọn loại báo cáo để xuất file Excel (.xlsx)</CardDescription>
                         </CardHeader>
                         <CardContent className="p-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="border rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors cursor-pointer" onClick={() => exportCSV("ranking")}>
+                                <div className="border rounded-xl p-5 hover:border-indigo-300 hover:bg-indigo-50/30 transition-colors cursor-pointer" onClick={() => exportExcel("ranking")}>
                                     <div className="flex items-center gap-3 mb-2">
                                         <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center"><Trophy className="w-5 h-5" /></div>
                                         <div><p className="font-bold text-sm">Xếp hạng tổng hợp</p><p className="text-[11px] text-slate-500">ĐTB/10, KT/10, BT/10, CC%, TĐ%, ĐTL</p></div>
                                     </div>
-                                    <Button variant="outline" size="sm" className="w-full mt-2"><Download className="w-3 h-3 mr-2" /> Tải CSV</Button>
+                                    <Button variant="outline" size="sm" className="w-full mt-2"><Download className="w-3 h-3 mr-2" /> Tải Excel</Button>
                                 </div>
-                                <div className="border rounded-xl p-5 hover:border-amber-300 hover:bg-amber-50/30 transition-colors cursor-pointer" onClick={() => exportCSV("attendance")}>
+                                <div className="border rounded-xl p-5 hover:border-amber-300 hover:bg-amber-50/30 transition-colors cursor-pointer" onClick={() => exportExcel("attendance")}>
                                     <div className="flex items-center gap-3 mb-2">
                                         <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center"><Clock className="w-5 h-5" /></div>
                                         <div><p className="font-bold text-sm">Báo cáo chuyên cần</p><p className="text-[11px] text-slate-500">Có mặt, Đi muộn, Có phép, Vắng</p></div>
                                     </div>
-                                    <Button variant="outline" size="sm" className="w-full mt-2"><Download className="w-3 h-3 mr-2" /> Tải CSV</Button>
+                                    <Button variant="outline" size="sm" className="w-full mt-2"><Download className="w-3 h-3 mr-2" /> Tải Excel</Button>
                                 </div>
-                                <div className="border rounded-xl p-5 hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors cursor-pointer" onClick={() => exportCSV("exams")}>
+                                <div className="border rounded-xl p-5 hover:border-emerald-300 hover:bg-emerald-50/30 transition-colors cursor-pointer" onClick={() => exportExcel("exams")}>
                                     <div className="flex items-center gap-3 mb-2">
                                         <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><ClipboardList className="w-5 h-5" /></div>
                                         <div><p className="font-bold text-sm">Báo cáo kiểm tra</p><p className="text-[11px] text-slate-500">ĐTB KT /10, Số bài nộp</p></div>
                                     </div>
-                                    <Button variant="outline" size="sm" className="w-full mt-2"><Download className="w-3 h-3 mr-2" /> Tải CSV</Button>
+                                    <Button variant="outline" size="sm" className="w-full mt-2"><Download className="w-3 h-3 mr-2" /> Tải Excel</Button>
                                 </div>
-                                <div className="border rounded-xl p-5 hover:border-blue-300 hover:bg-blue-50/30 transition-colors cursor-pointer" onClick={() => exportCSV("homework")}>
+                                <div className="border rounded-xl p-5 hover:border-blue-300 hover:bg-blue-50/30 transition-colors cursor-pointer" onClick={() => exportExcel("homework")}>
                                     <div className="flex items-center gap-3 mb-2">
                                         <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center"><BookOpen className="w-5 h-5" /></div>
                                         <div><p className="font-bold text-sm">Báo cáo bài tập</p><p className="text-[11px] text-slate-500">ĐTB BT /10, Số bài nộp</p></div>
                                     </div>
-                                    <Button variant="outline" size="sm" className="w-full mt-2"><Download className="w-3 h-3 mr-2" /> Tải CSV</Button>
+                                    <Button variant="outline" size="sm" className="w-full mt-2"><Download className="w-3 h-3 mr-2" /> Tải Excel</Button>
                                 </div>
                             </div>
                         </CardContent>

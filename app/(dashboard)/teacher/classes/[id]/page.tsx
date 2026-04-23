@@ -198,22 +198,22 @@ export default async function ClassDetailPage({
                         </div>
 
                         <div className="flex items-center gap-3 ml-auto pr-2">
-                            <Link href={`/teacher/classes/${id}?tab=announcements_feedback`}>
-                                <Button size="sm" variant="ghost" className="h-9 px-4 rounded-xl text-slate-600 hover:text-violet-600 hover:bg-violet-50 font-bold text-xs transition-all">
-                                    <Bell className="w-4 h-4 mr-2" />
-                                    Thông báo & Feedback
+                            <Link href={`/teacher/classes/${id}?tab=progress`}>
+                                <Button size="sm" variant="ghost" className="h-9 px-4 rounded-xl text-slate-600 hover:text-blue-600 hover:bg-blue-50 font-bold text-xs transition-all">
+                                    <BarChart3 className="w-4 h-4 mr-2" />
+                                    Tiến độ
+                                </Button>
+                            </Link>
+                            <Link href={`/teacher/classes/${id}?tab=behavior`}>
+                                <Button size="sm" variant="ghost" className="h-9 px-4 rounded-xl text-slate-600 hover:text-red-600 hover:bg-red-50 font-bold text-xs transition-all">
+                                    <ShieldAlert className="w-4 h-4 mr-2" />
+                                    Hành vi
                                 </Button>
                             </Link>
                             <Link href={`/teacher/classes/${id}/points`}>
                                 <Button size="sm" variant="ghost" className="h-9 px-4 rounded-xl text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 font-bold text-xs transition-all">
-                                    <ClipboardList className="w-4 h-4 mr-2" />
-                                    Quản lý Điểm
-                                </Button>
-                            </Link>
-                            <Link href={`/teacher/classes/${id}/points`}>
-                                <Button size="sm" variant="ghost" className="h-9 px-4 rounded-xl text-slate-600 hover:text-amber-600 hover:bg-amber-50 font-bold text-xs transition-all">
                                     <Trophy className="w-4 h-4 mr-2" />
-                                    Xếp hạng
+                                    Điểm tích lũy
                                 </Button>
                             </Link>
                         </div>
@@ -222,7 +222,7 @@ export default async function ClassDetailPage({
             </div>
 
             {/* TABS SECTION */}
-            <Tabs defaultValue={defaultTab} className="w-full">
+            <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full">
                 <TabsList className="w-full justify-start bg-white border border-slate-200 rounded-xl p-1 h-auto flex-wrap gap-1">
                     <TabsTrigger value="overview" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
                         <BookOpen className="w-4 h-4 mr-2" /> Tổng quan
@@ -245,12 +245,6 @@ export default async function ClassDetailPage({
                     </TabsTrigger>
                     <TabsTrigger value="announcements_feedback" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
                         <MessageSquare className="w-4 h-4 mr-2" /> TB & Feedback
-                    </TabsTrigger>
-                    <TabsTrigger value="progress" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
-                        <BarChart3 className="w-4 h-4 mr-2" /> Tiến độ
-                    </TabsTrigger>
-                    <TabsTrigger value="behavior" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
-                        <ShieldAlert className="w-4 h-4 mr-2" /> Hành vi
                     </TabsTrigger>
                 </TabsList>
 

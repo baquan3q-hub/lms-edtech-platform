@@ -4,26 +4,45 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell
 } from "recharts";
 import {
     Brain, Loader2, TrendingUp, TrendingDown, Lightbulb, AlertTriangle,
-    CheckCircle2, Target, Users, Trophy
+    CheckCircle2, Target, Users, Trophy, Send, Award, ArrowDownCircle
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatKnowledgeGap } from "@/lib/utils";
+import { notifyParentAboutBehavior } from "@/lib/actions/behavior-analysis";
 
 interface AIClassAnalysisProps {
     examId: string;
     classId: string;
     existingAnalysis: any | null;
     totalSubmissions: number;
+    submissions?: any[];
 }
 
-export default function AIClassAnalysis({ examId, classId, existingAnalysis, totalSubmissions }: AIClassAnalysisProps) {
+export default function AIClassAnalysis({ examId, classId, existingAnalysis, totalSubmissions, submissions = [] }: AIClassAnalysisProps) {
     const [analysis, setAnalysis] = useState<any>(existingAnalysis);
     const [isLoading, setIsLoading] = useState(false);
+
+    // Notify parent state
+    const [notifyStudent, setNotifyStudent] = useState<any>(null);
+    const [notifyMessage, setNotifyMessage] = useState("");
+    const [sending, setSending] = useState(false);
+
+    const handleNotify = async () => {
+        if (!notifyStudent || !notifyMessage.trim()) return;
+        setSending(true);
+        const studentId = notifyStudent.student?.id || notifyStudent.student_id;
+        const res = await notifyParentAboutBehavior(studentId, notifyMessage.trim());
+        if (res.error) toast.error(res.error);
+        else { toast.success("Đã gửi thông báo và nhận xét cho phụ huynh!"); setNotifyStudent(null); }
+        setSending(false);
+    };
 
     const handleRunAnalysis = async () => {
         if (totalSubmissions < 3) {
@@ -40,13 +59,23 @@ export default function AIClassAnalysis({ examId, classId, existingAnalysis, tot
             const result = await res.json();
             if (result.error) throw new Error(result.error);
             setAnalysis(result.data);
-            toast.success("AI đã phân tích xong!");
+            toast.success("AI đã phân tích xong và tự động lưu báo cáo!");
         } catch (err: any) {
             toast.error("Lỗi phân tích: " + err.message);
         } finally {
             setIsLoading(false);
         }
     };
+
+    // Calculate Top & Need Improvement Students
+    const sortedSubmissions = [...submissions].sort((a, b) => {
+        const pctA = (a.score / (a.total_points || 1)) * 100;
+        const pctB = (b.score / (b.total_points || 1)) * 100;
+        return pctB - pctA;
+    });
+
+    const topStudents = sortedSubmissions.filter(s => (s.score / (s.total_points || 1)) * 100 >= 80).slice(0, 5);
+    const needImprovementStudents = sortedSubmissions.filter(s => (s.score / (s.total_points || 1)) * 100 < 50).slice(0, 5);
 
     if (!analysis) {
         return (
@@ -121,7 +150,7 @@ export default function AIClassAnalysis({ examId, classId, existingAnalysis, tot
                 </CardHeader>
                 <CardContent>
                     <div className="h-[200px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
+                        <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
                             <BarChart data={distData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
@@ -217,6 +246,55 @@ export default function AIClassAnalysis({ examId, classId, existingAnalysis, tot
                         </div>
                     )}
 
+                    {/* Top & Need Improvement Students */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-5">
+                        {/* Học sinh xuất sắc */}
+                        {topStudents.length > 0 && (
+                            <div className="bg-white rounded-xl border border-emerald-200 p-4">
+                                <h4 className="font-bold text-sm text-emerald-700 flex items-center gap-1.5 mb-3">
+                                    <Award className="w-4 h-4" /> Học sinh xuất sắc (≥80%)
+                                </h4>
+                                <div className="space-y-2">
+                                    {topStudents.map((s, i) => (
+                                        <div key={i} className="flex items-center justify-between p-2 bg-emerald-50 rounded-lg">
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-semibold text-slate-800 truncate">{s.student?.full_name}</p>
+                                                <p className="text-[10px] text-emerald-600 font-bold">{s.score}/{s.total_points}</p>
+                                            </div>
+                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-emerald-600 hover:bg-emerald-100"
+                                                onClick={() => { setNotifyStudent(s); setNotifyMessage("Làm bài rất tốt! Tiếp tục phát huy nhé."); }}>
+                                                <Send className="w-3 h-3" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Học sinh cần cải thiện */}
+                        {needImprovementStudents.length > 0 && (
+                            <div className="bg-white rounded-xl border border-red-200 p-4">
+                                <h4 className="font-bold text-sm text-red-700 flex items-center gap-1.5 mb-3">
+                                    <ArrowDownCircle className="w-4 h-4" /> Học sinh cần cải thiện (&lt;50%)
+                                </h4>
+                                <div className="space-y-2">
+                                    {needImprovementStudents.map((s, i) => (
+                                        <div key={i} className="flex items-center justify-between p-2 bg-red-50 rounded-lg">
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-semibold text-slate-800 truncate">{s.student?.full_name}</p>
+                                                <p className="text-[10px] text-red-600 font-bold">{s.score}/{s.total_points}</p>
+                                            </div>
+                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-red-600 hover:bg-red-100"
+                                                onClick={() => { setNotifyStudent(s); setNotifyMessage("Kết quả bài làm chưa tốt, em cần ôn tập thêm phần kiến thức này nhé."); }}>
+                                                <Send className="w-3 h-3" />
+                                            </Button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Nút làm mới */}
                     <div className="mt-4 flex justify-end">
                         <Button variant="outline" size="sm" onClick={handleRunAnalysis} disabled={isLoading} className="text-xs border-indigo-200 text-indigo-700">
@@ -226,6 +304,31 @@ export default function AIClassAnalysis({ examId, classId, existingAnalysis, tot
                     </div>
                 </CardContent>
             </Card>
+
+            {/* Notify Parent Dialog */}
+            <Dialog open={!!notifyStudent} onOpenChange={(open) => { if (!open) setNotifyStudent(null); }}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-base">
+                            <Send className="w-4 h-4 text-violet-500" /> Gửi nhận xét cho phụ huynh
+                        </DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-3 py-2">
+                        <p className="text-sm text-slate-600">
+                            Học sinh: <span className="font-bold text-slate-800">{notifyStudent?.student?.full_name || notifyStudent?.student_name}</span>
+                        </p>
+                        <Textarea placeholder="Nhập nội dung nhắc nhở..."
+                            rows={4} value={notifyMessage} onChange={(e) => setNotifyMessage(e.target.value)} className="text-sm" />
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setNotifyStudent(null)}>Hủy</Button>
+                        <Button className="bg-violet-600 hover:bg-violet-700 text-white"
+                            disabled={sending || !notifyMessage.trim()} onClick={handleNotify}>
+                            {sending ? "Đang gửi..." : "Gửi phụ huynh"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

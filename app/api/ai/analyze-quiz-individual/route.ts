@@ -1,184 +1,133 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getGeminiModel } from "@/lib/gemini";
+import { getRotatingGeminiModel } from "@/lib/gemini";
 
 // ============================================================
-// Prompt cho học sinh điểm cao (≥85%): Khen ngợi + bài tập thử thách
+// PROMPT cho HS GIỎI (≥80%): CHỈ nhận xét + nhắc nhở, KHÔNG tạo quiz
+// Token rất nhẹ (~300 output tokens)
 // ============================================================
 function buildHighPerformerPrompt(
-    student: any, exam: any, score: number, totalPoints: number, wrongQuestions: any[]
+    studentName: string, examTitle: string, score: number, totalPoints: number,
+    percentage: string, wrongQuestions: any[]
 ): string {
-    return `
-Bạn là gia sư giáo dục chuyên nghiệp, thân thiện.
-Học sinh đạt điểm CAO. Hãy KHEN NGỢI thành tích, tạo bài ÔN TẬP + MỞ RỘNG kiến thức, và ĐỀ XUẤT học lên phần cao hơn.
-Trọng tâm: Vẫn phải chỉ ra lổ hổng kiến thức nếu có câu sai.
+    const limitedWrong = wrongQuestions.slice(0, 3).map(wq => ({
+        câu: wq.questionIndex,
+        hỏi: (wq.question || "").substring(0, 60),
+        đúng: wq.correctAnswer,
+    }));
 
-HỌC SINH: ${student?.full_name || "Học sinh"}
-BÀI KIỂM TRA: ${exam.title}
-ĐIỂM: ${score}/${totalPoints} (${((score / totalPoints) * 100).toFixed(0)}% — Xuất sắc!)
+    return `Gia sư giáo dục. ${studentName} đạt ${score}/${totalPoints} (${percentage}%) bài "${examTitle}".
+${wrongQuestions.length > 0 ? `Câu sai: ${JSON.stringify(limitedWrong)}` : "Hoàn hảo, không sai câu nào!"}
 
-${wrongQuestions.length > 0 ? `CÂU LÀM SAI CHÍNH XÁC CỦA HỌC SINH (${wrongQuestions.length} câu):\n${JSON.stringify(wrongQuestions, null, 2)}\n(AI PHẢI TẬP TRUNG PHÂN TÍCH NHỮNG KIẾN THỨC CỦA CÁC CÂU NÀY MÀ HỌC SINH ĐÃ CHỌN SAI KHỎI ĐÁP ÁN ĐÚNG)` : "Không có câu sai — hoàn hảo!"}
-
-Trả về DUY NHẤT một cục JSON theo cấu trúc sau:
+Trả về JSON:
 {
-  "knowledge_gaps": [${wrongQuestions.length > 0 ? "\"Tên kiến thức bị sai 1\", \"Tên kiến thức bị sai 2\"" : ""}],
-  "ai_feedback": "Lời khen ngợi nhiệt tình (3-4 câu). Nhấn mạnh thành tích xuất sắc. Nếu có 1-2 câu sai nhẹ, nhắc nhẹ nhàng. KẾT THÚC bằng đề xuất cụ thể: Em nên tìm hiểu thêm về [chủ đề nâng cao liên quan] để phát triển hơn nữa.",
-  "advancement_suggestion": "Gợi ý cụ thể 2-3 chủ đề/phần kiến thức nâng cao mà học sinh nên học tiếp theo, dựa trên nội dung bài kiểm tra. Ví dụ: Nếu bài kiểm tra về phương trình bậc 1, đề xuất học phương trình bậc 2. Viết dạng đoạn văn ngắn, thân thiện.",
+  "knowledge_gaps": [${wrongQuestions.length > 0 ? '"tên kiến thức từ câu sai"' : ""}],
+  "ai_feedback": "Khen ngợi cụ thể 3-4 câu, nhắc nhẹ kiến thức cần ôn nếu có câu sai, kết bằng lời động viên phát triển.",
+  "advancement_suggestion": "2-3 chủ đề nâng cao nên tìm hiểu tiếp để phát triển hơn."
+}
+
+YÊU CẦU: knowledge_gaps dựa vào câu sai (mảng rỗng nếu không sai). ai_feedback phải thân thiện, khen ngợi trước. Tiếng Việt.`;
+}
+
+// ============================================================
+// PROMPT cho HS CẦN CẢI THIỆN (<80%): Nhận xét + bài tập + quiz
+// Token trung bình (~1200 output tokens)
+// ============================================================
+function buildImprovementPrompt(
+    studentName: string, examTitle: string, score: number, totalPoints: number,
+    percentage: string, wrongQuestions: any[]
+): string {
+    const limitedWrong = wrongQuestions.slice(0, 5).map(wq => ({
+        câu: wq.questionIndex,
+        hỏi: (wq.question || "").substring(0, 80),
+        hs_chọn: wq.studentAnswer,
+        đúng: wq.correctAnswer,
+    }));
+
+    return `Gia sư giáo dục kiên nhẫn. ${studentName} đạt ${score}/${totalPoints} (${percentage}%) bài "${examTitle}".
+Câu sai (${wrongQuestions.length}): ${JSON.stringify(limitedWrong)}
+
+Trả về JSON:
+{
+  "knowledge_gaps": ["kiến thức hổng rút từ câu sai 1","kiến thức hổng 2"],
+  "ai_feedback": "Động viên trước. Khen điểm tốt. KHÔNG dùng 'yếu/kém'. Dùng 'cần luyện thêm'. 3-4 câu. Kết bằng động viên.",
   "improvement_tasks": [
     {
-      "title": "📚 Ôn tập & Củng cố kiến thức cốt lõi",
+      "title": "Tên kiến thức cần ôn",
       "type": "review",
-      "knowledge_topic": "Kiến thức cốt lõi từ bài kiểm tra",
+      "knowledge_topic": "Tên chính xác",
       "estimated_time": "15 phút",
       "theory": {
-        "explanation": "Tóm tắt ngắn gọn các kiến thức QUAN TRỌNG NHẤT trong bài kiểm tra, giúp học sinh hệ thống hóa lại",
-        "formula": "Công thức/quy tắc chính (nếu có)",
-        "examples": ["Ví dụ ôn tập 1 kèm giải thích", "Ví dụ ôn tập 2 kèm giải thích"],
-        "tip": "Mẹo ghi nhớ nhanh"
+        "explanation": "Giải thích dễ hiểu 2-3 câu",
+        "formula": "Công thức/quy tắc nếu có",
+        "examples": ["VD1 kèm giải thích","VD2"],
+        "tip": "Mẹo ghi nhớ"
       },
       "mini_quiz": [
-        {"id": "q1", "question": "Câu ôn tập kiến thức cốt lõi 1", "options": [{"id":"a","text":"A"},{"id":"b","text":"B"},{"id":"c","text":"C"},{"id":"d","text":"D"}], "correct": "b", "explanation": "Giải thích"},
-        {"id": "q2", "question": "Câu ôn tập 2", "options": [...], "correct": "...", "explanation": "..."},
-        {"id": "q3", "question": "Câu ôn tập 3", "options": [...], "correct": "...", "explanation": "..."},
-        {"id": "q4", "question": "Câu ôn tập 4", "options": [...], "correct": "...", "explanation": "..."},
-        {"id": "q5", "question": "Câu ôn tập 5", "options": [...], "correct": "...", "explanation": "..."}
-      ]
-    },
-    {
-      "title": "🚀 Mở rộng & Nâng cao kiến thức",
-      "type": "extension",
-      "knowledge_topic": "Kiến thức nâng cao liên quan",
-      "estimated_time": "20 phút",
-      "theory": {
-        "explanation": "Giới thiệu kiến thức MỚI, NÂNG CAO hơn bài kiểm tra. Mở rộng từ nội dung đã học sang phần tiếp theo. Giải thích dễ hiểu cho học sinh giỏi.",
-        "formula": "Công thức/quy tắc nâng cao (nếu có)",
-        "examples": ["Ví dụ nâng cao 1 kèm giải thích chi tiết", "Ví dụ nâng cao 2 kèm giải thích chi tiết"],
-        "tip": "Mẹo cho bài tập khó + hướng dẫn tư duy"
-      },
-      "mini_quiz": [
-        {"id": "q1", "question": "Câu nâng cao 1 — MỨC ĐỘ KHÓ", "options": [{"id":"a","text":"A"},{"id":"b","text":"B"},{"id":"c","text":"C"},{"id":"d","text":"D"}], "correct": "b", "explanation": "Giải thích chi tiết"},
-        {"id": "q2", "question": "Câu nâng cao 2", "options": [...], "correct": "...", "explanation": "..."},
-        {"id": "q3", "question": "Câu nâng cao 3", "options": [...], "correct": "...", "explanation": "..."},
-        {"id": "q4", "question": "Câu nâng cao 4", "options": [...], "correct": "...", "explanation": "..."},
-        {"id": "q5", "question": "Câu nâng cao 5", "options": [...], "correct": "...", "explanation": "..."}
+        {"id":"q1","question":"Câu hỏi liên quan câu sai","options":[{"id":"a","text":"A"},{"id":"b","text":"B"},{"id":"c","text":"C"},{"id":"d","text":"D"}],"correct":"b","explanation":"Giải thích đáp án"},
+        {"id":"q2","question":"Câu 2","options":[{"id":"a","text":"A"},{"id":"b","text":"B"},{"id":"c","text":"C"},{"id":"d","text":"D"}],"correct":"c","explanation":"..."},
+        {"id":"q3","question":"Câu 3","options":[{"id":"a","text":"A"},{"id":"b","text":"B"},{"id":"c","text":"C"},{"id":"d","text":"D"}],"correct":"a","explanation":"..."}
       ]
     }
   ]
 }
 
 YÊU CẦU BẮT BUỘC:
-- PHẢI TẠO ĐÚNG 2 improvement_tasks:
-  + Task 1 (type: "review"): Ôn tập kiến thức cốt lõi — câu hỏi mức TRUNG BÌNH, giúp củng cố lại
-  + Task 2 (type: "extension"): Mở rộng kiến thức — câu hỏi mức KHÓ, kiến thức CHUYÊN SÂU hơn bài kiểm tra
-- Mỗi task PHẢI CÓ ĐÚNG 5 câu hỏi mini_quiz (id: q1-q5)
-- advancement_suggestion PHẢI ĐỀ XUẤT CỤ THỂ chủ đề học tiếp theo (không chung chung)
-- ai_feedback PHẢI kết thúc bằng đề xuất phát triển cụ thể
-- Tiếng Việt, khen ngợi nhiệt tình, truyền cảm hứng học tập
-`;
+- knowledge_gaps DỰA VÀO CÂU SAI, KHÔNG ĐỂ TRỐNG
+- Tạo 1-2 tasks tùy số kiến thức hổng, mỗi task ĐÚNG 3 câu quiz trắc nghiệm
+- Mỗi câu quiz PHẢI có 4 options (a,b,c,d), 1 correct, 1 explanation
+- Câu quiz PHẢI liên quan trực tiếp đến kiến thức câu sai
+- Tiếng Việt`;
 }
 
 // ============================================================
-// Prompt cho học sinh cần cải thiện (<85%): Động viên + bài ôn tập
+// Validate: đảm bảo mỗi task có đúng 3 câu quiz hợp lệ
 // ============================================================
-function buildImprovementPrompt(
-    student: any, exam: any, score: number, totalPoints: number, wrongQuestions: any[]
-): string {
-    return `
-Bạn là gia sư giáo dục chuyên nghiệp, thân thiện và KIÊN NHẪN.
-Học sinh cần được hỗ trợ cải thiện. ĐỘNG VIÊN trước, rồi hướng dẫn ôn tập.
-CHÚ Ý ĐẶC BIỆT: Bạn PHẢI đọc kỹ danh sách "CÂU LÀM SAI" để rút ra KẾT LUẬN về "Kiến thức hổng". KHÔNG đoán bừa.
-
-HỌC SINH: ${student?.full_name || "Học sinh"}
-BÀI KIỂM TRA: ${exam.title}
-ĐIỂM: ${score}/${totalPoints} (${((score / totalPoints) * 100).toFixed(0)}%)
-
-CÂU LÀM SAI CHÍNH XÁC CỦA HỌC SINH (${wrongQuestions.length} câu):
-${JSON.stringify(wrongQuestions, null, 2)}
-(AI PHẢI TẬP TRUNG PHÂN TÍCH CÁC CÂU LÀM SAI MÀ HỌC SINH ĐÃ CHỌN ĐỂ TẠO NHẬN XÉT, TẠO MẢNG KNOWLEDGE_GAPS VÀ CÁC THỰC HÀNH IMPROVEMENT)
-
-Trả về DUY NHẤT một cục JSON theo cấu trúc sau:
-{
-  "knowledge_gaps": ["Rút ra từ các câu sai ở trên (ví dụ: Phép nhân số thập phân, Động từ to-be)"],
-  "ai_feedback": "Nhận xét thân thiện: LUÔN khen điểm tốt trước (dù ít). Không dùng 'yếu', 'kém'. Dùng 'cần luyện thêm', 'sẽ tiến bộ'. 3-4 câu. Kết bằng lời động viên.",
-  "improvement_tasks": [
-    {
-      "title": "Tên kiến thức cần ôn",
-      "knowledge_topic": "Tên chính xác",
-      "estimated_time": "15 phút",
-      "theory": {
-        "explanation": "Giải thích ngắn gọn 2-3 câu, dễ hiểu, có ví dụ thực tế",
-        "formula": "Công thức/quy tắc chính",
-        "examples": ["Ví dụ minh họa 1 kèm giải thích", "Ví dụ minh họa 2 kèm giải thích"],
-        "tip": "Mẹo ghi nhớ nhanh"
-      },
-      "mini_quiz": [
-        {"id": "q1", "question": "Câu 1 liên quan trực tiếp đến câu sai", "options": [{"id":"a","text":"A"},{"id":"b","text":"B"},{"id":"c","text":"C"},{"id":"d","text":"D"}], "correct": "b", "explanation": "Giải thích chi tiết"},
-        {"id": "q2", "question": "...", "options": [...], "correct": "...", "explanation": "..."},
-        {"id": "q3", "question": "...", "options": [...], "correct": "...", "explanation": "..."},
-        {"id": "q4", "question": "...", "options": [...], "correct": "...", "explanation": "..."},
-        {"id": "q5", "question": "...", "options": [...], "correct": "...", "explanation": "..."}
-      ]
-    }
-  ]
-}
-
-YÊU CẦU BẮT BUỘC DRACONIAN:
-- PHẢI điền CHÍNH XÁC danh sách mảng knowledge_gaps DỰA DỰA VÀO CÂU LÀM SAI. KHÔNG ĐƯỢC ĐỂ TRỐNG ARRAY ẤY nếu có bất kì lỗi nào!
-- Tạo thẻ knowledge_topic và theory ĐÚNG như phần kiến thức học sinh bị mất.
-- Không nhận xét chung chung, bài ôn PHẢI là bài học cụ thể về chính cái chỗ học sinh sai ở phương án!
-- Trả về JSON, không thêm văn bản bên ngoài.
-`;
-}
-
-// ============================================================
-// Validate mini_quiz có đúng 5 câu cho mỗi task
-// ============================================================
-function validateAndFixQuizCount(aiResult: any): any {
+function validateAndFixQuizCount(aiResult: any, targetCount: number = 3): any {
     if (!aiResult?.improvement_tasks) return aiResult;
 
     aiResult.improvement_tasks = aiResult.improvement_tasks.map((task: any) => {
         const quiz = task.mini_quiz || [];
-        if (quiz.length === 5) return task;
-
-        // Pad nếu thiếu, trim nếu thừa
-        while (quiz.length < 5) {
+        while (quiz.length < targetCount) {
             quiz.push({
                 id: `q${quiz.length + 1}`,
-                question: `Câu hỏi bổ sung ${quiz.length + 1} về ${task.knowledge_topic || task.title}`,
+                question: `Câu bổ sung ${quiz.length + 1} về ${task.knowledge_topic || task.title}`,
                 options: [
-                    { id: "a", text: "Đáp án A" },
-                    { id: "b", text: "Đáp án B" },
-                    { id: "c", text: "Đáp án C" },
-                    { id: "d", text: "Đáp án D" },
+                    { id: "a", text: "Đáp án A" }, { id: "b", text: "Đáp án B" },
+                    { id: "c", text: "Đáp án C" }, { id: "d", text: "Đáp án D" },
                 ],
                 correct: "a",
-                explanation: "Đáp án sẽ được giáo viên cập nhật.",
+                explanation: "Giáo viên sẽ cập nhật đáp án.",
             });
         }
-        task.mini_quiz = quiz.slice(0, 5);
+        task.mini_quiz = quiz.slice(0, targetCount);
         return task;
     });
-
     return aiResult;
 }
 
-async function analyzeOneStudent(
-    adminSupabase: any,
-    submission: any,
-    exam: any
-) {
+function delay(ms: number) {
+    return new Promise(r => setTimeout(r, ms));
+}
+
+// ============================================================
+// Phân tích 1 học sinh — tự động chọn prompt theo % điểm
+// ≥80%: Chỉ nhận xét + nhắc nhở (KHÔNG quiz)
+// <80%: Nhận xét + bài tập + quiz trắc nghiệm
+// ============================================================
+async function analyzeOneStudent(adminSupabase: any, submission: any, exam: any) {
     const questions = (exam.questions || []) as any[];
     const studentAnswers = (submission.answers || []) as any[];
     const studentObj = Array.isArray(submission.student) ? submission.student[0] : submission.student;
+    const studentName = studentObj?.full_name || "Học sinh";
 
     // Xác định câu sai
     const wrongQuestions = questions
         .map((q: any, qIdx: number) => {
-            if (q.type === "ESSAY") return null; // skip essay
+            if (q.type === "ESSAY") return null;
             const correctOption = (q.options || []).find((o: any) => o.isCorrect);
             const studentAnswer = studentAnswers[qIdx];
-            if (studentAnswer?.selectedOptionId === correctOption?.id) return null; // đúng → skip
-
+            if (studentAnswer?.selectedOptionId === correctOption?.id) return null;
             const selectedOption = (q.options || []).find((o: any) => o.id === studentAnswer?.selectedOptionId);
             return {
                 questionIndex: qIdx + 1,
@@ -190,64 +139,71 @@ async function analyzeOneStudent(
         })
         .filter(Boolean);
 
-    // Nếu không có câu sai, vẫn tạo feedback
     const score = Number(submission.score) || 0;
     const totalPoints = exam.total_points || 10;
     const percentage = totalPoints > 0 ? (score / totalPoints) * 100 : 0;
-    const isHighPerformer = percentage >= 85;
+    const percentageStr = percentage.toFixed(0);
+    const isHighPerformer = percentage >= 80;
 
-    // Xây dựng prompt theo mức độ
+    // Chọn prompt theo mức điểm
     const prompt = isHighPerformer
-        ? buildHighPerformerPrompt(studentObj, exam, score, totalPoints, wrongQuestions)
-        : buildImprovementPrompt(studentObj, exam, score, totalPoints, wrongQuestions);
+        ? buildHighPerformerPrompt(studentName, exam.title, score, totalPoints, percentageStr, wrongQuestions)
+        : buildImprovementPrompt(studentName, exam.title, score, totalPoints, percentageStr, wrongQuestions);
 
-    const genAI = require("@google/generative-ai").GoogleGenerativeAI;
-    const apiKey = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY;
-    const genAiInstance = new genAI(apiKey);
-    const model = genAiInstance.getGenerativeModel({ 
-        model: "gemini-2.5-flash",
-        generationConfig: {
-            responseMimeType: "application/json",
-            temperature: 0.2 // Giảm temperature để tăng tính logic và chính xác đối với kết quả sai của hs
-        } 
+    console.log(`[AI] ${studentName}: ${score}/${totalPoints} (${percentageStr}%) → ${isHighPerformer ? 'NHẸ (chỉ nhận xét)' : 'ĐẦY ĐỦ (nhận xét + quiz)'}`);
+
+    // Key rotation — mỗi HS dùng key khác
+    const model = getRotatingGeminiModel("gemini-2.5-flash", {
+        temperature: 0.2,
+        responseMimeType: "application/json"
     });
-    
+
     let aiResult: any = null;
 
-    for (let attempt = 0; attempt < 4; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
         try {
             const result = await model.generateContent(prompt);
             let text = result.response.text();
-            
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) text = jsonMatch[0];
             aiResult = JSON.parse(text);
-            aiResult = validateAndFixQuizCount(aiResult); // Đảm bảo 5 câu/task
+
+            // Validate quiz cho HS cần cải thiện
+            if (!isHighPerformer) {
+                aiResult = validateAndFixQuizCount(aiResult, 3);
+            }
             break;
         } catch (err: any) {
-            const isOverloaded = err.status === 429 || err.status === 503 || err.message?.includes("429") || err.message?.includes("503");
-            
-            if (isOverloaded && attempt < 3) {
-                const waitTime = Math.pow(2, attempt) * 2000 + 1000;
-                console.log(`Individual Analysis - Gemini Rate Limit hit. Retry ${attempt + 1}/3 in ${waitTime}ms...`);
-                await new Promise(r => setTimeout(r, waitTime));
+            const isOverloaded = err.status === 429 || err.status === 503 ||
+                err.message?.includes("429") || err.message?.includes("503") ||
+                err.message?.includes("quota") || err.message?.includes("RESOURCE_EXHAUSTED");
+
+            if (isOverloaded && attempt < 2) {
+                // Exponential backoff: 4s, 10s — đủ dài để tránh rate limit
+                const waitTime = Math.pow(2, attempt + 1) * 2000 + Math.random() * 2000;
+                console.log(`[AI] ${studentName} — Rate limit. Retry ${attempt + 1}/2 in ${Math.round(waitTime)}ms`);
+                await delay(waitTime);
                 continue;
             }
-            
-            if (attempt === 3) {
+
+            if (attempt === 2) {
+                console.error(`[AI] ${studentName} — Failed after 3 attempts:`, err.message);
                 aiResult = {
-                    knowledge_gaps: [],
-                    ai_feedback: isOverloaded 
-                        ? "AI đang quá tải. Vui lòng thử lại sau vài phút."
+                    knowledge_gaps: wrongQuestions.slice(0, 3).map((wq: any) => wq.tags?.[0] || `Câu ${wq.questionIndex}`),
+                    ai_feedback: isOverloaded
+                        ? "⏳ AI đang quá tải. Vui lòng bấm 'Chạy phân tích cá nhân' lại sau 1-2 phút."
                         : "Không thể tạo nhận xét tự động. Giáo viên vui lòng viết nhận xét thủ công.",
-                    improvement_tasks: []
+                    improvement_tasks: [],
+                    advancement_suggestion: null,
                 };
             }
-            await new Promise(r => setTimeout(r, 1500));
+            await delay(1000);
         }
     }
 
-    // Lưu vào DB
-    const deadline = new Date();
-    deadline.setDate(deadline.getDate() + 7);
+    // Lưu DB
+    const deadlineDate = new Date();
+    deadlineDate.setDate(deadlineDate.getDate() + 7);
 
     const { data, error } = await adminSupabase
         .from("quiz_individual_analysis")
@@ -261,7 +217,7 @@ async function analyzeOneStudent(
             improvement_tasks: aiResult.improvement_tasks || [],
             advancement_suggestion: aiResult.advancement_suggestion || null,
             status: 'ai_draft',
-            deadline: deadline.toISOString(),
+            deadline: deadlineDate.toISOString(),
             created_at: new Date().toISOString()
         }, { onConflict: 'submission_id' })
         .select()
@@ -271,36 +227,31 @@ async function analyzeOneStudent(
     return data;
 }
 
+// ============================================================
+// POST handler — Tuần tự, skip existing, key rotation
+// ============================================================
 export async function POST(req: NextRequest) {
     try {
         const body = await req.json();
         const { examId, submissionId } = body;
-
         const adminSupabase = createAdminClient();
 
         // Lấy exam
-        const { data: exam, error: examError } = await adminSupabase
-            .from("exams")
-            .select("*")
-            .eq("id", examId || "")
-            .single();
+        const { data: exam } = await adminSupabase
+            .from("exams").select("*").eq("id", examId || "").single();
 
         if (!exam && !submissionId) {
             return NextResponse.json({ error: "Không tìm thấy bài kiểm tra" }, { status: 404 });
         }
 
-        // Xử lý 1 học sinh
+        // === Xử lý 1 học sinh ===
         if (submissionId) {
-            const { data: sub, error: subError } = await adminSupabase
+            const { data: sub } = await adminSupabase
                 .from("exam_submissions")
                 .select("*, student:users!student_id(id, full_name)")
-                .eq("id", submissionId)
-                .single();
-            if (subError || !sub) {
-                return NextResponse.json({ error: "Không tìm thấy bài nộp" }, { status: 404 });
-            }
+                .eq("id", submissionId).single();
+            if (!sub) return NextResponse.json({ error: "Không tìm thấy bài nộp" }, { status: 404 });
 
-            // Lấy exam nếu chưa có
             let examData = exam;
             if (!examData) {
                 const { data: e } = await adminSupabase.from("exams").select("*").eq("id", sub.exam_id).single();
@@ -312,47 +263,60 @@ export async function POST(req: NextRequest) {
             return NextResponse.json({ data: result, error: null });
         }
 
-        // Xử lý hàng loạt
+        // === Xử lý hàng loạt — TUẦN TỰ ===
         const { data: submissions, error: subError } = await adminSupabase
             .from("exam_submissions")
             .select("*, student:users!student_id(id, full_name)")
             .eq("exam_id", examId);
         if (subError) throw subError;
-
-        if (!submissions || submissions.length === 0) {
+        if (!submissions?.length) {
             return NextResponse.json({ error: "Chưa có bài nộp nào" }, { status: 400 });
         }
 
-        // Batch 5 học sinh/lần, delay 2s giữa các batch
-        const batchSize = 5;
-        let success = 0;
+        // Kiểm tra HS đã có analysis hợp lệ → skip
+        // HS giỏi (≥80%) sẽ KHÔNG có improvement_tasks → chỉ kiểm tra ai_feedback
+        const { data: existingAnalyses } = await adminSupabase
+            .from("quiz_individual_analysis")
+            .select("submission_id, ai_feedback")
+            .eq("exam_id", examId);
+
+        const alreadyDone = new Set(
+            (existingAnalyses || [])
+                .filter((a: any) => a.ai_feedback && !a.ai_feedback.includes("quá tải") && !a.ai_feedback.includes("⏳"))
+                .map((a: any) => a.submission_id)
+        );
+
+        const pendingSubmissions = submissions.filter((s: any) => !alreadyDone.has(s.id));
+        let success = alreadyDone.size;
         let failed = 0;
+        let skipped = alreadyDone.size;
         const errors: string[] = [];
 
-        for (let i = 0; i < submissions.length; i += batchSize) {
-            const batch = submissions.slice(i, i + batchSize);
-            const results = await Promise.allSettled(
-                batch.map(sub => analyzeOneStudent(adminSupabase, sub, exam))
-            );
+        console.log(`[Batch] Total: ${submissions.length}, Skip: ${skipped}, Pending: ${pendingSubmissions.length}`);
 
-            results.forEach((r, idx) => {
-                if (r.status === "fulfilled") {
-                    success++;
-                } else {
-                    failed++;
-                    const studentObj = Array.isArray(batch[idx].student) ? batch[idx].student[0] : batch[idx].student;
-                    errors.push(`${studentObj?.full_name || 'Unknown'}: ${r.reason?.message || 'Error'}`);
-                }
-            });
+        // Tuần tự từng HS — delay 4s giữa mỗi HS (tránh rate limit)
+        for (let i = 0; i < pendingSubmissions.length; i++) {
+            const sub = pendingSubmissions[i];
+            const studentObj = Array.isArray(sub.student) ? sub.student[0] : sub.student;
 
-            // Delay giữa các batch để tránh rate limit
-            if (i + batchSize < submissions.length) {
-                await new Promise(r => setTimeout(r, 2000));
+            try {
+                console.log(`[Batch] ${i + 1}/${pendingSubmissions.length}: ${studentObj?.full_name}`);
+                await analyzeOneStudent(adminSupabase, sub, exam);
+                success++;
+            } catch (err: any) {
+                failed++;
+                errors.push(`${studentObj?.full_name || 'HS'}: ${err.message || 'Lỗi'}`);
+                console.error(`[Batch] Failed: ${studentObj?.full_name}:`, err.message);
+            }
+
+            // Delay 4s giữa mỗi HS — đảm bảo không vượt 15 RPM/key
+            if (i < pendingSubmissions.length - 1) {
+                await delay(4000);
             }
         }
 
         return NextResponse.json({
-            data: { success, failed, total: submissions.length, errors },
+            data: { success, failed, skipped, total: submissions.length, errors },
             error: null
         });
     } catch (error: any) {

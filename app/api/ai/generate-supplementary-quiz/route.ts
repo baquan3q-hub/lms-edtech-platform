@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getGeminiModel } from "@/lib/gemini";
+import { getRotatingGeminiModel } from "@/lib/gemini";
 
 export async function POST(req: NextRequest) {
     try {
@@ -94,7 +94,7 @@ YÊU CẦU:
 - Ngôn ngữ: Tiếng Việt
 `;
 
-        const model = getGeminiModel("gemini-2.5-flash");
+        const model = getRotatingGeminiModel("gemini-2.5-flash");
         let quizData: any = null;
 
         for (let attempt = 0; attempt < 2; attempt++) {

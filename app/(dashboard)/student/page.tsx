@@ -321,7 +321,7 @@ export default async function StudentDashboardPage() {
                                     icon={<Bell className="w-5 h-5 text-amber-600" />}
                                     title={ann.title}
                                     content={ann.content}
-                                    detailUrl="/student/notifications"
+                                    detailUrl={ann.class_id ? `/student/classes/${ann.class_id}?tab=announcements` : undefined}
                                     timestamp={new Date(ann.created_at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })}
                                 />
                             ))}

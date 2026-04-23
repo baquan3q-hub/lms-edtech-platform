@@ -222,12 +222,10 @@ export async function fetchClassScoreReport(classId: string) {
 }
 
 // =====================================================
-// AI PHÂN TÍCH BÁO CÁO LỚP HỌC
+// AI PHÂN TÍCH BÁO CÁO LỚP HỌC (có Retry + lưu DB)
 // =====================================================
-export async function generateClassAIReport(className: string, reportData: any) {
+export async function generateClassAIReport(className: string, reportData: any, classId?: string) {
     try {
-        const model = getGeminiModel("gemini-2.5-flash");
-
         const { summary, students } = reportData;
         const weakStudents = students.filter((s: any) => s.avgScore10 < 5);
 
@@ -257,14 +255,89 @@ YÊU CẦU PHÂN TÍCH (Viết tiếng Việt, rõ ràng, dưới 500 chữ):
 5. **🎯 Đề xuất cải thiện**: 4-5 hành động CỤ THỂ cho giáo viên.
 6. **📌 Ưu tiên hàng đầu**: 1-2 việc cần làm NGAY trong tuần tới.
 
-QUAN TRỌNG: Sử dụng **in đậm** cho tiêu đề và tên học sinh. Dùng emoji phù hợp. Không dùng heading Markdown (##, ###). Phân tích phải dựa trên dữ liệu thực tế.
+QUAN TRỌNG: Trả về văn bản thuần (KHÔNG dùng JSON). Sử dụng **in đậm** cho tiêu đề và tên học sinh. Dùng emoji phù hợp. Không dùng heading Markdown (##, ###). Phân tích phải dựa trên dữ liệu thực tế.
 `;
 
-        const result = await model.generateContent(prompt);
-        const text = result.response.text();
+        // Dùng getGeminiModel trực tiếp (không dùng callGeminiWithRetry vì output là text, không phải JSON)
+        const model = getGeminiModel("gemini-2.5-flash");
+        let text = "";
+        
+        // Retry logic cho rate limit
+        for (let attempt = 0; attempt < 4; attempt++) {
+            try {
+                const result = await model.generateContent(prompt);
+                text = result.response.text();
+                break;
+            } catch (err: any) {
+                const isOverloaded = err.status === 429 || err.status === 503 || err.message?.includes("429") || err.message?.includes("503");
+                if (isOverloaded && attempt < 3) {
+                    const waitTime = Math.pow(2, attempt) * 2000 + 1000;
+                    console.log(`[ClassAIReport] Rate limit hit. Retrying in ${waitTime}ms (attempt ${attempt + 1}/3)...`);
+                    await new Promise(r => setTimeout(r, waitTime));
+                    continue;
+                }
+                if (isOverloaded) {
+                    return { data: null, error: "AI hiện đang quá tải. Vui lòng thử lại sau 1-2 phút." };
+                }
+                throw err;
+            }
+        }
+        
+        if (!text) {
+            return { data: null, error: "Không nhận được phản hồi từ AI." };
+        }
+
+        // Lưu vào DB nếu có classId
+        if (classId) {
+            try {
+                const adminSupabase = createAdminClient();
+                
+                // Lấy teacher_id từ class
+                const { data: classData } = await adminSupabase
+                    .from("classes")
+                    .select("teacher_id")
+                    .eq("id", classId)
+                    .single();
+
+                await adminSupabase
+                    .from("class_ai_reports")
+                    .upsert({
+                        class_id: classId,
+                        teacher_id: classData?.teacher_id || null,
+                        report_text: text,
+                        student_count: summary.totalStudents || 0,
+                        class_avg: summary.classAvg10 || 0,
+                        generated_at: new Date().toISOString(),
+                    }, { onConflict: "class_id" });
+            } catch (saveErr) {
+                console.error("[ClassAIReport] Failed to save to DB:", saveErr);
+                // Vẫn trả về text dù lưu DB lỗi
+            }
+        }
+        
         return { data: text, error: null };
     } catch (error: any) {
         console.error("Error generateClassAIReport:", error);
+        return { data: null, error: error.message };
+    }
+}
+
+// =====================================================
+// LOAD BÁO CÁO AI ĐÃ LƯU TỪ DB (không cần gọi AI lại)
+// =====================================================
+export async function loadSavedAIReport(classId: string) {
+    try {
+        const adminSupabase = createAdminClient();
+        const { data, error } = await adminSupabase
+            .from("class_ai_reports")
+            .select("*")
+            .eq("class_id", classId)
+            .single();
+
+        if (error && error.code !== "PGRST116") throw error; // PGRST116 = not found
+        return { data: data || null, error: null };
+    } catch (error: any) {
+        console.error("Error loadSavedAIReport:", error);
         return { data: null, error: error.message };
     }
 }

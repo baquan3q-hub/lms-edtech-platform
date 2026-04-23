@@ -1,0 +1,8 @@
+﻿app/(dashboard)/parent/ParentDashboardClient.tsx(411,81): error TS7006: Parameter 'p' implicitly has an 'any' type.
+app/(dashboard)/parent/ParentDashboardClient.tsx(425,122): error TS2322: Type '{ value: number; className: string; indicatorClassName: string; }' is not assignable to type 'IntrinsicAttributes & ProgressProps'.
+  Property 'indicatorClassName' does not exist on type 'IntrinsicAttributes & ProgressProps'.
+app/(dashboard)/teacher/behavior/TeacherBehaviorClient.tsx(151,54): error TS2322: Type '(value: number) => [string, string]' is not assignable to type 'Formatter<ValueType, NameType> & ((value: ValueType, name: NameType, item: TooltipPayloadEntry, index: number, payload: TooltipPayload) => ReactNode | [...])'.
+  Type '(value: number) => [string, string]' is not assignable to type 'Formatter<ValueType, NameType>'.
+    Types of parameters 'value' and 'value' are incompatible.
+      Type 'ValueType | undefined' is not assignable to type 'number'.
+        Type 'undefined' is not assignable to type 'number'.

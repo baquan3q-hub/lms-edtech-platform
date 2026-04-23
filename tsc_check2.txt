@@ -1,0 +1,3 @@
+﻿app/(dashboard)/parent/ParentDashboardClient.tsx(411,81): error TS7006: Parameter 'p' implicitly has an 'any' type.
+app/(dashboard)/parent/ParentDashboardClient.tsx(425,122): error TS2322: Type '{ value: number; className: string; indicatorClassName: string; }' is not assignable to type 'IntrinsicAttributes & ProgressProps'.
+  Property 'indicatorClassName' does not exist on type 'IntrinsicAttributes & ProgressProps'.

@@ -13,7 +13,6 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "E-Learning Platform",
   description: "Nền tảng học trực tuyến thông minh",
-  manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",

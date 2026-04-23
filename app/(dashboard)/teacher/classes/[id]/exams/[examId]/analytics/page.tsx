@@ -207,6 +207,7 @@ export default async function ExamAnalyticsPage({ params }: { params: Promise<{ 
                     classId={classId}
                     existingAnalysis={classAnalysis}
                     totalSubmissions={submissions?.length || 0}
+                    submissions={submissions || []}
                 />
 
                 {/* TAB 3: Individual Student Analysis */}

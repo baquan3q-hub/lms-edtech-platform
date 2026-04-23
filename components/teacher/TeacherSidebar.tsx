@@ -88,7 +88,7 @@ export default function TeacherSidebar({ userName = "Giáo viên", userEmail = "
             </div>
 
             {/* Navigation options */}
-            <nav className="flex-1 px-4 py-4 space-y-6 overflow-y-auto overflow-x-hidden">
+            <nav className="flex-1 px-4 py-4 space-y-6 overflow-y-auto overflow-x-hidden [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-slate-700/30 hover:[&::-webkit-scrollbar-thumb]:bg-slate-600/50 [&::-webkit-scrollbar-thumb]:rounded-full">
                 {menuGroups.map((group, groupIdx) => (
                     <div key={groupIdx} className="space-y-1">
                         {!isCollapsed && (

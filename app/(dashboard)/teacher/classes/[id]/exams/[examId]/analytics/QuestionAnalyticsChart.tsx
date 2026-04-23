@@ -75,7 +75,7 @@ export default function QuestionAnalyticsChart({ data }: QuestionAnalyticsChartP
             </CardHeader>
             <CardContent className="p-6">
                 <div className="h-[350px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
                         <BarChart
                             data={chartData}
                             margin={{ top: 10, right: 30, left: 0, bottom: 20 }}

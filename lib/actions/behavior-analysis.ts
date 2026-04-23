@@ -504,8 +504,486 @@ async function createBehaviorAlert(
 }
 
 // ============================================================
+// Teacher Dashboard — Tổng hợp Hành vi học tập toàn lớp
+// ============================================================
+
+/**
+ * Lấy tổng quan hành vi lớp: stats, biểu đồ, cảnh báo, chi tiết HS
+ * Dùng cho trang /teacher/behavior
+ */
+export async function fetchTeacherClassBehaviorOverview(classId: string) {
+    try {
+        const supabase = createAdminClient();
+
+        // 1. Lấy danh sách HS enrolled
+        const { data: enrollments } = await supabase
+            .from("enrollments")
+            .select("student_id, student:users!student_id(id, full_name, avatar_url, email)")
+            .eq("class_id", classId)
+            .eq("status", "active");
+
+        if (!enrollments || enrollments.length === 0) {
+            return { data: null, error: null };
+        }
+
+        const studentIds = enrollments.map((e: any) => e.student_id);
+
+        // 2. Lấy behavior scores (mới nhất per student)
+        const { data: allScores } = await supabase
+            .from("student_behavior_scores")
+            .select("*")
+            .eq("class_id", classId)
+            .in("student_id", studentIds)
+            .order("updated_at", { ascending: false });
+
+        const scoreMap = new Map<string, any>();
+        (allScores || []).forEach((s: any) => {
+            if (!scoreMap.has(s.student_id)) scoreMap.set(s.student_id, s);
+        });
+
+        // 3. Lấy alerts chưa resolved
+        const { data: unresolvedAlerts } = await supabase
+            .from("behavior_alerts")
+            .select("*")
+            .eq("class_id", classId)
+            .in("student_id", studentIds)
+            .eq("is_resolved", false)
+            .order("created_at", { ascending: false })
+            .limit(20);
+
+        // 4. Lấy lịch sử bài làm (exam_submissions + submissions)
+        const [{ data: examSubs }, { data: assignSubs }] = await Promise.all([
+            supabase
+                .from("exam_submissions")
+                .select("id, student_id, score, submitted_at, time_spent, exam:exams(id, title, total_points, class_id)")
+                .in("student_id", studentIds)
+                .not("score", "is", null)
+                .order("submitted_at", { ascending: false })
+                .limit(200),
+            supabase
+                .from("submissions")
+                .select("id, student_id, score, submitted_at, assignment:assignments(id, title, type, class_id)")
+                .in("student_id", studentIds)
+                .not("score", "is", null)
+                .order("submitted_at", { ascending: false })
+                .limit(200),
+        ]);
+
+        // Filter theo class_id
+        const classExamSubs = (examSubs || []).filter((s: any) => {
+            const exam = Array.isArray(s.exam) ? s.exam[0] : s.exam;
+            return exam?.class_id === classId;
+        });
+        const classAssignSubs = (assignSubs || []).filter((s: any) => {
+            const assignment = Array.isArray(s.assignment) ? s.assignment[0] : s.assignment;
+            return assignment?.class_id === classId;
+        });
+
+        // 5. Lấy activity logs cho metrics per submission
+        const { data: activityLogs } = await supabase
+            .from("student_activity_logs")
+            .select("student_id, context_type, context_id, activity_type, metadata, created_at")
+            .eq("class_id", classId)
+            .in("student_id", studentIds)
+            .order("created_at", { ascending: false })
+            .limit(500);
+
+        // === OVERVIEW STATS ===
+        const scores = Array.from(scoreMap.values());
+        const highRiskCount = scores.filter((s: any) => s.risk_level === "high_risk").length;
+        const warningCount = scores.filter((s: any) => s.risk_level === "warning").length;
+        const normalCount = scores.filter((s: any) => s.risk_level === "normal").length;
+        const noDataCount = studentIds.length - scores.length;
+
+        const gamingScores = scores.map((s: any) => s.gaming_score || 0);
+        const avgGamingScore = gamingScores.length > 0
+            ? Number((gamingScores.reduce((a: number, b: number) => a + b, 0) / gamingScores.length).toFixed(2))
+            : 0;
+
+        // Metrics trung bình lớp
+        const avgTabSwitch = scores.length > 0
+            ? Number((scores.reduce((a: number, s: any) => a + (s.tab_switch_count || 0), 0) / scores.length).toFixed(1))
+            : 0;
+        const avgRapidGuess = scores.length > 0
+            ? Number((scores.reduce((a: number, s: any) => a + (s.rapid_guess_count || 0), 0) / scores.length).toFixed(1))
+            : 0;
+        const avgAnswerSpeed = scores.length > 0
+            ? Math.round(scores.reduce((a: number, s: any) => a + (s.avg_answer_speed_ms || 0), 0) / scores.length)
+            : 0;
+
+        const overview = {
+            totalStudents: studentIds.length,
+            highRiskCount,
+            warningCount,
+            normalCount,
+            noDataCount,
+            avgGamingScore,
+            avgTabSwitch,
+            avgRapidGuess,
+            avgAnswerSpeedMs: avgAnswerSpeed,
+            unresolvedAlertCount: (unresolvedAlerts || []).length,
+        };
+
+        // === PIE CHART: Phân bổ risk ===
+        const riskDistribution = [
+            { name: "Bình thường", value: normalCount, fill: "#10b981" },
+            { name: "Cần theo dõi", value: warningCount, fill: "#f59e0b" },
+            { name: "Nguy cơ cao", value: highRiskCount, fill: "#ef4444" },
+            { name: "Chưa có dữ liệu", value: noDataCount, fill: "#cbd5e1" },
+        ].filter(d => d.value > 0);
+
+        // === CẢNH BÁO TỨC THÌ — Rule-based ===
+        const immediateAlerts: any[] = [];
+        scores.forEach((s: any) => {
+            const studentEnrollment = enrollments.find((e: any) => e.student_id === s.student_id);
+            const studentData = studentEnrollment
+                ? (Array.isArray(studentEnrollment.student) ? studentEnrollment.student[0] : studentEnrollment.student)
+                : null;
+            const name = studentData?.full_name || "HS";
+
+            // Rule 1: Gaming score cao
+            if (s.gaming_score >= 0.7) {
+                immediateAlerts.push({
+                    student_id: s.student_id, student_name: name,
+                    type: "gaming_high", severity: "high",
+                    message: `Điểm nghi ngờ gian lận: ${(s.gaming_score * 100).toFixed(0)}%`,
+                    icon: "🔴",
+                });
+            }
+            // Rule 2: Đoán bừa nhiều
+            if (s.rapid_guess_count >= 5) {
+                immediateAlerts.push({
+                    student_id: s.student_id, student_name: name,
+                    type: "rapid_guess", severity: s.rapid_guess_count >= 10 ? "high" : "medium",
+                    message: `Đoán bừa ${s.rapid_guess_count} câu (< 3s/câu)`,
+                    icon: "🟠",
+                });
+            }
+            // Rule 3: Chuyển tab nhiều
+            if (s.tab_switch_count >= 8) {
+                immediateAlerts.push({
+                    student_id: s.student_id, student_name: name,
+                    type: "tab_switch", severity: s.tab_switch_count >= 15 ? "high" : "medium",
+                    message: `Chuyển tab ${s.tab_switch_count} lần khi làm bài`,
+                    icon: "🟠",
+                });
+            }
+            // Rule 4: Idle cao
+            const totalTime = (s.total_active_time_s || 0) + (s.total_idle_time_s || 0);
+            if (totalTime > 0 && (s.total_idle_time_s || 0) / totalTime > 0.4) {
+                immediateAlerts.push({
+                    student_id: s.student_id, student_name: name,
+                    type: "high_idle", severity: "low",
+                    message: `Thời gian rảnh tay chiếm ${Math.round(((s.total_idle_time_s || 0) / totalTime) * 100)}%`,
+                    icon: "🟡",
+                });
+            }
+            // Rule 5: Điểm giảm sút
+            if (s.score_trend === "declining" && (s.avg_score_recent || 0) < 50) {
+                immediateAlerts.push({
+                    student_id: s.student_id, student_name: name,
+                    type: "score_decline", severity: "medium",
+                    message: `Điểm giảm sút — TB gần đây: ${s.avg_score_recent}%`,
+                    icon: "🟠",
+                });
+            }
+            // Rule 6: Điểm bất thường
+            if (s.anomaly_detected) {
+                immediateAlerts.push({
+                    student_id: s.student_id, student_name: name,
+                    type: "anomaly", severity: "high",
+                    message: `Phát hiện bất thường về điểm số`,
+                    icon: "🔴",
+                });
+            }
+            // Rule 7: Làm bài quá nhanh
+            if (s.avg_answer_speed_ms > 0 && s.avg_answer_speed_ms < 2000) {
+                immediateAlerts.push({
+                    student_id: s.student_id, student_name: name,
+                    type: "too_fast", severity: "medium",
+                    message: `Tốc độ trả lời quá nhanh: ${(s.avg_answer_speed_ms / 1000).toFixed(1)}s/câu`,
+                    icon: "🟠",
+                });
+            }
+        });
+
+        // Sort alerts: high → medium → low
+        const severityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+        immediateAlerts.sort((a, b) => (severityOrder[a.severity] ?? 3) - (severityOrder[b.severity] ?? 3));
+
+        // === CHI TIẾT TỪNG HS ===
+        // Gom submission history per student
+        const submissionHistoryMap = new Map<string, any[]>();
+        classExamSubs.forEach((s: any) => {
+            const exam = Array.isArray(s.exam) ? s.exam[0] : s.exam;
+            const list = submissionHistoryMap.get(s.student_id) || [];
+            list.push({
+                id: s.id, type: "exam", title: exam?.title || "Kiểm tra",
+                score: Number(s.score), total: exam?.total_points || 10,
+                percentage: exam?.total_points ? Math.round((Number(s.score) / exam.total_points) * 100) : 0,
+                submitted_at: s.submitted_at,
+                time_spent: s.time_spent || null,
+            });
+            submissionHistoryMap.set(s.student_id, list);
+        });
+        classAssignSubs.forEach((s: any) => {
+            const assignment = Array.isArray(s.assignment) ? s.assignment[0] : s.assignment;
+            const list = submissionHistoryMap.get(s.student_id) || [];
+            list.push({
+                id: s.id, type: assignment?.type || "homework", title: assignment?.title || "Bài tập",
+                score: Number(s.score), total: 10,
+                percentage: Math.round(Number(s.score) * 10),
+                submitted_at: s.submitted_at,
+                time_spent: null,
+            });
+            submissionHistoryMap.set(s.student_id, list);
+        });
+
+        // Gom activity logs per student
+        const logsMap = new Map<string, any[]>();
+        (activityLogs || []).forEach((l: any) => {
+            const list = logsMap.get(l.student_id) || [];
+            list.push(l);
+            logsMap.set(l.student_id, list);
+        });
+
+        const students = enrollments.map((e: any) => {
+            const studentData = Array.isArray(e.student) ? e.student[0] : e.student;
+            const behavior = scoreMap.get(e.student_id);
+            const submissions = (submissionHistoryMap.get(e.student_id) || [])
+                .sort((a: any, b: any) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime());
+            const studentAlerts = (unresolvedAlerts || []).filter((a: any) => a.student_id === e.student_id);
+            const logs = logsMap.get(e.student_id) || [];
+
+            // Tính metrics per student (từ logs)
+            const tabSwitchLogs = logs.filter((l: any) => l.activity_type === "tab_switch");
+            const rapidGuessLogs = logs.filter((l: any) => l.metadata?.is_rapid_guess === true);
+
+            return {
+                student_id: e.student_id,
+                student_name: studentData?.full_name || "N/A",
+                avatar_url: studentData?.avatar_url,
+                email: studentData?.email,
+                behavior: behavior ? {
+                    gaming_score: behavior.gaming_score,
+                    risk_level: behavior.risk_level,
+                    avg_answer_speed_ms: behavior.avg_answer_speed_ms,
+                    tab_switch_count: behavior.tab_switch_count,
+                    rapid_guess_count: behavior.rapid_guess_count,
+                    total_active_time_s: behavior.total_active_time_s,
+                    total_idle_time_s: behavior.total_idle_time_s,
+                    score_trend: behavior.score_trend,
+                    avg_score_recent: behavior.avg_score_recent,
+                    anomaly_detected: behavior.anomaly_detected,
+                    ai_analysis: behavior.ai_analysis_json,
+                    updated_at: behavior.updated_at,
+                } : null,
+                submissions,
+                alerts: studentAlerts,
+                total_tab_switches: tabSwitchLogs.length,
+                total_rapid_guesses: rapidGuessLogs.length,
+            };
+        });
+
+        // Sort: high_risk → warning → normal → no data
+        students.sort((a: any, b: any) => {
+            const riskOrder: Record<string, number> = { high_risk: 0, warning: 1, normal: 2 };
+            const aRisk = a.behavior?.risk_level ? riskOrder[a.behavior.risk_level] ?? 3 : 3;
+            const bRisk = b.behavior?.risk_level ? riskOrder[b.behavior.risk_level] ?? 3 : 3;
+            if (aRisk !== bRisk) return aRisk - bRisk;
+            return (b.behavior?.gaming_score || 0) - (a.behavior?.gaming_score || 0);
+        });
+
+        // === BAR CHART: So sánh metrics HS (top 15) ===
+        const barChartData = students.slice(0, 15).map((s: any) => ({
+            name: (s.student_name || "").split(" ").slice(-1)[0] || "HS", // Lấy tên cuối
+            fullName: s.student_name,
+            gaming: Math.round((s.behavior?.gaming_score || 0) * 100),
+            tabSwitch: s.behavior?.tab_switch_count || 0,
+            rapidGuess: s.behavior?.rapid_guess_count || 0,
+            avgScore: s.behavior?.avg_score_recent || 0,
+        }));
+
+        return {
+            data: {
+                overview,
+                riskDistribution,
+                immediateAlerts,
+                barChartData,
+                students,
+                dbAlerts: unresolvedAlerts || [],
+            },
+            error: null,
+        };
+    } catch (error: any) {
+        console.error("Error fetchTeacherClassBehaviorOverview:", error);
+        return { data: null, error: error.message };
+    }
+}
+
+// ============================================================
 // API cho Teacher dashboard
 // ============================================================
+
+/**
+ * Lấy lịch sử bài làm chi tiết của 1 HS trong 1 lớp
+ * Kèm behavior metrics per submission (tab switch, rapid guess, speed, idle)
+ */
+export async function fetchStudentBehaviorHistory(studentId: string, classId: string) {
+    try {
+        const supabase = createAdminClient();
+
+        // 1. Lấy tất cả exam submissions
+        const { data: examSubs } = await supabase
+            .from("exam_submissions")
+            .select("id, student_id, score, submitted_at, time_spent, answers, exam:exams(id, title, total_points, class_id, questions)")
+            .eq("student_id", studentId)
+            .not("score", "is", null)
+            .order("submitted_at", { ascending: false })
+            .limit(30);
+
+        // 2. Lấy tất cả assignment submissions
+        const { data: assignSubs } = await supabase
+            .from("submissions")
+            .select("id, student_id, score, submitted_at, assignment:assignments(id, title, type, class_id)")
+            .eq("student_id", studentId)
+            .not("score", "is", null)
+            .order("submitted_at", { ascending: false })
+            .limit(30);
+
+        // Filter theo class_id
+        const classExamSubs = (examSubs || []).filter((s: any) => {
+            const exam = Array.isArray(s.exam) ? s.exam[0] : s.exam;
+            return exam?.class_id === classId;
+        });
+        const classAssignSubs = (assignSubs || []).filter((s: any) => {
+            const assignment = Array.isArray(s.assignment) ? s.assignment[0] : s.assignment;
+            return assignment?.class_id === classId;
+        });
+
+        // 3. Lấy activity logs cho student trong class này
+        const { data: allLogs } = await supabase
+            .from("student_activity_logs")
+            .select("context_type, context_id, activity_type, metadata, created_at")
+            .eq("student_id", studentId)
+            .eq("class_id", classId)
+            .order("created_at", { ascending: false })
+            .limit(500);
+
+        // Group logs by context_id
+        const logsByContext = new Map<string, any[]>();
+        (allLogs || []).forEach((l: any) => {
+            const key = l.context_id;
+            if (!key) return;
+            const list = logsByContext.get(key) || [];
+            list.push(l);
+            logsByContext.set(key, list);
+        });
+
+        // 4. Build detailed submissions list
+        const submissions: any[] = [];
+
+        classExamSubs.forEach((s: any) => {
+            const exam = Array.isArray(s.exam) ? s.exam[0] : s.exam;
+            const totalPoints = exam?.total_points || 10;
+            const percentage = Math.round((Number(s.score) / totalPoints) * 100);
+
+            // Get behavior metrics from logs for this exam
+            const contextLogs = logsByContext.get(exam?.id) || [];
+            const tabSwitches = contextLogs.filter((l: any) => l.activity_type === "tab_switch").length;
+            const rapidGuesses = contextLogs.filter((l: any) => l.metadata?.is_rapid_guess === true).length;
+            const answerLogs = contextLogs.filter((l: any) => l.activity_type === "quiz_answer");
+            const answerSpeeds = answerLogs.map((l: any) => l.metadata?.answer_speed_ms).filter((s: any) => typeof s === "number");
+            const avgSpeed = answerSpeeds.length > 0 ? Math.round(answerSpeeds.reduce((a: number, b: number) => a + b, 0) / answerSpeeds.length) : 0;
+            const idleLogs = contextLogs.filter((l: any) => l.activity_type === "idle_end");
+            const totalIdle = idleLogs.reduce((acc: number, l: any) => acc + (l.metadata?.idle_duration_s || 0), 0);
+            const warnings = contextLogs.filter((l: any) => l.activity_type === "cheat_warning").length;
+            const totalQuestions = (exam?.questions || []).length;
+
+            submissions.push({
+                id: s.id,
+                type: "exam",
+                title: exam?.title || "Bài kiểm tra",
+                score: Number(s.score),
+                total: totalPoints,
+                percentage,
+                submitted_at: s.submitted_at,
+                time_spent: s.time_spent || null,
+                total_questions: totalQuestions,
+                behavior: {
+                    tab_switches: tabSwitches,
+                    rapid_guesses: rapidGuesses,
+                    avg_speed_ms: avgSpeed,
+                    total_idle_s: totalIdle,
+                    warnings,
+                    has_data: contextLogs.length > 0,
+                },
+            });
+        });
+
+        classAssignSubs.forEach((s: any) => {
+            const assignment = Array.isArray(s.assignment) ? s.assignment[0] : s.assignment;
+            submissions.push({
+                id: s.id,
+                type: assignment?.type || "homework",
+                title: assignment?.title || "Bài tập",
+                score: Number(s.score),
+                total: 10,
+                percentage: Math.round(Number(s.score) * 10),
+                submitted_at: s.submitted_at,
+                time_spent: null,
+                total_questions: 0,
+                behavior: { tab_switches: 0, rapid_guesses: 0, avg_speed_ms: 0, total_idle_s: 0, warnings: 0, has_data: false },
+            });
+        });
+
+        // Sort by date
+        submissions.sort((a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime());
+
+        // 5. Trend data (cho sparkline chart — chronological order)
+        const trendData = [...submissions]
+            .reverse()
+            .map(s => ({
+                date: new Date(s.submitted_at).toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" }),
+                score: s.percentage,
+                title: s.title,
+                type: s.type,
+            }));
+
+        // 6. Summary stats
+        const examSubmissions = submissions.filter(s => s.type === "exam");
+        const behaviorSubs = examSubmissions.filter(s => s.behavior.has_data);
+        const totalTabSwitches = behaviorSubs.reduce((a, s) => a + s.behavior.tab_switches, 0);
+        const totalRapidGuesses = behaviorSubs.reduce((a, s) => a + s.behavior.rapid_guesses, 0);
+        const avgSpeedAll = behaviorSubs.length > 0
+            ? Math.round(behaviorSubs.reduce((a, s) => a + s.behavior.avg_speed_ms, 0) / behaviorSubs.length)
+            : 0;
+        const avgPercentage = submissions.length > 0
+            ? Math.round(submissions.reduce((a, s) => a + s.percentage, 0) / submissions.length)
+            : 0;
+
+        return {
+            data: {
+                submissions,
+                trendData,
+                summary: {
+                    totalSubmissions: submissions.length,
+                    totalExams: examSubmissions.length,
+                    avgPercentage,
+                    totalTabSwitches,
+                    totalRapidGuesses,
+                    avgSpeedMs: avgSpeedAll,
+                    sessionsWithData: behaviorSubs.length,
+                },
+            },
+            error: null,
+        };
+    } catch (error: any) {
+        console.error("Error fetchStudentBehaviorHistory:", error);
+        return { data: null, error: error.message };
+    }
+}
+
 
 /**
  * Lấy behavior scores cho toàn bộ học sinh trong lớp
