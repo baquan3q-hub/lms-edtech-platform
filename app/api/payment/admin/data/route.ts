@@ -84,7 +84,12 @@ export async function GET(req: NextRequest) {
       `)
 
   if (period !== 'all') {
-      allInvoicesQuery = allInvoicesQuery.gte('due_date', startStr).lte('due_date', endStr)
+      const orConditions = [
+        `and(due_date.gte.${startStr},due_date.lte.${endStr})`,
+        `and(paid_at.gte.${startDateIso},paid_at.lte.${endDateIso})`,
+        `status.in.(unpaid,overdue,pending)`
+      ]
+      allInvoicesQuery = allInvoicesQuery.or(orConditions.join(','))
       paymentsQuery = paymentsQuery.gte('created_at', startDateIso).lte('created_at', endDateIso)
   }
 
@@ -95,10 +100,22 @@ export async function GET(req: NextRequest) {
       .select('id, name')
       .order('name')
 
-  const [invoicesRes, paymentRes, classRes] = await Promise.all([
+  // Fee Plans query — danh sách đợt học phí admin đã tạo
+  const feePlansPromise = adminClient.from('fee_plans')
+      .select(`
+        *,
+        classes ( name ),
+        users!created_by ( full_name ),
+        invoices ( id, status, amount, student_id, users!student_id(full_name), invoice_number )
+      `)
+      .order('created_at', { ascending: false })
+      .limit(200)
+
+  const [invoicesRes, paymentRes, classRes, feePlansRes] = await Promise.all([
     allInvoicesPromise,
     paymentsPromise,
     classPromise,
+    feePlansPromise,
   ])
 
   // Process KPIs in memory since we already fetched invoices for the month
@@ -129,6 +146,21 @@ export async function GET(req: NextRequest) {
       }
   })
 
+  // Tính thống kê cho từng fee_plan (sử dụng nested invoices)
+  const feePlansList = (feePlansRes.data ?? []).map(fp => {
+    const fpInvoices = fp.invoices || []
+    const paidInvs = fpInvoices.filter((inv: any) => inv.status === 'paid' || inv.status === 'succeeded')
+    return {
+      ...fp,
+      invoice_total: fpInvoices.length,
+      invoice_paid: paidInvs.length,
+      collected_amount: paidInvs.reduce((sum: number, inv: any) => sum + (inv.amount || 0), 0),
+      can_edit: fpInvoices.every((inv: any) => inv.status === 'unpaid' || inv.status === 'overdue'),
+      // Keep invoices array for detailed view on frontend
+      invoices: fpInvoices
+    }
+  })
+
   return NextResponse.json({
     kpis: {
       revenue: monthRevenue,
@@ -141,5 +173,6 @@ export async function GET(req: NextRequest) {
     invoices: invoicesList,
     payments: paymentRes.data ?? [],
     classes: classRes.data ?? [],
+    feePlans: feePlansList,
   })
 }

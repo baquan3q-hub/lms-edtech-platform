@@ -6,7 +6,7 @@ import { vi } from 'date-fns/locale'
 import {
   DollarSign, Clock, CheckCircle2, AlertTriangle, Plus,
   Loader2, FileText, Users, CreditCard, Banknote,
-  Send, X, BarChart3, CalendarDays
+  Send, X, BarChart3, CalendarDays, Pencil, Trash2, Eye, Bell
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend
@@ -60,8 +60,32 @@ interface ClassOption {
   name: string
 }
 
+interface FeePlanRow {
+  id: string
+  class_id: string
+  name: string
+  amount: number
+  due_date: string
+  description: string | null
+  created_by: string
+  created_at: string
+  classes: { name: string } | null
+  users: { full_name: string } | null
+  invoice_total: number
+  invoice_paid: number
+  collected_amount: number
+  can_edit: boolean
+  invoices?: {
+    id: string
+    status: string
+    amount: number
+    invoice_number: string
+    users: { full_name: string } | null
+  }[]
+}
+
 export default function AdminFinancePage() {
-  const [activeTab, setActiveTab] = useState<'class' | 'student' | 'transactions'>('student')
+  const [activeTab, setActiveTab] = useState<'feeplans' | 'student' | 'transactions'>('student')
   const [period, setPeriod] = useState<'month' | 'quarter' | 'year' | 'all'>('month')
   const [selectedMonth, setSelectedMonth] = useState<string>(() => {
     const d = new Date()
@@ -92,6 +116,15 @@ export default function AdminFinancePage() {
   const [cashNote, setCashNote] = useState('')
   const [cashLoading, setCashLoading] = useState(false)
 
+  // Fee Plans management
+  const [feePlans, setFeePlans] = useState<FeePlanRow[]>([])
+  const [editingFee, setEditingFee] = useState<FeePlanRow | null>(null)
+  const [editForm, setEditForm] = useState({ name: '', amount: '', dueDate: '', description: '' })
+  const [editLoading, setEditLoading] = useState(false)
+  const [deletingFee, setDeletingFee] = useState<FeePlanRow | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [detailsFee, setDetailsFee] = useState<FeePlanRow | null>(null)
+
   // ===========================
   // Fetch KPIs & Data
   // ===========================
@@ -116,6 +149,7 @@ export default function AdminFinancePage() {
       setInvoices((data.invoices as InvoiceRow[]) ?? [])
       setPayments((data.payments as PaymentRow[]) ?? [])
       setClasses((data.classes as ClassOption[]) ?? [])
+      setFeePlans((data.feePlans as FeePlanRow[]) ?? [])
     } catch (error) {
       console.error('Error fetching finance data:', error)
     }
@@ -196,6 +230,78 @@ export default function AdminFinancePage() {
     setCashNote('')
     setCashLoading(false)
     fetchData()
+  }
+
+  // ===========================
+  // Cập nhật đợt học phí
+  // ===========================
+  const openEditFee = (fp: FeePlanRow) => {
+    setEditingFee(fp)
+    setEditForm({
+      name: fp.name,
+      amount: String(fp.amount),
+      dueDate: fp.due_date,
+      description: fp.description || '',
+    })
+  }
+
+  const handleUpdateFee = async () => {
+    if (!editingFee) return
+    setEditLoading(true)
+    try {
+      const res = await fetch('/api/payment/admin/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'update_fee',
+          feePlanId: editingFee.id,
+          name: editForm.name || undefined,
+          amount: editForm.amount ? parseInt(editForm.amount) : undefined,
+          dueDate: editForm.dueDate || undefined,
+          description: editForm.description,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Có lỗi xảy ra')
+      } else {
+        alert(`✅ ${data.message}`)
+        setEditingFee(null)
+        fetchData()
+      }
+    } catch {
+      alert('Lỗi kết nối server')
+    }
+    setEditLoading(false)
+  }
+
+  // ===========================
+  // Xóa đợt học phí
+  // ===========================
+  const handleDeleteFee = async () => {
+    if (!deletingFee) return
+    setDeleteLoading(true)
+    try {
+      const res = await fetch('/api/payment/admin/actions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'delete_fee',
+          feePlanId: deletingFee.id,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        alert(data.error || 'Có lỗi xảy ra')
+      } else {
+        alert(`✅ ${data.message}`)
+        setDeletingFee(null)
+        fetchData()
+      }
+    } catch {
+      alert('Lỗi kết nối server')
+    }
+    setDeleteLoading(false)
   }
 
   // Status badge
@@ -344,6 +450,7 @@ export default function AdminFinancePage() {
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
         {[
           { key: 'student' as const, label: '👤 Theo học sinh', icon: Users },
+          { key: 'feeplans' as const, label: '📝 Đợt học phí', icon: FileText },
           { key: 'transactions' as const, label: '💳 Giao dịch', icon: CreditCard },
         ].map(tab => (
           <button
@@ -481,6 +588,92 @@ export default function AdminFinancePage() {
                   <tr>
                     <td colSpan={6} className="px-4 py-12 text-center text-gray-400">
                       Chưa có giao dịch nào
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ===== TAB: Đợt học phí ===== */}
+      {activeTab === 'feeplans' && (
+        <div className="bg-white border rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b">
+                <tr>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Tên đợt học phí</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Lớp</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-500">Số tiền</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Hạn đóng</th>
+                  <th className="text-center px-4 py-3 font-medium text-gray-500">Đã thu</th>
+                  <th className="text-right px-4 py-3 font-medium text-gray-500">Đã thu (VNĐ)</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Người tạo</th>
+                  <th className="text-left px-4 py-3 font-medium text-gray-500">Ngày tạo</th>
+                  <th className="text-center px-4 py-3 font-medium text-gray-500">Hành động</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {feePlans.map(fp => {
+                  const isFullyPaid = fp.invoice_total > 0 && fp.invoice_paid === fp.invoice_total
+                  const isOverdue = !isFullyPaid && new Date(fp.due_date) < new Date()
+                  return (
+                    <tr key={fp.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-medium">
+                        <div className="flex items-center gap-2">
+                          {fp.name}
+                          {isFullyPaid && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-700">✓ Đủ</span>}
+                          {isOverdue && <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-600">Quá hạn</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600">{fp.classes?.name ?? '—'}</td>
+                      <td className="px-4 py-3 text-right font-medium">{formatMoney(fp.amount)}</td>
+                      <td className="px-4 py-3 text-gray-600">{format(new Date(fp.due_date), 'dd/MM/yyyy')}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`font-bold ${fp.invoice_paid === fp.invoice_total && fp.invoice_total > 0 ? 'text-green-600' : 'text-gray-700'}`}>
+                          {fp.invoice_paid}/{fp.invoice_total}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right font-medium text-emerald-700">{formatMoney(fp.collected_amount)}</td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">{fp.users?.full_name ?? '—'}</td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">{format(new Date(fp.created_at), 'dd/MM/yyyy HH:mm')}</td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="flex justify-center gap-1.5">
+                          <button
+                            onClick={() => setDetailsFee(fp)}
+                            className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600 transition" title="Xem chi tiết"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          {fp.can_edit ? (
+                            <>
+                              <button
+                                onClick={() => openEditFee(fp)}
+                                className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600 transition" title="Chỉnh sửa"
+                              >
+                                <Pencil className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setDeletingFee(fp)}
+                                className="p-1.5 rounded-lg hover:bg-red-50 text-red-500 transition" title="Xóa"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </>
+                          ) : (
+                            <span className="text-[10px] text-gray-400 italic">Đã có thanh toán</span>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+                {feePlans.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-12 text-center text-gray-400">
+                      Chưa tạo đợt học phí nào
                     </td>
                   </tr>
                 )}
@@ -642,6 +835,211 @@ export default function AdminFinancePage() {
                 className="px-4 py-3 border border-gray-300 rounded-xl hover:bg-gray-50 transition"
               >
                 Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== DIALOG CHỈNH SỬA ĐỢT HỌC PHÍ ===== */}
+      {editingFee && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => !editLoading && setEditingFee(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full space-y-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Pencil className="w-5 h-5 text-blue-600" />
+                Chỉnh sửa đợt học phí
+              </h2>
+              <button onClick={() => setEditingFee(null)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="bg-blue-50 rounded-xl p-3 text-xs text-blue-700">
+              ⚠️ Thay đổi sẽ áp dụng cho tất cả hóa đơn chưa thanh toán trong đợt này.
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tên học phí</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                  className="w-full px-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Số tiền (VNĐ)</label>
+                <input
+                  type="number"
+                  value={editForm.amount}
+                  onChange={e => setEditForm({ ...editForm, amount: e.target.value })}
+                  className="w-full px-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500"
+                />
+                {editForm.amount && (
+                  <p className="text-sm text-blue-600 mt-1">{formatMoney(parseInt(editForm.amount) || 0)}</p>
+                )}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Hạn đóng</label>
+                <input
+                  type="date"
+                  value={editForm.dueDate}
+                  onChange={e => setEditForm({ ...editForm, dueDate: e.target.value })}
+                  className="w-full px-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
+                <textarea
+                  value={editForm.description}
+                  onChange={e => setEditForm({ ...editForm, description: e.target.value })}
+                  rows={2}
+                  className="w-full px-3 py-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 resize-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleUpdateFee}
+                disabled={editLoading}
+                className="flex-1 py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 disabled:opacity-50 transition flex items-center justify-center gap-2"
+              >
+                {editLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                {editLoading ? 'Đang lưu...' : 'Lưu thay đổi'}
+              </button>
+              <button
+                onClick={() => setEditingFee(null)}
+                disabled={editLoading}
+                className="px-4 py-3 border border-gray-300 rounded-xl hover:bg-gray-50 transition"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== DIALOG XÁC NHẬN XÓA ĐỢT HỌC PHÍ ===== */}
+      {deletingFee && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => !deleteLoading && setDeletingFee(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full space-y-5" onClick={e => e.stopPropagation()}>
+            <h2 className="text-xl font-bold flex items-center gap-2 text-red-600">
+              <Trash2 className="w-5 h-5" />
+              Xác nhận xóa đợt học phí
+            </h2>
+
+            <div className="bg-red-50 rounded-xl p-4 space-y-2">
+              <p className="text-sm font-medium text-red-800">Bạn có chắc chắn muốn xóa đợt học phí này?</p>
+              <div className="text-sm text-red-700 space-y-1">
+                <p>• <strong>{deletingFee.name}</strong></p>
+                <p>• Lớp: {deletingFee.classes?.name ?? '—'}</p>
+                <p>• Số tiền: {formatMoney(deletingFee.amount)}</p>
+                <p>• {deletingFee.invoice_total} hóa đơn sẽ bị hủy</p>
+              </div>
+              <p className="text-xs text-red-600 font-medium mt-2">⚠️ Hành động này không thể hoàn tác!</p>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={handleDeleteFee}
+                disabled={deleteLoading}
+                className="flex-1 py-3 bg-red-600 text-white rounded-xl font-medium hover:bg-red-700 disabled:opacity-50 transition flex items-center justify-center gap-2"
+              >
+                {deleteLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                {deleteLoading ? 'Đang xóa...' : 'Xóa vĩnh viễn'}
+              </button>
+              <button
+                onClick={() => setDeletingFee(null)}
+                disabled={deleteLoading}
+                className="px-4 py-3 border border-gray-300 rounded-xl hover:bg-gray-50 transition"
+              >
+                Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== DIALOG CHI TIẾT ĐỢT HỌC PHÍ ===== */}
+      {detailsFee && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setDetailsFee(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-3xl w-full max-h-[90vh] flex flex-col space-y-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between shrink-0">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <FileText className="w-5 h-5 text-emerald-600" />
+                Chi tiết: {detailsFee.name}
+              </h2>
+              <button onClick={() => setDetailsFee(null)} className="p-1 hover:bg-gray-100 rounded-lg">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4 shrink-0">
+              <div className="bg-gray-50 rounded-xl p-3">
+                <div className="text-xs text-gray-500 mb-1">Lớp</div>
+                <div className="font-bold">{detailsFee.classes?.name}</div>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3">
+                <div className="text-xs text-gray-500 mb-1">Hạn đóng</div>
+                <div className="font-bold">{format(new Date(detailsFee.due_date), 'dd/MM/yyyy')}</div>
+              </div>
+              <div className="bg-emerald-50 rounded-xl p-3">
+                <div className="text-xs text-emerald-600 mb-1">Đã thu / Tổng</div>
+                <div className="font-bold text-emerald-700">{detailsFee.invoice_paid} / {detailsFee.invoice_total}</div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-auto border rounded-xl">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 border-b sticky top-0 z-10">
+                  <tr>
+                    <th className="text-left px-4 py-3 font-medium text-gray-500">Mã HĐ</th>
+                    <th className="text-left px-4 py-3 font-medium text-gray-500">Học sinh</th>
+                    <th className="text-right px-4 py-3 font-medium text-gray-500">Số tiền</th>
+                    <th className="text-center px-4 py-3 font-medium text-gray-500">Trạng thái</th>
+                    <th className="text-center px-4 py-3 font-medium text-gray-500">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {detailsFee.invoices?.map(inv => (
+                    <tr key={inv.id} className="hover:bg-gray-50">
+                      <td className="px-4 py-3 font-mono text-xs">{inv.invoice_number}</td>
+                      <td className="px-4 py-3 font-medium">{inv.users?.full_name ?? '—'}</td>
+                      <td className="px-4 py-3 text-right font-medium">{formatMoney(inv.amount)}</td>
+                      <td className="px-4 py-3 text-center">{statusBadge(inv.status)}</td>
+                      <td className="px-4 py-3 text-center">
+                        {inv.status !== 'paid' && inv.status !== 'succeeded' ? (
+                          <button
+                            onClick={() => alert('Đã gửi thông báo nhắc nhở (Demo)')}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 text-orange-600 hover:bg-orange-100 rounded-lg text-xs font-medium transition"
+                          >
+                            <Bell className="w-3.5 h-3.5" />
+                            Nhắc nhở
+                          </button>
+                        ) : (
+                          <span className="text-xs text-gray-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {(!detailsFee.invoices || detailsFee.invoices.length === 0) && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-8 text-center text-gray-500">Không có hóa đơn nào</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            
+            <div className="shrink-0 flex justify-end">
+              <button
+                onClick={() => setDetailsFee(null)}
+                className="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition"
+              >
+                Đóng
               </button>
             </div>
           </div>

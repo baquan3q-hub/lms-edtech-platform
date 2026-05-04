@@ -31,8 +31,7 @@ export async function POST(req: NextRequest) {
                     .from("quiz_individual_analysis")
                     .update({
                         status: "sent",
-                        sent_at: new Date().toISOString(),
-                        deadline: deadline || analysis.deadline
+                        sent_at: new Date().toISOString()
                     })
                     .eq("id", analysisId);
 

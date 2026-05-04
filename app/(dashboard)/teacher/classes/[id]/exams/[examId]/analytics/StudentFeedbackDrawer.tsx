@@ -30,7 +30,6 @@ export default function StudentFeedbackDrawer({ open, onOpenChange, analysis, ex
 
     // Tab 1: Feedback
     const [feedback, setFeedback] = useState(analysis.teacher_edited_feedback || analysis.ai_feedback || "");
-    const [deadline, setDeadline] = useState(analysis.deadline ? analysis.deadline.split("T")[0] : "");
     const [tasks, setTasks] = useState<any[]>(analysis.teacher_edited_tasks || analysis.improvement_tasks || []);
 
     // Tab 3: Supplementary quiz
@@ -50,8 +49,7 @@ export default function StudentFeedbackDrawer({ open, onOpenChange, analysis, ex
         try {
             const res = await editAnalysis(analysis.id, {
                 feedback,
-                tasks,
-                deadline: deadline ? new Date(deadline).toISOString() : undefined
+                tasks
             });
             if (res.error) throw new Error(res.error);
             toast.success("Đã lưu chỉnh sửa!");
@@ -66,13 +64,12 @@ export default function StudentFeedbackDrawer({ open, onOpenChange, analysis, ex
     const handleSendFeedback = async () => {
         setIsSending(true);
         try {
-            await editAnalysis(analysis.id, { feedback, tasks, deadline: deadline ? new Date(deadline).toISOString() : undefined });
+            await editAnalysis(analysis.id, { feedback, tasks });
             const res = await fetch("/api/ai/send-feedback", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    analysisIds: [analysis.id],
-                    deadline: deadline ? new Date(deadline).toISOString() : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+                    analysisIds: [analysis.id]
                 })
             });
             const result = await res.json();
@@ -325,16 +322,7 @@ export default function StudentFeedbackDrawer({ open, onOpenChange, analysis, ex
                                     className="w-full min-h-[120px] p-3 border border-slate-200 rounded-xl text-sm resize-y focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
                                     placeholder="Nhận xét của AI hoặc tự viết..."
                                 />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-bold text-slate-800 mb-2">📅 Deadline</label>
-                                <input
-                                    type="date"
-                                    value={deadline}
-                                    onChange={(e) => setDeadline(e.target.value)}
-                                    className="w-full p-2.5 border border-slate-200 rounded-xl text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
-                                />
-                            </div>
+                        </div>
                         </div>
                     )}
 

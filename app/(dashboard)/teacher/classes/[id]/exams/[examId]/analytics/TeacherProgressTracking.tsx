@@ -121,8 +121,6 @@ export default function TeacherProgressTracking({ analyses }: TeacherProgressTra
                                     const studentQuizPct = studentQuizTotal > 0 ? Math.round((studentQuizScore / studentQuizTotal) * 100) : null;
 
                                     const allDone = doneCount === taskCount && taskCount > 0;
-                                    const deadline = a.deadline ? new Date(a.deadline) : null;
-                                    const isOverdue = deadline && deadline < new Date() && !allDone;
 
                                     return (
                                         <tr key={a.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
@@ -154,10 +152,6 @@ export default function TeacherProgressTracking({ analyses }: TeacherProgressTra
                                                 {allDone ? (
                                                     <Badge className="bg-emerald-50 text-emerald-700 border-none text-[10px]">
                                                         <CheckCircle2 className="w-3 h-3 mr-0.5" /> Hoàn thành
-                                                    </Badge>
-                                                ) : isOverdue ? (
-                                                    <Badge className="bg-red-50 text-red-700 border-none text-[10px]">
-                                                        <XCircle className="w-3 h-3 mr-0.5" /> Quá hạn
                                                     </Badge>
                                                 ) : (
                                                     <Badge className="bg-amber-50 text-amber-700 border-none text-[10px]">

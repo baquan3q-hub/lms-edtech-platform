@@ -151,9 +151,7 @@ export default function StudentFeedbackClient({ examId, classId, examTitle }: St
     const totalTasks = tasks.length;
     const progressPercent = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0;
 
-    const deadlineDate = feedback.deadline ? new Date(feedback.deadline) : null;
-    const isExpired = deadlineDate ? Date.now() > deadlineDate.getTime() : false;
-    const daysLeft = deadlineDate && !isExpired ? Math.max(0, Math.ceil((deadlineDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))) : null;
+    // Không còn gia hạn — HS có thể làm bài bất kỳ lúc nào
     const displayFeedback = feedback.teacher_edited_feedback || feedback.ai_feedback || "";
 
     return (
@@ -183,7 +181,7 @@ export default function StudentFeedbackClient({ examId, classId, examTitle }: St
                             {displayFeedback}
                         </ReactMarkdown>
                     </div>
-                    {feedback.knowledge_gaps && feedback.knowledge_gaps.length > 0 && (
+                    {feedback.knowledge_gaps && feedback.knowledge_gaps.length > 0 && (totalTasks === 0 || completedCount < totalTasks) && (
                         <div className="mt-4 pt-4 border-t border-slate-100">
                             <h4 className="text-xs font-bold text-amber-700 flex items-center gap-1.5 mb-2">
                                 <AlertTriangle className="w-3.5 h-3.5" /> Kiến thức cần cải thiện
@@ -215,13 +213,13 @@ export default function StudentFeedbackClient({ examId, classId, examTitle }: St
                     <CardContent className="p-5">
                         <div className="flex items-center justify-between mb-3">
                             <span className="text-sm font-bold text-slate-800">Hoàn thành: {completedCount}/{totalTasks} bài tập</span>
-                            {isExpired ? (
-                                <Badge className="text-[10px] bg-red-50 text-red-700 border-red-200">
-                                    <Clock className="w-3 h-3 mr-1" /> Đã hết hạn
+                            {completedCount === totalTasks ? (
+                                <Badge className="text-[10px] bg-emerald-50 text-emerald-700 border-emerald-200">
+                                    <CheckCircle2 className="w-3 h-3 mr-1" /> Đã hoàn thành tất cả
                                 </Badge>
-                            ) : daysLeft !== null && (
-                                <Badge className={`text-[10px] ${daysLeft <= 2 ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'} border-none`}>
-                                    <Clock className="w-3 h-3 mr-1" /> Còn {daysLeft} ngày
+                            ) : (
+                                <Badge className="text-[10px] bg-blue-50 text-blue-700 border-none">
+                                    <Clock className="w-3 h-3 mr-1" /> Không giới hạn thời gian
                                 </Badge>
                             )}
                         </div>
@@ -232,7 +230,7 @@ export default function StudentFeedbackClient({ examId, classId, examTitle }: St
             )}
 
             {/* Bài tập cải thiện */}
-            {totalTasks > 0 && !isExpired && (
+            {totalTasks > 0 && completedCount < totalTasks && (
                 <div>
                     <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4">
                         <BookOpen className="w-5 h-5 text-indigo-500" /> Bài tập cải thiện ({totalTasks})
@@ -433,7 +431,7 @@ export default function StudentFeedbackClient({ examId, classId, examTitle }: St
             )}
 
             {/* Bài tập bổ trợ (MCQ + Tự luận) */}
-            {supQuizzes.length > 0 && !isExpired && (
+            {supQuizzes.length > 0 && (
                 <div>
                     <h3 className="font-bold text-slate-800 flex items-center gap-2 mb-4">
                         <FileQuestion className="w-5 h-5 text-purple-500" /> Bài tập bổ trợ ({supQuizzes.length})

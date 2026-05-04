@@ -111,9 +111,9 @@ export default function TeacherClassStudentsClient({ classId, className, student
     };
 
     const getScore10Bg = (score: number) => {
-        if (score >= 8) return "bg-emerald-50 border-emerald-200";
-        if (score >= 6) return "bg-amber-50 border-amber-200";
-        return "bg-red-50 border-red-200";
+        if (score >= 8) return "bg-emerald-50 border-emerald-200 text-emerald-700";
+        if (score >= 6) return "bg-amber-50 border-amber-200 text-amber-700";
+        return "bg-red-50 border-red-200 text-red-700";
     };
 
     const exportExcel = (filter: string) => {
@@ -297,7 +297,7 @@ export default function TeacherClassStudentsClient({ classId, className, student
                                                     </div>
                                                 </td>
                                                 <td className="px-3 py-3 text-center">
-                                                    <Badge className={`text-xs font-black border ${getScore10Bg(s.avgScore10)}`}>{s.avgScore10}</Badge>
+                                                    <Badge variant="outline" className={`text-xs font-black border ${getScore10Bg(s.avgScore10)}`}>{s.avgScore10}</Badge>
                                                 </td>
                                                 <td className={`px-3 py-3 text-center font-semibold ${getScore10Color(s.exams.avg10)}`}>{s.exams.avg10}</td>
                                                 <td className={`px-3 py-3 text-center font-semibold ${getScore10Color(s.homework.avg10)}`}>{s.homework.avg10}</td>

@@ -79,10 +79,9 @@ export default function AIStudentAnalysis({ examId, classId, analyses, submissio
         if (approvedIds.length === 0) { toast.error("Chưa có nhận xét nào được duyệt."); return; }
         setIsSendingAll(true);
         try {
-            const deadline = new Date(); deadline.setDate(deadline.getDate() + 7);
             const res = await fetch("/api/ai/send-feedback", {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ analysisIds: approvedIds, deadline: deadline.toISOString() })
+                body: JSON.stringify({ analysisIds: approvedIds })
             });
             const result = await res.json();
             if (result.error) throw new Error(result.error);
@@ -94,10 +93,9 @@ export default function AIStudentAnalysis({ examId, classId, analyses, submissio
 
     const handleSendOne = async (analysisId: string) => {
         try {
-            const deadline = new Date(); deadline.setDate(deadline.getDate() + 7);
             const res = await fetch("/api/ai/send-feedback", {
                 method: "POST", headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ analysisIds: [analysisId], deadline: deadline.toISOString() })
+                body: JSON.stringify({ analysisIds: [analysisId] })
             });
             const result = await res.json();
             if (result.error) throw new Error(result.error);

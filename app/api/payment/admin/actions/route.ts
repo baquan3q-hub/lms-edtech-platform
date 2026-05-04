@@ -256,5 +256,92 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // ========== CẬP NHẬT ĐỢT HỌC PHÍ ==========
+  if (action === 'update_fee') {
+    try {
+      const { feePlanId, name, amount, dueDate, description } = body
+      if (!feePlanId) return NextResponse.json({ error: 'Thiếu feePlanId' }, { status: 400 })
+
+      // Kiểm tra fee_plan tồn tại
+      const { data: feePlan } = await adminClient
+        .from('fee_plans')
+        .select('id')
+        .eq('id', feePlanId)
+        .single()
+
+      if (!feePlan) return NextResponse.json({ error: 'Đợt học phí không tồn tại' }, { status: 404 })
+
+      // Kiểm tra tất cả invoices đều chưa đóng
+      const { data: paidInvoices } = await adminClient
+        .from('invoices')
+        .select('id')
+        .eq('fee_plan_id', feePlanId)
+        .in('status', ['paid', 'pending'])
+        .limit(1)
+
+      if (paidInvoices && paidInvoices.length > 0) {
+        return NextResponse.json({
+          error: 'Không thể sửa — đã có học sinh đóng tiền hoặc đang xử lý thanh toán.'
+        }, { status: 400 })
+      }
+
+      // Cập nhật fee_plan
+      const updateData: Record<string, any> = {}
+      if (name) updateData.name = name
+      if (amount) updateData.amount = amount
+      if (dueDate) updateData.due_date = dueDate
+      if (description !== undefined) updateData.description = description || null
+
+      await adminClient.from('fee_plans').update(updateData).eq('id', feePlanId)
+
+      // Cập nhật invoices liên quan (amount + due_date)
+      const invoiceUpdate: Record<string, any> = {}
+      if (amount) invoiceUpdate.amount = amount
+      if (dueDate) invoiceUpdate.due_date = dueDate
+
+      if (Object.keys(invoiceUpdate).length > 0) {
+        await adminClient.from('invoices').update(invoiceUpdate).eq('fee_plan_id', feePlanId)
+      }
+
+      return NextResponse.json({ success: true, message: 'Đã cập nhật đợt học phí thành công.' })
+    } catch (error) {
+      console.error('[Update Fee]', error)
+      return NextResponse.json({ error: 'Lỗi server' }, { status: 500 })
+    }
+  }
+
+  // ========== XÓA ĐỢT HỌC PHÍ ==========
+  if (action === 'delete_fee') {
+    try {
+      const { feePlanId } = body
+      if (!feePlanId) return NextResponse.json({ error: 'Thiếu feePlanId' }, { status: 400 })
+
+      // Kiểm tra tất cả invoices đều chưa đóng
+      const { data: paidInvoices } = await adminClient
+        .from('invoices')
+        .select('id')
+        .eq('fee_plan_id', feePlanId)
+        .in('status', ['paid', 'pending'])
+        .limit(1)
+
+      if (paidInvoices && paidInvoices.length > 0) {
+        return NextResponse.json({
+          error: 'Không thể xóa — đã có học sinh đóng tiền hoặc đang xử lý thanh toán.'
+        }, { status: 400 })
+      }
+
+      // Xóa invoices trước (FK constraint)
+      await adminClient.from('invoices').delete().eq('fee_plan_id', feePlanId)
+
+      // Xóa fee_plan
+      await adminClient.from('fee_plans').delete().eq('id', feePlanId)
+
+      return NextResponse.json({ success: true, message: 'Đã xóa đợt học phí và hủy tất cả hóa đơn liên quan.' })
+    } catch (error) {
+      console.error('[Delete Fee]', error)
+      return NextResponse.json({ error: 'Lỗi server' }, { status: 500 })
+    }
+  }
+
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 })
 }
