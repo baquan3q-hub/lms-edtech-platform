@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Image from "next/image";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,12 +56,12 @@ export default function TeacherBehaviorClient({ classes }: { classes: any[] }) {
 
     const getRiskBadge = (level: string) => {
         const map: Record<string, { bg: string; label: string }> = {
-            high_risk: { bg: "bg-red-100 text-red-700 border-red-200", label: "Nguy cơ cao" },
-            warning: { bg: "bg-amber-100 text-amber-700 border-amber-200", label: "Cần theo dõi" },
-            normal: { bg: "bg-emerald-100 text-emerald-700 border-emerald-200", label: "Bình thường" },
+            high_risk: { bg: "bg-red-500 text-white border-red-600 font-extrabold animate-pulse", label: "🚨 GIAN LẬN - CAN THIỆP NGAY" },
+            warning: { bg: "bg-amber-100 text-amber-700 border-amber-200 font-bold", label: "Cần theo dõi" },
+            normal: { bg: "bg-emerald-100 text-emerald-700 border-emerald-200 font-medium", label: "Bình thường" },
         };
         const s = map[level] || { bg: "bg-slate-100 text-slate-500 border-slate-200", label: "Chưa có" };
-        return <Badge variant="outline" className={`text-[10px] ${s.bg} border`}>{s.label}</Badge>;
+        return <Badge variant="outline" className={`text-[10px] ${s.bg} border px-2 py-0.5 shadow-sm`}>{s.label}</Badge>;
     };
 
     const getTrendIcon = (trend: string) => {
@@ -265,10 +266,12 @@ export default function TeacherBehaviorClient({ classes }: { classes: any[] }) {
                                     const risk = st.behavior?.risk_level || "none";
 
                                     return (
-                                        <div key={st.student_id} className={`border rounded-xl overflow-hidden transition-all ${
-                                            risk === "high_risk" ? "border-red-200 bg-red-50/20"
-                                                : risk === "warning" ? "border-amber-200 bg-amber-50/10"
-                                                    : "border-slate-200"
+                                        <div key={st.student_id} className={`border rounded-xl overflow-hidden transition-all duration-300 ${
+                                            risk === "high_risk" 
+                                                ? "border-red-500 bg-red-50/20 shadow-[0_0_12px_rgba(239,68,68,0.15)] ring-1 ring-red-200"
+                                                : risk === "warning" 
+                                                    ? "border-amber-300 bg-amber-50/10 shadow-[0_0_8px_rgba(245,158,11,0.05)]"
+                                                    : "border-slate-200 hover:border-slate-300"
                                         }`}>
                                             {/* Row header */}
                                             <div className="flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-50/50 transition-colors"
@@ -276,25 +279,39 @@ export default function TeacherBehaviorClient({ classes }: { classes: any[] }) {
                                                 <span className="text-xs font-bold text-slate-400 w-5 text-center">{idx + 1}</span>
                                                 <div className="w-8 h-8 bg-slate-100 rounded-full flex items-center justify-center shrink-0">
                                                     {st.avatar_url ? (
-                                                        <img src={st.avatar_url} alt="" className="w-full h-full rounded-full object-cover" />
+                                                        <Image src={st.avatar_url} alt="" width={32} height={32} className="w-full h-full rounded-full object-cover" />
                                                     ) : (
                                                         <User className="w-4 h-4 text-slate-400" />
                                                     )}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2">
+                                                    <div className="flex items-center gap-2 flex-wrap">
                                                         <p className="font-bold text-sm text-slate-800 truncate">{st.student_name}</p>
                                                         {getRiskBadge(risk)}
                                                     </div>
+                                                    {st.behavior?.exam_title && (
+                                                        <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1.5 flex-wrap">
+                                                            <span>Vi phạm nặng nhất tại:</span>
+                                                            <span className="font-bold text-red-600 bg-red-100/50 px-1.5 py-0.5 rounded border border-red-200/50 text-[10px]">
+                                                                {st.behavior.exam_title}
+                                                            </span>
+                                                        </p>
+                                                    )}
                                                 </div>
                                                 {/* Quick stats */}
-                                                <div className="hidden sm:flex items-center gap-4 text-[10px] text-slate-500 shrink-0">
-                                                    <span title="Rủi ro">🎯 {st.behavior ? `${(st.behavior.gaming_score * 100).toFixed(0)}%` : "—"}</span>
-                                                    <span title="Tab switch">📱 {st.behavior?.tab_switch_count ?? "—"}</span>
-                                                    <span title="Đoán bừa">⚡ {st.behavior?.rapid_guess_count ?? "—"}</span>
-                                                    <span title="Xu hướng điểm" className="flex items-center gap-0.5">
+                                                <div className="hidden sm:flex items-center gap-3 text-[11px] text-slate-600 shrink-0 mr-2">
+                                                    <span className={`px-2 py-1 rounded-lg flex items-center gap-1 font-medium ${st.behavior?.gaming_score >= 0.7 ? 'bg-red-100 text-red-800 font-extrabold border border-red-200' : 'bg-slate-100'}`} title="Chỉ số nghi ngờ gian lận (AI)">
+                                                        🎯 Rủi ro AI: <span className="font-bold text-xs">{st.behavior ? `${(st.behavior.gaming_score * 100).toFixed(0)}%` : "—"}</span>
+                                                    </span>
+                                                    <span className={`px-2 py-1 rounded-lg flex items-center gap-1 font-medium ${st.behavior?.tab_switch_count >= 5 ? 'bg-amber-100 text-amber-800 font-bold border border-amber-200' : 'bg-slate-100'}`} title="Số lần chuyển tab trong bài thi vi phạm nặng nhất">
+                                                        📱 Chuyển tab: <span className="font-bold text-xs">{st.behavior?.tab_switch_count ?? "—"}</span>
+                                                    </span>
+                                                    <span className="px-2 py-1 rounded-lg bg-slate-100 flex items-center gap-1 font-medium" title="Số lần đoán bừa trong bài thi vi phạm nặng nhất">
+                                                        ⚡ Đoán bừa: <span className="font-bold text-xs">{st.behavior?.rapid_guess_count ?? "—"}</span>
+                                                    </span>
+                                                    <span className="px-2 py-1 rounded-lg bg-slate-100 flex items-center gap-1 font-medium" title="Điểm trung bình gần đây">
+                                                        📈 Điểm TB: <span className="font-bold text-xs">{st.behavior?.avg_score_recent ? `${st.behavior.avg_score_recent}%` : "—"}</span>
                                                         {getTrendIcon(st.behavior?.score_trend || "stable")}
-                                                        {st.behavior?.avg_score_recent ? `${st.behavior.avg_score_recent}%` : "—"}
                                                     </span>
                                                 </div>
                                                 {isExpanded ? <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />}

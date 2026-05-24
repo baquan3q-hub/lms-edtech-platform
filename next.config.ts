@@ -7,6 +7,22 @@ const nextConfig: NextConfig = {
   webpack: (config, { isServer }) => {
     return config;
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "*.supabase.co",
+      },
+      {
+        protocol: "https",
+        hostname: "*.googleusercontent.com",
+      },
+      {
+        protocol: "https",
+        hostname: "lh3.googleusercontent.com",
+      },
+    ],
+  },
   // In Next.js 15+, turbopack can be customized directly.
   // We provide an empty config to silence the Next warning.
   // @ts-ignore - Ignore type error as next config type might not have been fully updated yet for v16

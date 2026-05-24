@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, startTransition } from "react";
 import { submitExamAnswers } from "@/lib/actions/exam";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -35,7 +35,17 @@ export default function ExamTakingClient({
     const [warnings, setWarnings] = useState(0);
     const [showWarningDialog, setShowWarningDialog] = useState(false);
     const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
-    const isSubmittingRef = useRef(false); // Flag tạm tắt violation detection khi đang nộp bài
+    const isSubmittingRef = useRef(false); // Flag khóa submit đồng bộ
+    const bypassDetectionRef = useRef(false); // Tạm tắt violation detection khi hiện dialog xác nhận
+    
+    // Refs để tránh capture state trong các event listeners (fix lỗi tự động nộp bài bị 0đ)
+    const answersRef = useRef(answers);
+    answersRef.current = answers;
+    const timeLeftRef = useRef(timeLeft);
+    timeLeftRef.current = timeLeft;
+    const startedAtRef = useRef(startedAt);
+    startedAtRef.current = startedAt;
+    const warningsRef = useRef(0);
 
     // === Activity Tracker: Theo dõi hành vi học sinh ===
     const tracker = useActivityTracker({
@@ -45,83 +55,28 @@ export default function ExamTakingClient({
         enabled: hasStarted && !showResult,
     });
 
-    // Strict Mode & Fullscreen: Detect tab switch / blur / exit fullscreen
-    useEffect(() => {
-        if (showResult || !hasStarted) return;
-
-        const handleVisibilityChange = () => {
-            if (document.hidden) {
-                // User left the tab
-                triggerWarning("Bạn đã thoát khỏi tab làm bài!");
-            }
-        };
-
-        const handleBlur = () => {
-             // User defocused the window
-             triggerWarning("Bạn đã chuyển sang cửa sổ khác!");
-        };
-
-        const handleFullscreenChange = () => {
-             if (!document.fullscreenElement) {
-                 triggerWarning("Bạn đã thoát chế độ toàn màn hình!");
-             }
-        };
-
-        const triggerWarning = (reason: string) => {
-            // Nếu đang trong quá trình nộp bài hoặc xác nhận nộp → BỎ QUA detection
-            if (isSubmittingRef.current) return;
-            
-            // Ghi nhận tab switch/warning vào behavior tracker
-            tracker.trackWarning(reason);
-            if (!exam.is_strict_mode) return;
-            
-            setWarnings(prev => {
-                const newCount = prev + 1;
-                if (exam.strict_mode_limit !== null && newCount > exam.strict_mode_limit) {
-                    // Auto submit
-                    toast.error("Vượt quá số lần cảnh báo (" + newCount + "/" + exam.strict_mode_limit + "). Tự động nộp bài.");
-                    handleSubmit(undefined, true);
-                } else {
-                    toast.error(reason);
-                    setShowWarningDialog(true);
-                }
-                return newCount;
-            });
-        };
-
-        if (exam.is_strict_mode) {
-            document.addEventListener("visibilitychange", handleVisibilityChange);
-            window.addEventListener("blur", handleBlur);
-            document.addEventListener("fullscreenchange", handleFullscreenChange);
-        }
-
-        return () => {
-            if (exam.is_strict_mode) {
-                document.removeEventListener("visibilitychange", handleVisibilityChange);
-                window.removeEventListener("blur", handleBlur);
-                document.removeEventListener("fullscreenchange", handleFullscreenChange);
-            }
-        };
-    }, [showResult, hasStarted, exam.is_strict_mode, exam.strict_mode_limit]);
-
     const handleSubmit = useCallback(async (e?: any, autoSubmit: boolean = false) => {
-        if (isSubmitting || !startedAt) return;
+        if (isSubmittingRef.current || !startedAtRef.current) return;
 
-        // Bật flag tạm tắt violation detection
+        // Bật flag khóa submit đồng bộ và tạm tắt violation detection
         isSubmittingRef.current = true;
         setIsSubmitting(true);
         
         try {
-            const elapsed = exam.duration_minutes * 60 - timeLeft;
-            const res = await submitExamAnswers(exam.id, classId, answers, startedAt, elapsed);
+            const elapsed = exam.duration_minutes * 60 - timeLeftRef.current;
+            console.log("[ExamTakingClient] Submitting answers:", answersRef.current, "elapsed time:", elapsed);
+            const res = await submitExamAnswers(exam.id, classId, answersRef.current, startedAtRef.current, elapsed);
             if (res.error) {
                 toast.error(res.error);
                 setIsSubmitting(false);
                 isSubmittingRef.current = false;
+                bypassDetectionRef.current = false;
                 return;
             }
-            setResult(res.data);
-            setShowResult(true);
+            startTransition(() => {
+                setResult(res.data);
+                setShowResult(true);
+            });
             toast.success("Nộp bài thành công!");
 
             // Thoát fullscreen SAU khi submit thành công
@@ -130,7 +85,7 @@ export default function ExamTakingClient({
             }
 
             // Trigger AI behavior analysis sau khi nộp bài
-            await tracker.trackSubmission({ score: res.data?.score, warnings_count: warnings });
+            await tracker.trackSubmission({ score: res.data?.score, warnings_count: warningsRef.current });
             try {
                 fetch("/api/ai/behavior-analysis", {
                     method: "POST",
@@ -143,15 +98,76 @@ export default function ExamTakingClient({
         } finally {
             setIsSubmitting(false);
             isSubmittingRef.current = false;
+            bypassDetectionRef.current = false;
         }
-    }, [answers, timeLeft, isSubmitting, exam.id, classId, startedAt, exam.duration_minutes]);
+    }, [exam.id, classId, exam.duration_minutes, tracker]);
+
+    // Ref để lưu trữ callback handleSubmit mới nhất, tránh capture stale closure trong event listeners
+    const handleSubmitRef = useRef(handleSubmit);
+    handleSubmitRef.current = handleSubmit;
+
+    // Strict Mode & Fullscreen: Detect tab switch / blur / exit fullscreen
+    useEffect(() => {
+        if (showResult || !hasStarted) return;
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                // User left the tab
+                triggerWarning("Bạn đã thoát khỏi tab làm bài!");
+            }
+        };
+
+        const handleFullscreenChange = () => {
+             if (!document.fullscreenElement) {
+                 triggerWarning("Bạn đã thoát chế độ toàn màn hình!");
+             }
+        };
+
+        const triggerWarning = (reason: string) => {
+            // Nếu đang trong quá trình nộp bài hoặc xác nhận nộp → BỎ QUA detection
+            if (isSubmittingRef.current || bypassDetectionRef.current) return;
+            
+            // Ghi nhận tab switch/warning vào behavior tracker
+            tracker.trackWarning(reason);
+            if (!exam.is_strict_mode) return;
+            
+            // Cập nhật số lần cảnh báo đồng bộ qua Ref
+            warningsRef.current += 1;
+            const newCount = warningsRef.current;
+            
+            // Cập nhật state để hiển thị trên UI cảnh báo
+            setWarnings(newCount);
+            
+            if (exam.strict_mode_limit !== null && newCount > exam.strict_mode_limit) {
+                // Auto submit - gọi bên ngoài state updater để tránh lỗi React render cycle
+                toast.error("Vượt quá số lần cảnh báo (" + newCount + "/" + exam.strict_mode_limit + "). Tự động nộp bài.");
+                handleSubmitRef.current(undefined, true);
+            } else {
+                toast.error(reason);
+                setShowWarningDialog(true);
+            }
+        };
+
+        if (exam.is_strict_mode) {
+            document.addEventListener("visibilitychange", handleVisibilityChange);
+            document.addEventListener("fullscreenchange", handleFullscreenChange);
+        }
+
+        return () => {
+            if (exam.is_strict_mode) {
+                document.removeEventListener("visibilitychange", handleVisibilityChange);
+                document.removeEventListener("fullscreenchange", handleFullscreenChange);
+            }
+        };
+    }, [showResult, hasStarted, exam.is_strict_mode, exam.strict_mode_limit, tracker]);
+
 
     // Timer
     useEffect(() => {
         if (showResult || !hasStarted) return;
         if (!startedAt) return; // Wait until started info
         if (timeLeft <= 0) {
-            handleSubmit(undefined, true);
+            handleSubmitRef.current(undefined, true);
             return;
         }
         const interval = setInterval(() => {
@@ -161,7 +177,7 @@ export default function ExamTakingClient({
             });
         }, 1000);
         return () => clearInterval(interval);
-    }, [timeLeft, showResult, hasStarted, startedAt, handleSubmit]);
+    }, [timeLeft, showResult, hasStarted, startedAt]);
 
     const selectOption = (qIdx: number, optionId: string) => {
         if (showResult) return;
@@ -456,7 +472,7 @@ export default function ExamTakingClient({
             <div className="mt-8 mb-12">
                 <Button
                     onClick={() => {
-                        isSubmittingRef.current = true; // Tạm tắt detection khi hiện dialog
+                        bypassDetectionRef.current = true; // Tạm tắt detection khi hiện dialog
                         setShowSubmitConfirm(true);
                     }}
                     disabled={isSubmitting}
@@ -475,23 +491,25 @@ export default function ExamTakingClient({
                             <Send className="w-5 h-5" />
                             Xác nhận nộp bài
                         </DialogTitle>
-                        <DialogDescription className="text-slate-600 text-sm pt-3 space-y-3">
-                            <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center">
-                                <p className="text-base font-bold text-indigo-800 mb-1">
-                                    Bạn đã trả lời {answeredCount}/{questions.length} câu
-                                </p>
-                                <p className="text-xs text-indigo-600">
-                                    Thời gian còn lại: {formatTime(timeLeft)}
-                                </p>
-                                {answeredCount < questions.length && (
-                                    <p className="text-xs text-amber-600 font-semibold mt-2">
-                                        ⚠️ Bạn chưa trả lời hết tất cả các câu hỏi!
+                        <DialogDescription asChild>
+                            <div className="text-slate-600 text-sm pt-3 space-y-3">
+                                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-4 text-center">
+                                    <p className="text-base font-bold text-indigo-800 mb-1">
+                                        Bạn đã trả lời {answeredCount}/{questions.length} câu
                                     </p>
-                                )}
+                                    <p className="text-xs text-indigo-600">
+                                        Thời gian còn lại: {formatTime(timeLeft)}
+                                    </p>
+                                    {answeredCount < questions.length && (
+                                        <p className="text-xs text-amber-600 font-semibold mt-2">
+                                            ⚠️ Bạn chưa trả lời hết tất cả các câu hỏi!
+                                        </p>
+                                    )}
+                                </div>
+                                <p className="text-center text-sm text-slate-500">
+                                    Sau khi nộp bài, bạn sẽ <strong>không thể</strong> chỉnh sửa câu trả lời.
+                                </p>
                             </div>
-                            <p className="text-center text-sm text-slate-500">
-                                Sau khi nộp bài, bạn sẽ <strong>không thể</strong> chỉnh sửa câu trả lời.
-                            </p>
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="flex flex-col gap-2 sm:flex-col">
@@ -509,7 +527,7 @@ export default function ExamTakingClient({
                             variant="outline"
                             onClick={() => {
                                 setShowSubmitConfirm(false);
-                                isSubmittingRef.current = false; // Bật lại detection
+                                bypassDetectionRef.current = false; // Bật lại detection
                             }}
                             disabled={isSubmitting}
                             className="w-full border-slate-300 text-slate-700 font-semibold h-10 rounded-xl"

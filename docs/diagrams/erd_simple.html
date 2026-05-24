@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>ERD - So do thuc the quan he</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 24px;
+    font-family: 'Segoe UI', 'Arial', sans-serif;
+  }
+  h2 { font-size: 20px; color: #1e293b; margin-bottom: 4px; text-align: center; }
+  .subtitle { font-size: 13px; color: #64748b; margin-bottom: 24px; text-align: center; }
+  .mermaid { width: 100%; max-width: 1400px; }
+</style>
+</head>
+<body>
+<h2>So do thuc the quan he &#40;ERD&#41; - He thong LMS EdTech</h2>
+<p class="subtitle">Entity Relationship Diagram — Simplified for Academic Report</p>
+<div class="mermaid">
+erDiagram
+    USERS ||--o| PROFILES : "co ho so"
+    USERS ||--o{ PARENT_STUDENTS : "phu huynh"
+    USERS ||--o{ PARENT_STUDENTS : "hoc sinh"
+    USERS ||--o{ COURSES : "giang day"
+    USERS ||--o{ ENROLLMENTS : "ghi danh"
+    USERS ||--o{ NOTIFICATIONS : "nhan"
+    USERS ||--o{ INVOICES : "thanh toan"
+    USERS ||--o{ EXAM_SUBMISSIONS : "nop bai"
+    USERS ||--o{ ATTENDANCE_RECORDS : "diem danh"
+
+    COURSES ||--o{ CLASSES : "chua"
+    CLASSES ||--o{ ENROLLMENTS : "co"
+    CLASSES ||--o{ LESSONS : "chua"
+    CLASSES ||--o{ EXAMS : "co"
+    CLASSES ||--o{ ATTENDANCE_SESSIONS : "co"
+    CLASSES ||--o{ ANNOUNCEMENTS : "co"
+    CLASSES ||--o{ ABSENCE_REQUESTS : "cho lop"
+
+    EXAMS ||--o{ EXAM_SUBMISSIONS : "nhan bai"
+    EXAMS ||--o| AI_ANALYSIS : "phan tich"
+
+    ATTENDANCE_SESSIONS ||--o{ ATTENDANCE_RECORDS : "chua"
+
+    INVOICES ||--o{ PAYMENTS : "thanh toan boi"
+
+    USERS {
+        uuid id PK
+        text email
+        text role
+        text full_name
+        text phone
+    }
+
+    PROFILES {
+        uuid id PK
+        uuid user_id FK
+        date date_of_birth
+        text address
+    }
+
+    PARENT_STUDENTS {
+        uuid id PK
+        uuid parent_id FK
+        uuid student_id FK
+    }
+
+    COURSES {
+        uuid id PK
+        text name
+        text description
+        uuid teacher_id FK
+    }
+
+    CLASSES {
+        uuid id PK
+        uuid course_id FK
+        uuid teacher_id FK
+        text name
+        text room
+        int max_students
+    }
+
+    ENROLLMENTS {
+        uuid id PK
+        uuid student_id FK
+        uuid class_id FK
+        text status
+    }
+
+    LESSONS {
+        uuid id PK
+        uuid class_id FK
+        text title
+        text video_url
+        int order
+    }
+
+    EXAMS {
+        uuid id PK
+        uuid class_id FK
+        uuid created_by FK
+        text title
+        int duration_minutes
+    }
+
+    EXAM_SUBMISSIONS {
+        uuid id PK
+        uuid exam_id FK
+        uuid student_id FK
+        numeric score
+        text status
+    }
+
+    ATTENDANCE_SESSIONS {
+        uuid id PK
+        uuid class_id FK
+        uuid teacher_id FK
+        date session_date
+    }
+
+    ATTENDANCE_RECORDS {
+        uuid id PK
+        uuid session_id FK
+        uuid student_id FK
+        text status
+    }
+
+    ABSENCE_REQUESTS {
+        uuid id PK
+        uuid student_id FK
+        uuid parent_id FK
+        uuid class_id FK
+        text status
+    }
+
+    ANNOUNCEMENTS {
+        uuid id PK
+        uuid class_id FK
+        uuid teacher_id FK
+        text title
+    }
+
+    NOTIFICATIONS {
+        uuid id PK
+        uuid user_id FK
+        text title
+        text type
+        bool read
+    }
+
+    INVOICES {
+        uuid id PK
+        uuid student_id FK
+        numeric amount
+        text status
+    }
+
+    PAYMENTS {
+        uuid id PK
+        uuid invoice_id FK
+        uuid user_id FK
+        text provider
+        text status
+    }
+
+    AI_ANALYSIS {
+        uuid id PK
+        uuid exam_id FK
+        uuid student_id FK
+        text type
+        json result
+    }
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    er: {
+      useMaxWidth: false,
+      layoutDirection: 'TB',
+      minEntityWidth: 120,
+      entityPadding: 12,
+      fontSize: 12
+    },
+    themeVariables: {
+      fontSize: '12px'
+    }
+  });
+</script>
+</body>
+</html>

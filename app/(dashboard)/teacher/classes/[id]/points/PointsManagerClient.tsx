@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
+import Image from "next/image";
 import { Search, Trophy, Medal, PlusCircle, MinusCircle, History, AlertCircle, X, CheckCircle2, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
@@ -92,7 +93,7 @@ export default function PointsManagerClient({ classId, initialLeaderboard }: { c
                             <div className="relative mb-3">
                                 <div className="w-20 h-20 rounded-full bg-slate-200 border-4 border-slate-300 flex items-center justify-center shadow-lg overflow-hidden">
                                     {top3[1].avatar_url ? (
-                                        <img src={top3[1].avatar_url} alt="" className="w-full h-full object-cover" />
+                                        <Image src={top3[1].avatar_url} alt="" width={80} height={80} className="w-full h-full object-cover" />
                                     ) : (
                                         <span className="text-2xl font-bold text-slate-500">{top3[1].full_name.charAt(0).toUpperCase()}</span>
                                     )}
@@ -117,7 +118,7 @@ export default function PointsManagerClient({ classId, initialLeaderboard }: { c
                                 </div>
                                 <div className="w-28 h-28 rounded-full bg-amber-100 border-4 border-amber-300 flex items-center justify-center shadow-xl overflow-hidden ring-4 ring-amber-500/20">
                                     {top3[0].avatar_url ? (
-                                        <img src={top3[0].avatar_url} alt="" className="w-full h-full object-cover" />
+                                        <Image src={top3[0].avatar_url} alt="" width={112} height={112} className="w-full h-full object-cover" />
                                     ) : (
                                         <span className="text-4xl font-black text-amber-600">{top3[0].full_name.charAt(0).toUpperCase()}</span>
                                     )}
@@ -139,7 +140,7 @@ export default function PointsManagerClient({ classId, initialLeaderboard }: { c
                             <div className="relative mb-3">
                                 <div className="w-16 h-16 rounded-full bg-orange-100 border-4 border-orange-200 flex items-center justify-center shadow-md overflow-hidden">
                                     {top3[2].avatar_url ? (
-                                        <img src={top3[2].avatar_url} alt="" className="w-full h-full object-cover" />
+                                        <Image src={top3[2].avatar_url} alt="" width={64} height={64} className="w-full h-full object-cover" />
                                     ) : (
                                         <span className="text-xl font-bold text-orange-500">{top3[2].full_name.charAt(0).toUpperCase()}</span>
                                     )}

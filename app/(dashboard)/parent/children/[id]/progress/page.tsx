@@ -9,8 +9,10 @@ export const dynamic = "force-dynamic";
 export default async function ParentChildProgressPage({
     params,
 }: {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 }) {
+    const { id: studentId } = await params;
+
     // 1. Verify user & role
     const supabase = await createClient();
     const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -37,7 +39,7 @@ export default async function ParentChildProgressPage({
         const { data: studentItem } = await adminSupabase
             .from("users")
             .select("id as student_id, full_name, avatar_url")
-            .eq("id", params.id)
+            .eq("id", studentId)
             .single();
         
         if (studentItem) {
@@ -51,7 +53,7 @@ export default async function ParentChildProgressPage({
                 student:users!student_id(full_name, avatar_url)
             `)
             .eq("parent_id", user.id)
-            .eq("student_id", params.id)
+            .eq("student_id", studentId)
             .single();
 
         if (parentLink) {
@@ -71,9 +73,9 @@ export default async function ParentChildProgressPage({
 
     // 3. Fetch all data in parallel
     const [progressRes, feedbackRes, competencyRes] = await Promise.all([
-        getStudentProgressStats(params.id),
-        getStudentFeedbackList(params.id),
-        getStudentCompetencyData(params.id),
+        getStudentProgressStats(studentId),
+        getStudentFeedbackList(studentId),
+        getStudentCompetencyData(studentId),
     ]);
 
     return (
@@ -88,7 +90,7 @@ export default async function ParentChildProgressPage({
             </div>
 
             <ParentProgressClient
-                studentId={params.id}
+                studentId={studentId}
                 studentName={studentInfo.full_name}
                 stats={progressRes?.data?.stats || []}
                 history={progressRes?.data?.history || []}

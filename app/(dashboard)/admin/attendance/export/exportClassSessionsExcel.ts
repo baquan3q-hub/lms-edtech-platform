@@ -1,5 +1,3 @@
-import * as XLSX from "xlsx";
-
 interface ExportClassData {
     className: string;
     month: number;
@@ -7,7 +5,8 @@ interface ExportClassData {
     sessions: any[];
 }
 
-export function exportClassSessionsExcel({ className, month, year, sessions }: ExportClassData) {
+export async function exportClassSessionsExcel({ className, month, year, sessions }: ExportClassData) {
+    const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
 
     // Lọc ra các buổi đã điểm danh

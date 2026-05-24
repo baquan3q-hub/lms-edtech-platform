@@ -9,7 +9,6 @@ import {
     DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { bulkLinkParentStudents } from "@/lib/actions/parentStudent";
-import * as XLSX from "xlsx";
 import { useRouter } from "next/navigation";
 
 type ParsedRow = {
@@ -89,8 +88,9 @@ export default function ImportParentStudentDialog() {
 
     const handleFile = useCallback((file: File) => {
         const reader = new FileReader();
-        reader.onload = (e) => {
+        reader.onload = async (e) => {
             try {
+                const XLSX = await import("xlsx");
                 const data = new Uint8Array(e.target?.result as ArrayBuffer);
                 const workbook = XLSX.read(data, { type: "array" });
                 const sheetName = workbook.SheetNames[0];
@@ -151,7 +151,8 @@ export default function ImportParentStudentDialog() {
         }
     };
 
-    const downloadTemplate = () => {
+    const downloadTemplate = async () => {
+        const XLSX = await import("xlsx");
         const templateData = [
             {
                 "Email Phụ huynh": "phuhuynh1@email.com",

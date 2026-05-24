@@ -17,7 +17,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import TeacherPointsTab from "./TeacherPointsTab";
 import { generateClassAIReport, generateImprovementTasks, sendReminderAction, loadSavedAIReport } from "@/lib/actions/class-students";
 import { toast } from "sonner";
-import * as XLSX from "xlsx";
 
 interface StudentData {
     id: string;
@@ -116,7 +115,8 @@ export default function TeacherClassStudentsClient({ classId, className, student
         return "bg-red-50 border-red-200 text-red-700";
     };
 
-    const exportExcel = (filter: string) => {
+    const exportExcel = async (filter: string) => {
+        const XLSX = await import("xlsx");
         let headers = ["STT", "Họ tên", "Email"];
         let rows: any[][] = [];
 

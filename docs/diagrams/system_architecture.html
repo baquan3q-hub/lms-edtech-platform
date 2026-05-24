@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Sơ đồ Kiến trúc Tổng quan - Hệ thống LMS EdTech</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #f8fafc;
+    font-family: 'Inter', 'Segoe UI', sans-serif;
+    padding: 40px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    color: #1e293b;
+  }
+  h1 { font-size: 22px; font-weight: 700; margin-bottom: 4px; text-align: center; }
+  .subtitle { font-size: 13px; color: #64748b; margin-bottom: 32px; text-align: center; }
+  .arch-container {
+    width: 100%;
+    max-width: 1100px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  /* === ACTOR ROW === */
+  .actor-row {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+  }
+  .actor {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+  }
+  .actor-icon {
+    width: 48px; height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,.12);
+  }
+  .actor-admin .actor-icon { background: linear-gradient(135deg, #6366f1, #4f46e5); }
+  .actor-teacher .actor-icon { background: linear-gradient(135deg, #06b6d4, #0891b2); }
+  .actor-student .actor-icon { background: linear-gradient(135deg, #22c55e, #16a34a); }
+  .actor-parent .actor-icon { background: linear-gradient(135deg, #f59e0b, #d97706); }
+
+  /* === ARROW === */
+  .arrow-down {
+    display: flex;
+    justify-content: center;
+    color: #94a3b8;
+    font-size: 20px;
+    letter-spacing: 16px;
+    user-select: none;
+  }
+
+  /* === PRESENTATION LAYER === */
+  .presentation-layer {
+    background: #fff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 16px 20px;
+    text-align: center;
+  }
+  .presentation-layer .layer-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #475569;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .tech-tags {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .tech-tag {
+    background: #f1f5f9;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid #e2e8f0;
+  }
+
+  /* === MAIN GRID: 4 LAYERS + AI SIDEBAR === */
+  .main-grid {
+    display: grid;
+    grid-template-columns: 1fr 220px;
+    gap: 16px;
+  }
+  .layers-col {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  /* === LAYER CARD === */
+  .layer-card {
+    border-radius: 12px;
+    padding: 16px 20px;
+    border: 1.5px solid;
+    position: relative;
+  }
+  .layer-card .layer-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .layer-card .layer-num {
+    width: 28px; height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 700;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .layer-card .layer-name {
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .layer-card .layer-desc {
+    font-size: 11.5px;
+    color: #64748b;
+    line-height: 1.5;
+    margin-bottom: 10px;
+  }
+  .module-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .module-chip {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 6px;
+    border: 1px solid;
+  }
+
+  /* Layer 1 - Academic Operations */
+  .layer-academic { background: #f5f3ff; border-color: #c4b5fd; }
+  .layer-academic .layer-num { background: #7c3aed; }
+  .layer-academic .layer-name { color: #5b21b6; }
+  .layer-academic .module-chip { background: #ede9fe; border-color: #c4b5fd; color: #6d28d9; }
+
+  /* Layer 2 - LMS */
+  .layer-lms { background: #ecfdf5; border-color: #86efac; }
+  .layer-lms .layer-num { background: #16a34a; }
+  .layer-lms .layer-name { color: #15803d; }
+  .layer-lms .module-chip { background: #dcfce7; border-color: #86efac; color: #15803d; }
+
+  /* Layer 3 - Parent Portal */
+  .layer-parent { background: #fffbeb; border-color: #fcd34d; }
+  .layer-parent .layer-num { background: #d97706; }
+  .layer-parent .layer-name { color: #b45309; }
+  .layer-parent .module-chip { background: #fef3c7; border-color: #fcd34d; color: #b45309; }
+
+  /* Layer 4 - Communication Hub */
+  .layer-comm { background: #eff6ff; border-color: #93c5fd; }
+  .layer-comm .layer-num { background: #2563eb; }
+  .layer-comm .layer-name { color: #1d4ed8; }
+  .layer-comm .module-chip { background: #dbeafe; border-color: #93c5fd; color: #1d4ed8; }
+
+  /* === AI SIDEBAR === */
+  .ai-sidebar {
+    background: linear-gradient(180deg, #fdf2f8, #fce7f3, #fdf2f8);
+    border: 1.5px solid #f9a8d4;
+    border-radius: 12px;
+    padding: 16px 14px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    position: relative;
+  }
+  .ai-sidebar::before {
+    content: '';
+    position: absolute;
+    left: -17px;
+    top: 20%;
+    bottom: 20%;
+    width: 2px;
+    background: repeating-linear-gradient(to bottom, #f9a8d4 0, #f9a8d4 6px, transparent 6px, transparent 12px);
+  }
+  .ai-icon {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, #ec4899, #db2777);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(236,72,153,.3);
+  }
+  .ai-sidebar .ai-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #be185d;
+    text-align: center;
+    line-height: 1.3;
+  }
+  .ai-sidebar .ai-subtitle {
+    font-size: 10.5px;
+    color: #9d174d;
+    text-align: center;
+    font-style: italic;
+    line-height: 1.4;
+  }
+  .ai-features {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    width: 100%;
+  }
+  .ai-feat {
+    font-size: 10.5px;
+    color: #831843;
+    background: rgba(255,255,255,.6);
+    padding: 5px 8px;
+    border-radius: 6px;
+    border: 1px solid #fbcfe8;
+    text-align: center;
+  }
+  .ai-arrow-label {
+    font-size: 9px;
+    color: #ec4899;
+    font-weight: 600;
+    writing-mode: vertical-rl;
+    position: absolute;
+    left: -32px;
+    top: 50%;
+    transform: translateY(-50%) rotate(180deg);
+    letter-spacing: 1px;
+  }
+
+  /* === DATA LAYER === */
+  .data-layer {
+    background: linear-gradient(135deg, #0f172a, #1e293b);
+    border-radius: 12px;
+    padding: 18px 24px;
+    color: #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .data-icon {
+    width: 44px; height: 44px;
+    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .data-info { flex: 1; }
+  .data-info .data-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #f8fafc;
+    margin-bottom: 4px;
+  }
+  .data-info .data-desc {
+    font-size: 11.5px;
+    color: #94a3b8;
+    line-height: 1.5;
+  }
+  .data-badges {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .data-badge {
+    font-size: 10.5px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    background: rgba(59,130,246,.2);
+    color: #93c5fd;
+    border: 1px solid rgba(59,130,246,.3);
+  }
+
+  /* === EXTERNAL === */
+  .external-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .ext-card {
+    flex: 1;
+    min-width: 200px;
+    background: #fff;
+    border: 1.5px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .ext-icon {
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    color: #fff;
+    flex-shrink: 0;
+  }
+  .ext-card .ext-name { font-size: 12px; font-weight: 600; color: #334155; }
+  .ext-card .ext-desc { font-size: 10.5px; color: #94a3b8; }
+
+  /* === FOOTER NOTE === */
+  .footer-note {
+    margin-top: 16px;
+    font-size: 11px;
+    color: #94a3b8;
+    text-align: center;
+    max-width: 700px;
+    line-height: 1.6;
+  }
+
+  @media print {
+    body { padding: 16px; background: #fff; }
+    .arch-container { max-width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Sơ đồ Kiến trúc Tổng quan Hệ thống LMS EdTech</h1>
+<p class="subtitle">Layered Architecture Overview — Mô hình phân lớp với AI/Learning Analytics xuyên suốt</p>
+
+<div class="arch-container">
+
+  <!-- ACTORS -->
+  <div class="actor-row">
+    <div class="actor actor-admin">
+      <div class="actor-icon">👨‍💼</div>
+      <span>Admin</span>
+    </div>
+    <div class="actor actor-teacher">
+      <div class="actor-icon">👩‍🏫</div>
+      <span>Teacher</span>
+    </div>
+    <div class="actor actor-student">
+      <div class="actor-icon">🎓</div>
+      <span>Student</span>
+    </div>
+    <div class="actor actor-parent">
+      <div class="actor-icon">👪</div>
+      <span>Parent</span>
+    </div>
+  </div>
+
+  <div class="arrow-down">▼ ▼ ▼ ▼</div>
+
+  <!-- PRESENTATION LAYER -->
+  <div class="presentation-layer">
+    <div class="layer-title">Presentation Layer — Giao diện người dùng</div>
+    <div class="tech-tags">
+      <span class="tech-tag">Next.js 16 (App Router)</span>
+      <span class="tech-tag">React 19</span>
+      <span class="tech-tag">shadcn/ui</span>
+      <span class="tech-tag">TailwindCSS</span>
+      <span class="tech-tag">Recharts</span>
+      <span class="tech-tag">Zustand</span>
+      <span class="tech-tag">TanStack Query</span>
+      <span class="tech-tag">PWA</span>
+    </div>
+  </div>
+
+  <div class="arrow-down">▼ ▼ ▼ ▼</div>
+
+  <!-- MAIN GRID: 4 LAYERS + AI -->
+  <div class="main-grid">
+    <div class="layers-col">
+
+      <!-- Layer 1: Academic Operations -->
+      <div class="layer-card layer-academic">
+        <div class="layer-header">
+          <div class="layer-num">1</div>
+          <div class="layer-name">Academic Operations Platform</div>
+        </div>
+        <div class="layer-desc">Quản trị vận hành hành chính: người dùng, khóa học, lớp học, lịch, phòng, ghi danh, học phí, khảo sát.</div>
+        <div class="module-grid">
+          <span class="module-chip">Quản lý User & RBAC</span>
+          <span class="module-chip">Khóa học & Lớp</span>
+          <span class="module-chip">Ghi danh</span>
+          <span class="module-chip">Phòng & Lịch học</span>
+          <span class="module-chip">Học phí & Hóa đơn</span>
+          <span class="module-chip">Khảo sát</span>
+        </div>
+      </div>
+
+      <!-- Layer 2: LMS -->
+      <div class="layer-card layer-lms">
+        <div class="layer-header">
+          <div class="layer-num">2</div>
+          <div class="layer-name">Learning Management System</div>
+        </div>
+        <div class="layer-desc">Vận hành học tập và đánh giá: học liệu, bài giảng, homework, exam, chấm điểm, điểm danh, tiến trình.</div>
+        <div class="module-grid">
+          <span class="module-chip">Course Builder</span>
+          <span class="module-chip">Homework & Exam</span>
+          <span class="module-chip">Chấm điểm</span>
+          <span class="module-chip">Điểm danh</span>
+          <span class="module-chip">Tiến trình học</span>
+          <span class="module-chip">Gamification</span>
+        </div>
+      </div>
+
+      <!-- Layer 3: Parent Portal -->
+      <div class="layer-card layer-parent">
+        <div class="layer-header">
+          <div class="layer-num">3</div>
+          <div class="layer-name">Parent Portal</div>
+        </div>
+        <div class="layer-desc">Kết nối gia đình: liên kết phụ huynh-học sinh, theo dõi tiến độ, lịch, chuyên cần, thanh toán, xin nghỉ.</div>
+        <div class="module-grid">
+          <span class="module-chip">Liên kết con</span>
+          <span class="module-chip">Dashboard tiến độ</span>
+          <span class="module-chip">Xin nghỉ phép</span>
+          <span class="module-chip">Thanh toán học phí</span>
+          <span class="module-chip">Phản hồi</span>
+        </div>
+      </div>
+
+      <!-- Layer 4: Communication Hub -->
+      <div class="layer-card layer-comm">
+        <div class="layer-header">
+          <div class="layer-num">4</div>
+          <div class="layer-name">Communication Hub</div>
+        </div>
+        <div class="layer-desc">Điều phối thông báo đa vai trò: announcement, notification, realtime sync, đồng bộ trạng thái đa dashboard.</div>
+        <div class="module-grid">
+          <span class="module-chip">Notifications</span>
+          <span class="module-chip">Announcements</span>
+          <span class="module-chip">Realtime Sync</span>
+          <span class="module-chip">Read Tracking</span>
+          <span class="module-chip">Discussion</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- AI SIDEBAR -->
+    <div class="ai-sidebar">
+      <span class="ai-arrow-label">◀ THU THẬP &amp; PHÂN TÍCH ▶</span>
+      <div class="ai-icon">🤖</div>
+      <div class="ai-title">AI / Learning Analytics</div>
+      <div class="ai-subtitle">"Trợ lý vô hình" — xuyên suốt 4 tầng</div>
+      <div class="ai-features">
+        <div class="ai-feat">📊 Phân tích lớp & cá nhân</div>
+        <div class="ai-feat">🧠 Sinh câu hỏi & quiz</div>
+        <div class="ai-feat">📝 Tạo feedback cá nhân</div>
+        <div class="ai-feat">📈 Bài bổ trợ cải thiện</div>
+        <div class="ai-feat">⚠️ Behavior Analysis</div>
+        <div class="ai-feat">🔔 Cảnh báo can thiệp sớm</div>
+        <div class="ai-feat">🎯 Hỗ trợ quyết định sư phạm</div>
+      </div>
+      <div style="font-size:10px;color:#9d174d;text-align:center;margin-top:4px;">
+        Powered by<br><strong>Google Gemini API</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="arrow-down">▼ ▼ ▼ ▼</div>
+
+  <!-- DATA LAYER -->
+  <div class="data-layer">
+    <div class="data-icon">🗄️</div>
+    <div class="data-info">
+      <div class="data-title">Data Layer — Supabase (PostgreSQL + Realtime + Storage + Auth)</div>
+      <div class="data-desc">Toàn bộ dữ liệu được xử lý thông qua Supabase, đảm bảo đồng bộ tức thì giữa các vai trò với Row Level Security (RLS). Hỗ trợ Realtime subscriptions cho cập nhật không có độ trễ quan sát được.</div>
+    </div>
+    <div class="data-badges">
+      <span class="data-badge">PostgreSQL</span>
+      <span class="data-badge">Realtime</span>
+      <span class="data-badge">Auth + RLS</span>
+      <span class="data-badge">Storage</span>
+    </div>
+  </div>
+
+  <!-- EXTERNAL SERVICES -->
+  <div class="external-row">
+    <div class="ext-card">
+      <div class="ext-icon" style="background:linear-gradient(135deg,#6366f1,#4f46e5);">💳</div>
+      <div>
+        <div class="ext-name">Payment Gateway</div>
+        <div class="ext-desc">Stripe + VNPay (Webhook/IPN)</div>
+      </div>
+    </div>
+    <div class="ext-card">
+      <div class="ext-icon" style="background:linear-gradient(135deg,#ec4899,#db2777);">🤖</div>
+      <div>
+        <div class="ext-name">Google Gemini AI</div>
+        <div class="ext-desc">Generate & Analyze API</div>
+      </div>
+    </div>
+    <div class="ext-card">
+      <div class="ext-icon" style="background:linear-gradient(135deg,#22c55e,#16a34a);">📧</div>
+      <div>
+        <div class="ext-name">Email Service</div>
+        <div class="ext-desc">Resend (mở rộng)</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer-note">
+    <strong>Ghi chú:</strong> Lớp AI/Learning Analytics hoạt động xuyên suốt 4 tầng chức năng, liên tục thu thập dữ liệu từ hoạt động học tập, điểm danh, bài kiểm tra và hành vi người học để tạo ra tín hiệu hỗ trợ quyết định sư phạm. AI đóng vai trò gợi ý — quyền quyết định cuối cùng thuộc về giáo viên và quản trị viên.
+  </div>
+</div>
+
+</body>
+</html>

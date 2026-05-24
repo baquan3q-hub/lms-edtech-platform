@@ -156,16 +156,8 @@ export default function HomeworkSubmitClient({
         } else {
             toast.success("Nộp bài thành công!");
 
-            // Trigger AI behavior analysis sau khi nộp homework
-            // PHẢI await trackSubmission để logs được ghi vào DB trước khi AI đọc
+            // Trigger AI behavior analysis sau khi nộp homework (Đã gỡ bỏ vì chỉ chạy cho exam)
             await tracker.trackSubmission({ score: res.data?.score });
-            try {
-                fetch("/api/ai/behavior-analysis", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ classId, contextType: "homework", contextId: homework.id }),
-                });
-            } catch (e) { /* fire-and-forget */ }
 
             router.refresh();
         }

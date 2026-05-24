@@ -6,7 +6,7 @@ import {
     Users, Search, Filter, ChevronDown, ArrowUpDown,
     TrendingUp, TrendingDown, Minus, Eye, Clock,
     Zap, MonitorOff, MousePointerClick, User, Send,
-    HelpCircle, Info, ChevronUp
+    HelpCircle, Info, ChevronUp, FileText
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
     ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend
 } from "recharts";
-import { fetchStudentActivityDetail, notifyParentAboutBehavior } from "@/lib/actions/behavior-analysis";
+import { fetchStudentActivityDetail, fetchStudentBehaviorHistory, notifyParentAboutBehavior } from "@/lib/actions/behavior-analysis";
 
 interface AdminBehaviorDashboardProps {
     data: any;
@@ -35,7 +35,7 @@ export default function AdminBehaviorDashboard({ data }: AdminBehaviorDashboardP
     const [detailOpen, setDetailOpen] = useState(false);
     const [detailStudent, setDetailStudent] = useState<any>(null);
     const [detailLoading, setDetailLoading] = useState(false);
-    const [detailData, setDetailData] = useState<{ logs: any[]; alerts: any[] } | null>(null);
+    const [detailData, setDetailData] = useState<{ logs: any[]; alerts: any[]; history: any | null } | null>(null);
     const [parentMsg, setParentMsg] = useState("");
     const [sending, setSending] = useState(false);
     const [glossaryOpen, setGlossaryOpen] = useState(false);
@@ -113,8 +113,15 @@ export default function AdminBehaviorDashboard({ data }: AdminBehaviorDashboardP
         setDetailLoading(true);
         setDetailData(null);
         setParentMsg("");
-        const res = await fetchStudentActivityDetail(student.studentId, student.classId);
-        setDetailData({ logs: res.logs || [], alerts: res.alerts || [] });
+        const [resDetail, resHistory] = await Promise.all([
+            fetchStudentActivityDetail(student.studentId, student.classId),
+            fetchStudentBehaviorHistory(student.studentId, student.classId)
+        ]);
+        setDetailData({ 
+            logs: resDetail.logs || [], 
+            alerts: resDetail.alerts || [], 
+            history: resHistory.data || null 
+        });
         setDetailLoading(false);
     };
 
@@ -690,6 +697,78 @@ export default function AdminBehaviorDashboard({ data }: AdminBehaviorDashboardP
                                         <p className="text-xs text-slate-500 italic">{detailStudent.aiAnalysis.recommendation}</p>
                                     </div>
                                 )}
+
+                                {/* Lịch sử bài làm chi tiết */}
+                                <div>
+                                    <h4 className="text-sm font-bold text-slate-800 mb-2 flex items-center gap-1.5">
+                                        <FileText className="w-4 h-4 text-blue-500" /> Lịch sử bài làm & Hành vi
+                                    </h4>
+                                    {detailData?.history?.submissions && detailData.history.submissions.length > 0 ? (
+                                        <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                                            {detailData.history.submissions.map((sub: any) => (
+                                                <div key={sub.id} className={`bg-white rounded-lg border p-3 hover:shadow-sm transition-all ${
+                                                    sub.behavior.warnings > 0 ? "border-red-200" 
+                                                        : sub.behavior.tab_switches >= 5 ? "border-amber-200"
+                                                            : "border-slate-100"
+                                                }`}>
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <div className="flex items-center gap-2 min-w-0">
+                                                            <Badge className={`text-[8px] border-none shrink-0 ${
+                                                                sub.type === "exam" ? "bg-purple-100 text-purple-700"
+                                                                    : sub.type === "quiz" ? "bg-blue-100 text-blue-700"
+                                                                        : "bg-slate-100 text-slate-600"
+                                                            }`}>{sub.type === "exam" ? "Kiểm tra" : sub.type === "quiz" ? "Quiz" : "Bài tập"}</Badge>
+                                                            <p className="text-xs font-semibold text-slate-800 truncate">{sub.title}</p>
+                                                        </div>
+                                                        <div className="flex items-center gap-2 shrink-0">
+                                                            <span className={`text-xs font-black ${
+                                                                sub.percentage >= 80 ? "text-emerald-600"
+                                                                    : sub.percentage >= 50 ? "text-amber-600" : "text-red-600"
+                                                            }`}>{sub.score}/{sub.total}</span>
+                                                            <span className="text-[10px] text-slate-400">
+                                                                {new Date(sub.submitted_at).toLocaleDateString("vi-VN")}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    {sub.behavior.has_data && (
+                                                        <div className="flex items-center gap-2 flex-wrap">
+                                                            <span className={`inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                                                                sub.behavior.tab_switches >= 8 ? "bg-red-100 text-red-700"
+                                                                    : sub.behavior.tab_switches >= 3 ? "bg-amber-100 text-amber-700"
+                                                                        : "bg-slate-100 text-slate-500"
+                                                            }`}>
+                                                                <MonitorOff className="w-2.5 h-2.5" />
+                                                                Tab: {sub.behavior.tab_switches}
+                                                            </span>
+                                                            <span className={`inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full font-medium ${
+                                                                sub.behavior.rapid_guesses >= 5 ? "bg-red-100 text-red-700"
+                                                                    : sub.behavior.rapid_guesses >= 2 ? "bg-amber-100 text-amber-700"
+                                                                        : "bg-slate-100 text-slate-500"
+                                                            }`}>
+                                                                <Zap className="w-2.5 h-2.5" />
+                                                                Đoán bừa: {sub.behavior.rapid_guesses}
+                                                            </span>
+                                                            {sub.behavior.avg_speed_ms > 0 && (
+                                                                <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 font-medium">
+                                                                    <Clock className="w-2.5 h-2.5" />
+                                                                    {(sub.behavior.avg_speed_ms / 1000).toFixed(1)}s/câu
+                                                                </span>
+                                                            )}
+                                                            {sub.behavior.warnings > 0 && (
+                                                                <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-bold">
+                                                                    <AlertTriangle className="w-2.5 h-2.5" />
+                                                                    {sub.behavior.warnings} cảnh báo
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-slate-500 p-3 bg-slate-50 rounded-lg italic">Chưa có lịch sử làm bài chi tiết.</p>
+                                    )}
+                                </div>
 
                                 {/* Activity Logs */}
                                 <div>

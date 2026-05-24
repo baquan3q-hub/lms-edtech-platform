@@ -41,10 +41,10 @@ export default function AdminAttendanceClient() {
         setLoading(false);
     };
 
-    const handleExport = () => {
+    const handleExport = async () => {
         if (!data) return;
         try {
-            exportAttendanceExcel({
+            await exportAttendanceExcel({
                 month,
                 year,
                 classSummaries: data.classSummaries || [],

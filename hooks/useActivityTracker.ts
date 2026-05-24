@@ -225,7 +225,8 @@ export function useActivityTracker(options: UseActivityTrackerOptions) {
             });
             // Phải dùng sendBeacon vì fetch bị cancel khi unload
             const payload = JSON.stringify({ events: eventBuffer.current });
-            navigator.sendBeacon("/api/activity/log", payload);
+            const blob = new Blob([payload], { type: "application/json" });
+            navigator.sendBeacon("/api/activity/log", blob);
             eventBuffer.current = [];
         };
 

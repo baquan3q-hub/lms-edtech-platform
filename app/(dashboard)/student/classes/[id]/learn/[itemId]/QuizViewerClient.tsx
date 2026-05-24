@@ -87,16 +87,8 @@ export default function QuizViewerClient({
                 maxPossibleScore: res.maxPossibleScore as number
             });
 
-            // Trigger AI behavior analysis sau khi nộp quiz
-            // PHẢI await trackSubmission để logs được ghi vào DB trước khi AI đọc
+            // Trigger AI behavior analysis sau khi nộp quiz (Đã gỡ bỏ vì chỉ chạy cho exam)
             await tracker.trackSubmission({ score: res.score });
-            try {
-                fetch("/api/ai/behavior-analysis", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ classId, contextType: "quiz", contextId: itemId }),
-                });
-            } catch (e) { /* fire-and-forget */ }
         }
     };
 

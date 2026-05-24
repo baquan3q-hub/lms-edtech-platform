@@ -99,10 +99,10 @@ export default function ClassDetailTab({ month, year }: Props) {
 
     const selectedClassName = classes.find((c: any) => c.id === selectedClassId)?.name || "";
 
-    const handleExport = () => {
+    const handleExport = async () => {
         if (!selectedClassId || sessions.length === 0) return;
         try {
-            exportClassSessionsExcel({
+            await exportClassSessionsExcel({
                 className: selectedClassName,
                 month,
                 year,

@@ -34,9 +34,9 @@ export async function analyzeStudentBehavior(
         // 4. Gọi AI phân tích
         const aiResult = await runAIAnalysis(sessionMetrics, scoreHistory, contextType);
 
-        // 5. Lưu behavior score
-        const today = new Date().toISOString().split("T")[0]; // '2026-04-14'
-        await saveBehaviorScore(supabase, studentId, classId, today, sessionMetrics, aiResult, scoreHistory);
+        // 5. Lưu behavior score (dùng contextType + contextId làm period để tránh ghi đè dữ liệu)
+        const periodKey = `${contextType}_${contextId}`;
+        await saveBehaviorScore(supabase, studentId, classId, periodKey, sessionMetrics, aiResult, scoreHistory);
 
         // 6. Tạo alert nếu cần
         if (aiResult.gaming_score >= 0.7 || aiResult.anomaly_detected) {
@@ -528,12 +528,13 @@ export async function fetchTeacherClassBehaviorOverview(classId: string) {
 
         const studentIds = enrollments.map((e: any) => e.student_id);
 
-        // 2. Lấy behavior scores (mới nhất per student)
+        // 2. Lấy behavior scores (lấy bài có gaming_score lớn nhất - MAX)
         const { data: allScores } = await supabase
             .from("student_behavior_scores")
             .select("*")
             .eq("class_id", classId)
             .in("student_id", studentIds)
+            .order("gaming_score", { ascending: false })
             .order("updated_at", { ascending: false });
 
         const scoreMap = new Map<string, any>();
@@ -555,7 +556,7 @@ export async function fetchTeacherClassBehaviorOverview(classId: string) {
         const [{ data: examSubs }, { data: assignSubs }] = await Promise.all([
             supabase
                 .from("exam_submissions")
-                .select("id, student_id, score, submitted_at, time_spent, exam:exams(id, title, total_points, class_id)")
+                .select("id, student_id, score, submitted_at, time_taken_seconds, exam:exams(id, title, total_points, class_id)")
                 .in("student_id", studentIds)
                 .not("score", "is", null)
                 .order("submitted_at", { ascending: false })
@@ -722,7 +723,7 @@ export async function fetchTeacherClassBehaviorOverview(classId: string) {
                 score: Number(s.score), total: exam?.total_points || 10,
                 percentage: exam?.total_points ? Math.round((Number(s.score) / exam.total_points) * 100) : 0,
                 submitted_at: s.submitted_at,
-                time_spent: s.time_spent || null,
+                time_spent: s.time_taken_seconds || null,
             });
             submissionHistoryMap.set(s.student_id, list);
         });
@@ -759,6 +760,21 @@ export async function fetchTeacherClassBehaviorOverview(classId: string) {
             const tabSwitchLogs = logs.filter((l: any) => l.activity_type === "tab_switch");
             const rapidGuessLogs = logs.filter((l: any) => l.metadata?.is_rapid_guess === true);
 
+            // Tìm thông tin bài thi vi phạm nặng nhất
+            let worstExamTitle = "Bài kiểm tra";
+            let worstExamId = "";
+            if (behavior && behavior.period && behavior.period.startsWith("exam_")) {
+                worstExamId = behavior.period.replace("exam_", "");
+                const worstSub = classExamSubs.find((s: any) => {
+                    const exam = Array.isArray(s.exam) ? s.exam[0] : s.exam;
+                    return s.student_id === e.student_id && exam?.id === worstExamId;
+                });
+                if (worstSub) {
+                    const exam = Array.isArray(worstSub.exam) ? worstSub.exam[0] : worstSub.exam;
+                    worstExamTitle = exam?.title || "Bài kiểm tra";
+                }
+            }
+
             return {
                 student_id: e.student_id,
                 student_name: studentData?.full_name || "N/A",
@@ -777,6 +793,8 @@ export async function fetchTeacherClassBehaviorOverview(classId: string) {
                     anomaly_detected: behavior.anomaly_detected,
                     ai_analysis: behavior.ai_analysis_json,
                     updated_at: behavior.updated_at,
+                    exam_title: worstExamTitle,
+                    exam_id: worstExamId,
                 } : null,
                 submissions,
                 alerts: studentAlerts,
@@ -836,7 +854,7 @@ export async function fetchStudentBehaviorHistory(studentId: string, classId: st
         // 1. Lấy tất cả exam submissions
         const { data: examSubs } = await supabase
             .from("exam_submissions")
-            .select("id, student_id, score, submitted_at, time_spent, answers, exam:exams(id, title, total_points, class_id, questions)")
+            .select("id, student_id, score, submitted_at, time_taken_seconds, answers, exam:exams(id, title, total_points, class_id, questions)")
             .eq("student_id", studentId)
             .not("score", "is", null)
             .order("submitted_at", { ascending: false })
@@ -908,7 +926,7 @@ export async function fetchStudentBehaviorHistory(studentId: string, classId: st
                 total: totalPoints,
                 percentage,
                 submitted_at: s.submitted_at,
-                time_spent: s.time_spent || null,
+                time_spent: s.time_taken_seconds || null,
                 total_questions: totalQuestions,
                 behavior: {
                     tab_switches: tabSwitches,
@@ -1005,12 +1023,13 @@ export async function fetchClassBehaviorScores(classId: string) {
 
         const studentIds = enrollments.map((e: any) => e.student_id);
 
-        // Lấy behavior scores mới nhất
+        // Lấy behavior scores có gaming score lớn nhất (MAX)
         const { data: scores } = await supabase
             .from("student_behavior_scores")
             .select("*")
             .eq("class_id", classId)
             .in("student_id", studentIds)
+            .order("gaming_score", { ascending: false })
             .order("updated_at", { ascending: false });
 
         // Lấy alerts chưa resolved

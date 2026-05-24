@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -104,9 +105,9 @@ export default function StudentDetailDialog({ student, open, onOpenChange, month
                     {/* Student Info */}
                     <div className="flex items-center gap-4">
                         <div className="w-14 h-14 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 overflow-hidden">
-                            {s.avatarUrl ? (
-                                <img src={s.avatarUrl} alt="" className="w-14 h-14 rounded-full object-cover" />
-                            ) : (
+                             {s.avatarUrl ? (
+                                 <Image src={s.avatarUrl} alt="" width={56} height={56} className="w-14 h-14 rounded-full object-cover" />
+                             ) : (
                                 <UserCircle className="w-8 h-8 text-indigo-400" />
                             )}
                         </div>

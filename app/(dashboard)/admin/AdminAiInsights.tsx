@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { Sparkles, BrainCircuit, Loader2, Play, RotateCcw } from "lucide-react";
-import { generateAdminInsights } from "./ai-actions";
+
+type ChartDatum = Record<string, string | number | boolean | null | undefined>;
 
 interface AdminAiInsightsProps {
-    attendanceData: any[];
-    gradesData: any[];
-    submissionData: any[];
+    attendanceData: ChartDatum[];
+    gradesData: ChartDatum[];
+    submissionData: ChartDatum[];
 }
 
 export function AdminAiInsights({ attendanceData, gradesData, submissionData }: AdminAiInsightsProps) {
@@ -21,14 +22,22 @@ export function AdminAiInsights({ attendanceData, gradesData, submissionData }: 
         setInsight(null);
 
         try {
-            const { data, error: resError } = await generateAdminInsights(attendanceData, gradesData, submissionData);
-            if (resError) {
-                setError(resError);
-            } else {
-                setInsight(data);
+            const response = await fetch("/api/ai/admin-insights", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ attendanceData, gradesData, submissionData }),
+            });
+
+            const result = await response.json().catch(() => null);
+
+            if (!response.ok || result?.error) {
+                setError(result?.error || "Không thể tạo phân tích AI. Vui lòng thử lại.");
+                return;
             }
-        } catch (e: any) {
-            setError(e.message || "Lỗi không xác định.");
+
+            setInsight(result?.data || "AI không trả về nội dung phân tích.");
+        } catch (e: unknown) {
+            setError(e instanceof Error ? e.message : "Lỗi không xác định.");
         } finally {
             setLoading(false);
         }

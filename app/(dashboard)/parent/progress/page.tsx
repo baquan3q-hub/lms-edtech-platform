@@ -10,8 +10,9 @@ export const dynamic = "force-dynamic";
 export default async function ParentChildProgressPage({
     searchParams,
 }: {
-    searchParams: { studentId?: string };
+    searchParams: Promise<{ studentId?: string }>;
 }) {
+    const resolvedSearchParams = await searchParams;
     // 1. Verify user & role
     const supabase = await createClient();
     const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -61,8 +62,8 @@ export default async function ParentChildProgressPage({
     });
 
     // 3. Determine active student parameter
-    const activeStudentId = searchParams.studentId && students.find(s => s.id === searchParams.studentId)
-        ? searchParams.studentId
+    const activeStudentId = resolvedSearchParams.studentId && students.find(s => s.id === resolvedSearchParams.studentId)
+        ? resolvedSearchParams.studentId
         : students[0].id;
 
     const activeStudent = students.find(s => s.id === activeStudentId)!;

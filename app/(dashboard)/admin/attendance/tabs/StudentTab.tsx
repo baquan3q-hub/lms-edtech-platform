@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import Image from "next/image";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -233,7 +234,7 @@ export default function StudentTab({ month, year }: Props) {
                                             <div className="flex items-center gap-3">
                                                 <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 overflow-hidden">
                                                     {s.avatarUrl ? (
-                                                        <img src={s.avatarUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+                                                        <Image src={s.avatarUrl} alt="" width={32} height={32} className="w-8 h-8 rounded-full object-cover" />
                                                     ) : (
                                                         <UserCircle className="w-5 h-5 text-indigo-500" />
                                                     )}

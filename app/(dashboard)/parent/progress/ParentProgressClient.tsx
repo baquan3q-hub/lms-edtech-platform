@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import { generateParentAIInsight } from "@/lib/actions/parent-progress";
 import {
@@ -182,7 +183,7 @@ export default function ParentProgressClient({ students, activeStudentId, active
                                             <div className="flex items-center gap-3 py-1">
                                                 <div className="w-7 h-7 rounded-full bg-gradient-to-br from-sky-100 to-indigo-100 flex items-center justify-center shrink-0">
                                                     {student.avatar_url ? (
-                                                        <img src={student.avatar_url} alt={student.name} className="w-full h-full rounded-full object-cover" />
+                                                        <Image src={student.avatar_url} alt={student.name} width={28} height={28} className="w-full h-full rounded-full object-cover" />
                                                     ) : (
                                                         <span className="text-sky-700 font-bold text-xs">{student.name.charAt(0)}</span>
                                                     )}

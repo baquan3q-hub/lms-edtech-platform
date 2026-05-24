@@ -1,5 +1,3 @@
-import * as XLSX from "xlsx";
-
 interface ClassSummary {
     classId: string;
     className: string;
@@ -43,7 +41,8 @@ interface ExportData {
 /**
  * Xuất file Excel 3 sheets: Tổng hợp, Chi tiết ngày, HS cần chú ý
  */
-export function exportAttendanceExcel(data: ExportData) {
+export async function exportAttendanceExcel(data: ExportData) {
+    const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
 
     // ===== Sheet 1: Tổng hợp theo lớp =====

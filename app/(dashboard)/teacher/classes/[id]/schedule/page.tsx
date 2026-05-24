@@ -8,8 +8,10 @@ export const dynamic = "force-dynamic";
 export default async function TeacherClassSchedulePage({
     params,
 }: {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 }) {
+    const { id: classId } = await params;
+
     // 1. Verify user & role
     const supabase = await createClient();
     const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -32,7 +34,7 @@ export default async function TeacherClassSchedulePage({
     const { data: classData, error: classError } = await supabase
         .from("classes")
         .select("id, name, course_id, status")
-        .eq("id", params.id)
+        .eq("id", classId)
         .single();
 
     if (classError || !classData) {
@@ -46,7 +48,7 @@ export default async function TeacherClassSchedulePage({
     }
 
     // 3. Fetch initial class sessions
-    const { data: initialSessions } = await getClassSessions(params.id);
+    const { data: initialSessions } = await getClassSessions(classId);
 
     return (
         <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -60,7 +62,7 @@ export default async function TeacherClassSchedulePage({
             </div>
 
             <TeacherClassScheduleClient
-                classId={params.id}
+                classId={classId}
                 initialSessions={initialSessions || []}
             />
         </div>

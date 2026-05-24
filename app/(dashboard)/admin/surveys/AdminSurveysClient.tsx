@@ -23,7 +23,6 @@ import {
     CalendarClock, Power, PowerOff, Type, Edit2, Clock,
     Download, Users
 } from "lucide-react";
-import * as XLSX from "xlsx";
 
 type ScopeType = "system" | "course" | "class";
 type QuestionType = "single_choice" | "multiple_choice" | "text" | "rating";
@@ -225,9 +224,10 @@ export default function AdminSurveysClient() {
     };
 
     // === Export Excel ===
-    const handleExportSurvey = () => {
+    const handleExportSurvey = async () => {
         if (!analyticsData) return;
 
+        const XLSX = await import("xlsx");
         const wb = XLSX.utils.book_new();
 
         // Sheet 1: Kết quả thống kê

@@ -5,7 +5,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users, Sparkles, FileSpreadsheet } from "lucide-react";
 import AIInsightModal from "./AIInsightModal";
-import * as XLSX from "xlsx";
 import ManualGradingModal from "@/components/teacher/ManualGradingModal";
 
 interface SubmissionsTableClientProps {
@@ -25,7 +24,8 @@ export default function SubmissionsTableClient({ submissions, exam, strengths, w
         return `${m}:${s.toString().padStart(2, '0')}`;
     };
 
-    const handleExportExcel = () => {
+    const handleExportExcel = async () => {
+        const XLSX = await import("xlsx");
         // Sheet 1: Student Scores & Insights
         const studentData = submissions.map((sub, idx) => {
             const studentObj = Array.isArray(sub.student) ? sub.student[0] : sub.student;

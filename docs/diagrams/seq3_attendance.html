@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Sequence Diagram 3 - Diem danh & Xin nghi</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 24px;
+    font-family: 'Segoe UI', 'Arial', sans-serif;
+  }
+  h2 { font-size: 20px; color: #1e293b; margin-bottom: 4px; text-align: center; }
+  .subtitle { font-size: 13px; color: #64748b; margin-bottom: 24px; text-align: center; }
+  .mermaid { width: 100%; max-width: 1200px; }
+</style>
+</head>
+<body>
+<h2>So do tuan tu 3: Diem danh & Xin nghi hoc</h2>
+<p class="subtitle">Sequence Diagram — Attendance & Leave Request Flow</p>
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor PH as Phu huynh
+    actor GV as Giao vien
+    participant UI as Next.js
+    participant SA as Server Actions
+    participant DB as PostgreSQL
+    participant RT as Realtime
+    participant Admin as Admin Dashboard
+
+    rect rgb(240, 248, 255)
+    Note over PH, GV: Quy trinh xin nghi hoc
+    PH->>UI: Tao don xin nghi hoc
+    UI->>SA: createAbsenceRequest
+    SA->>DB: Luu absence_requests &#40;pending&#41;
+    DB->>RT: Broadcast thay doi
+    RT-->>GV: Thong bao co don moi
+
+    GV->>UI: Xem va duyet don
+    alt Chap nhan
+        UI->>DB: Cap nhat status = approved
+    else Tu choi
+        UI->>DB: Cap nhat status = rejected
+    end
+    DB->>RT: Broadcast ket qua
+    RT-->>PH: Thong bao ket qua duyet don
+    end
+
+    rect rgb(255, 248, 240)
+    Note over GV, Admin: Quy trinh diem danh buoi hoc
+    GV->>UI: Mo phien diem danh cho buoi hoc
+    UI->>SA: openAttendanceSession
+    SA->>DB: Tao attendance_sessions
+
+    loop Tung hoc sinh trong lop
+        GV->>UI: Danh dau trang thai &#40;co mat / vang / tre / phep&#41;
+        UI->>SA: markAttendance
+        SA->>DB: Ghi attendance_records
+    end
+
+    GV->>UI: Luu phien diem danh
+    DB->>RT: Broadcast records moi
+    RT-->>Admin: Cap nhat dashboard diem danh toan he thong
+    RT-->>PH: Cap nhat chuyen can con em
+    end
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true, theme: 'default',
+    sequence: { actorMargin: 50, messageMargin: 35, mirrorActors: true, width: 160, useMaxWidth: false },
+    themeVariables: { fontSize: '13px', actorFontSize: '12px' }
+  });
+</script>
+</body>
+</html>

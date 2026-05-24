@@ -7,11 +7,12 @@ export const dynamic = "force-dynamic";
 export default async function ParentAnnouncementsPage({
     params,
 }: {
-    params: { id: string };
+    params: Promise<{ id: string }>;
 }) {
+    const { id } = await params;
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) redirect("/login");
 
-    return <ParentAnnouncementsClient studentId={params.id} />;
+    return <ParentAnnouncementsClient studentId={id} />;
 }

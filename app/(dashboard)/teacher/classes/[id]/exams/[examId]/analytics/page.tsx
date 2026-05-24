@@ -8,13 +8,17 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import QuestionAnalyticsChart from "./QuestionAnalyticsChart";
 import SubmissionsTableClient from "./SubmissionsTableClient";
 import AnalyticsTabsClient from "./AnalyticsTabsClient";
-import AIClassAnalysis from "./AIClassAnalysis";
-import AIStudentAnalysis from "./AIStudentAnalysis";
-import TeacherProgressTracking from "./TeacherProgressTracking";
-import ClassBehaviorTab from "./ClassBehaviorTab";
+import dynamic from "next/dynamic";
+
+const QuestionAnalyticsChart = dynamic(() => import("./QuestionAnalyticsChart"), {
+    loading: () => <div className="h-[350px] bg-slate-100 animate-pulse rounded-xl mt-6" />
+});
+const AIClassAnalysis = dynamic(() => import("./AIClassAnalysis"));
+const AIStudentAnalysis = dynamic(() => import("./AIStudentAnalysis"));
+const TeacherProgressTracking = dynamic(() => import("./TeacherProgressTracking"));
+const ClassBehaviorTab = dynamic(() => import("./ClassBehaviorTab"));
 
 export default async function ExamAnalyticsPage({ params }: { params: Promise<{ id: string; examId: string }> }) {
     const { id: classId, examId } = await params;

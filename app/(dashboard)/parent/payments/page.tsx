@@ -417,6 +417,7 @@ export default function ParentPaymentsPage() {
                     className="mx-auto rounded-xl"
                     width={280}
                     height={280}
+                    loading="lazy"
                   />
                 </div>
 

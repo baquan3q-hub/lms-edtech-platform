@@ -20,7 +20,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getAttendanceHistory, deleteAttendanceSession } from "@/lib/actions/attendance";
 import { calcAttendanceRate } from "@/lib/utils/attendance-rate";
-import * as XLSX from "xlsx";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -143,7 +142,8 @@ export default function AttendanceHistoryClient({
     });
 
     // ---- Export Excel ----
-    const exportExcel = () => {
+    const exportExcel = async () => {
+        const XLSX = await import("xlsx");
         // Sheet 1: Tổng hợp
         const summaryData = studentStats.map((s, idx) => ({
             "STT": idx + 1,

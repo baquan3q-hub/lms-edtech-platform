@@ -6,7 +6,6 @@ import {
     ArrowUpDown, Trophy, GraduationCap, BookOpen, ChevronDown,
     Download, Loader2
 } from "lucide-react";
-import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { fetchGradeExportData } from "@/lib/actions/admin-grades";
 import { Badge } from "@/components/ui/badge";
@@ -116,6 +115,7 @@ export default function AdminGradesClient({ data }: AdminGradesClientProps) {
 
     const handleExport = async () => {
         setIsExporting(true);
+        const XLSX = await import("xlsx");
         const toastId = toast.loading("Đang lập báo cáo, vui lòng đợi...");
 
         const res = await fetchGradeExportData({

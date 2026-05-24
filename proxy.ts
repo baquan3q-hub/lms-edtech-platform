@@ -14,7 +14,7 @@ const ROLE_ROUTES: Record<string, string> = {
 const PUBLIC_ROUTES = ["/login", "/forgot-password"];
 
 // Các route bắt đầu bằng prefix này sẽ bị bỏ qua (API, static files)
-const IGNORED_PREFIXES = ["/api", "/_next", "/favicon.ico"];
+const IGNORED_PREFIXES = ["/api", "/_next", "/favicon.ico", "/manifest.webmanifest"];
 
 export async function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl;
@@ -101,6 +101,6 @@ export const config = {
          * - favicon.ico (favicon file)
          * - Các file có extension (ảnh, fonts, v.v.)
          */
-        "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+        "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|webmanifest)$).*)",
     ],
 };

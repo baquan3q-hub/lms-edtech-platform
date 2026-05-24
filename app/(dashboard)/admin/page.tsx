@@ -18,14 +18,15 @@ import BehaviorAnalyticsWidget from "@/components/admin/BehaviorAnalyticsWidget"
 export const revalidate = 0; // Đảm bảo luôn fetch data mới (Realtime)
 
 interface PageProps {
-    searchParams: {
+    searchParams: Promise<{
         range?: string;
-    };
+    }>;
 }
 
 export default async function AdminDashboardPage({ searchParams }: PageProps) {
     const supabase = createAdminClient();
-    const range = searchParams?.range || 'all';
+    const resolvedSearchParams = await searchParams;
+    const range = resolvedSearchParams?.range || 'all';
 
     // Lấy dữ liệu thật từ database (Overviews)
     const [

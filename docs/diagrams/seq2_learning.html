@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Sequence Diagram 2 - Hoc tap & Danh gia AI</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 24px;
+    font-family: 'Segoe UI', 'Arial', sans-serif;
+  }
+  h2 { font-size: 20px; color: #1e293b; margin-bottom: 4px; text-align: center; }
+  .subtitle { font-size: 13px; color: #64748b; margin-bottom: 24px; text-align: center; }
+  .mermaid { width: 100%; max-width: 1200px; }
+</style>
+</head>
+<body>
+<h2>So do tuan tu 2: Hoc tap, Danh gia & Phan tich AI</h2>
+<p class="subtitle">Sequence Diagram — Learning, Assessment & AI Analysis Flow</p>
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    actor GV as Giao vien
+    actor HS as Hoc sinh
+    actor PH as Phu huynh
+    participant UI as Next.js
+    participant SA as Server Actions
+    participant DB as PostgreSQL
+    participant AI as Google Gemini
+    participant RT as Realtime
+
+    rect rgb(240, 248, 255)
+    Note over GV, DB: Giai doan 1 - Tao noi dung & bai kiem tra
+    GV->>UI: Tao bai kiem tra / bai tap
+    UI->>SA: createExam / createHomework
+    SA->>DB: Luu exams, homework
+
+    opt Sinh cau hoi bang AI
+        GV->>UI: Yeu cau AI tao cau hoi
+        UI->>AI: Prompt + noi dung bai giang
+        AI-->>UI: JSON cau hoi trac nghiem
+        GV->>UI: Duyet va chinh sua cau hoi
+        UI->>DB: Luu cau hoi vao exam
+    end
+    end
+
+    rect rgb(255, 248, 240)
+    Note over HS, RT: Giai doan 2 - Hoc sinh lam bai
+    HS->>UI: Vao lop, lam bai kiem tra
+    UI->>SA: submitExam / submitHomework
+    SA->>DB: Ghi exam_submissions
+    DB->>RT: Broadcast thay doi
+    RT-->>UI: Cap nhat UI realtime
+    end
+
+    rect rgb(240, 255, 240)
+    Note over GV, PH: Giai doan 3 - Phan tich AI & Gui nhan xet
+    GV->>UI: Xem ket qua va yeu cau phan tich
+    UI->>AI: Phan tich ket qua ca lop
+    AI-->>UI: Diem manh, diem yeu, goi y giang day
+    UI->>DB: Luu quiz_class_analysis
+
+    UI->>AI: Phan tich tung hoc sinh
+    AI-->>UI: Nhan xet ca nhan, bai on tap bo sung
+    UI->>DB: Luu quiz_individual_analysis
+
+    GV->>UI: Duyet nhan xet va gui cho phu huynh
+    UI->>DB: Tao notification cho PH
+    DB->>RT: Push notification
+    PH->>UI: Xem tien do, diem so, nhan xet cua con
+    end
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true, theme: 'default',
+    sequence: { actorMargin: 50, messageMargin: 35, mirrorActors: true, width: 160, useMaxWidth: false },
+    themeVariables: { fontSize: '13px', actorFontSize: '12px' }
+  });
+</script>
+</body>
+</html>

@@ -6,12 +6,12 @@ import ParentReviewsClient from "./ParentReviewsClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function ParentReviewsPage({ params }: { params: { id: string } }) {
+export default async function ParentReviewsPage({ params }: { params: Promise<{ id: string }> }) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) redirect("/login");
 
-    const studentId = params.id;
+    const { id: studentId } = await params;
 
     // Kiểm tra quyền PH
     const hasAccess = await canParentViewStudent(user.id, studentId);
