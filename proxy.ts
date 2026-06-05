@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
-import { createAdminClient } from "@/lib/supabase/admin";
 
 // Định nghĩa route permissions theo role
 const ROLE_ROUTES: Record<string, string> = {
@@ -34,7 +33,7 @@ export async function proxy(request: NextRequest) {
             return supabaseResponse;
         }
 
-        // Cho phép truy cập trang chủ (sẽ redirect trong page.tsx)
+        // Cho phép truy cập trang chủ (sẽ render Landing Page)
         if (pathname === "/") {
             return supabaseResponse;
         }
@@ -48,22 +47,8 @@ export async function proxy(request: NextRequest) {
 
     // --- LOGIC 2: User đã đăng nhập ---
 
-    // Sử dụng Admin Client để query role (bypass RLS hoàn toàn)
-    let role = "student";
-    try {
-        const adminSupabase = createAdminClient();
-        const { data: userData } = await adminSupabase
-            .from("users")
-            .select("role")
-            .eq("id", user.id)
-            .single();
-
-        if (userData?.role) {
-            role = userData.role;
-        }
-    } catch (err) {
-        console.error("[Middleware] Error fetching role:", err);
-    }
+    // Đọc role trực tiếp từ user_metadata để tối ưu hóa hiệu năng, loại bỏ hoàn toàn các truy vấn cơ sở dữ liệu đồng bộ
+    const role = user.user_metadata?.role || "student";
 
     // Nếu user đã login mà vào trang login/register → redirect về dashboard
     if (PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {

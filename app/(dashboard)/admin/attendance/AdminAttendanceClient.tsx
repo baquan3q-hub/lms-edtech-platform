@@ -28,6 +28,28 @@ export default function AdminAttendanceClient() {
     const [loading, setLoading] = useState(true);
     const [data, setData] = useState<any>(null);
     const [activeTab, setActiveTab] = useState("overview");
+    const [visitedTabs, setVisitedTabs] = useState<Record<string, boolean>>({
+        overview: true,
+        teachers: false,
+        students: false,
+        classes: false,
+        teacherLeave: false,
+    });
+
+    const handleTabChange = (value: string) => {
+        setActiveTab(value);
+        const keyMap: Record<string, string> = {
+            overview: "overview",
+            teachers: "teachers",
+            students: "students",
+            classes: "classes",
+            "teacher-leave": "teacherLeave",
+        };
+        const key = keyMap[value];
+        if (key && !visitedTabs[key]) {
+            setVisitedTabs((prev) => ({ ...prev, [key]: true }));
+        }
+    };
 
     useEffect(() => {
         loadOverview();
@@ -118,7 +140,7 @@ export default function AdminAttendanceClient() {
             </div>
 
             {/* Tab System */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+            <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
                 <TabsList className="bg-white border border-gray-200 p-1 rounded-xl shadow-sm h-auto flex-wrap">
                     <TabsTrigger
                         value="overview"
@@ -158,29 +180,37 @@ export default function AdminAttendanceClient() {
                 </TabsList>
 
                 {/* Tab 1: Overview */}
-                <TabsContent value="overview" className="mt-0">
+                <div className={activeTab === "overview" ? "mt-0 block animate-in fade-in duration-200" : "hidden"}>
                     <OverviewTab month={month} year={year} data={data} loading={loading} />
-                </TabsContent>
+                </div>
 
                 {/* Tab 2: Teachers */}
-                <TabsContent value="teachers" className="mt-0">
-                    <TeacherTab month={month} year={year} />
-                </TabsContent>
+                {visitedTabs.teachers && (
+                    <div className={activeTab === "teachers" ? "mt-0 block animate-in fade-in duration-200" : "hidden"}>
+                        <TeacherTab month={month} year={year} />
+                    </div>
+                )}
 
                 {/* Tab 3: Students */}
-                <TabsContent value="students" className="mt-0">
-                    <StudentTab month={month} year={year} />
-                </TabsContent>
+                {visitedTabs.students && (
+                    <div className={activeTab === "students" ? "mt-0 block animate-in fade-in duration-200" : "hidden"}>
+                        <StudentTab month={month} year={year} />
+                    </div>
+                )}
 
                 {/* Tab 4: Class Detail */}
-                <TabsContent value="classes" className="mt-0">
-                    <ClassDetailTab month={month} year={year} />
-                </TabsContent>
+                {visitedTabs.classes && (
+                    <div className={activeTab === "classes" ? "mt-0 block animate-in fade-in duration-200" : "hidden"}>
+                        <ClassDetailTab month={month} year={year} />
+                    </div>
+                )}
 
                 {/* Tab 5: Teacher Leave Requests */}
-                <TabsContent value="teacher-leave" className="mt-0">
-                    <TeacherLeaveTab month={month} year={year} />
-                </TabsContent>
+                {visitedTabs.teacherLeave && (
+                    <div className={activeTab === "teacher-leave" ? "mt-0 block animate-in fade-in duration-200" : "hidden"}>
+                        <TeacherLeaveTab month={month} year={year} />
+                    </div>
+                )}
             </Tabs>
         </div>
     );
