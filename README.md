@@ -6,7 +6,7 @@
 [![AI Engine](https://img.shields.io/badge/AI-Google%20Gemini%20AI-orange.svg?style=flat&logo=google-gemini)](https://deepmind.google/technologies/gemini/)
 [![PWA Ready](https://img.shields.io/badge/PWA-Installable-blueviolet.svg?style=flat&logo=pwa)](https://web.dev/explore/progressive-web-apps)
 
-> **Dự án cuối khóa / Đồ án tốt nghiệp cá nhân**
+> **Dự án cá nhân**
 > Dự án được nghiên cứu, phân tích, thiết kế, xây dựng, kiểm thử và cải tiến độc lập bởi học viên đảm nhiệm toàn bộ trách nhiệm vai trò Full-stack Developer.
 
 ---
