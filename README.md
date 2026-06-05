@@ -183,6 +183,6 @@ lms-edtech-platform/
 
 ## 👨‍💻 Tác Giả & Vai Trò Dự Án
 
-* **Họ và tên:** [Tên của bạn]
-* **Vai trò:** Product Owner, Solution Architect, UI/UX Designer, Full-stack Developer, QA Engineer.
-* **Mục tiêu:** Cung cấp giải pháp số hóa toàn diện giúp kết nối chặt chẽ giữa Nhà trường - Giáo viên - Học sinh - Phụ huynh trên cơ sở tối ưu hóa học tập bằng Trí tuệ nhân tạo (AI).
+* **Họ và tên:** Bùi Anh Quân (quanba)
+* **Vai trò:** Product Owner, Solution Architect, UI/UX ,Developer, QA.
+* **Mục tiêu:** Cung cấp giải pháp số hóa toàn diện giúp kết nối chặt chẽ giữa Trung tâm - Giáo viên - Học sinh - Phụ huynh trên cơ sở tối ưu hóa học tập bằng Trí tuệ nhân tạo (AI).
