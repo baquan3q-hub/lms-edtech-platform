@@ -1,1 +1,0 @@
-﻿app/(dashboard)/teacher/classes/[id]/exams/[examId]/analytics/ReportCardPDF.tsx(4,62): error TS2307: Cannot find module '@react-pdf/renderer' or its corresponding type declarations.

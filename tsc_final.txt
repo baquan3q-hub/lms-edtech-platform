@@ -1,1 +1,0 @@
-﻿app/(dashboard)/teacher/classes/[id]/exams/[examId]/analytics/AIClassAnalysis.tsx(278,102): error TS1003: Identifier expected.

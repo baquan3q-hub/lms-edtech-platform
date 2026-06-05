@@ -290,11 +290,10 @@ export default function ParentProgressClient({ studentName, stats, history, feed
                                                         📝 {examObj?.title || 'Bài kiểm tra'}
                                                     </h4>
                                                     {norm && (
-                                                        <Badge className={`text-[10px] border-none shrink-0 ${
-                                                            parseFloat(norm) >= 8 ? 'bg-emerald-50 text-emerald-700'
+                                                        <Badge className={`text-[10px] border-none shrink-0 ${parseFloat(norm) >= 8 ? 'bg-emerald-50 text-emerald-700'
                                                             : parseFloat(norm) >= 6 ? 'bg-amber-50 text-amber-700'
-                                                            : 'bg-red-50 text-red-700'
-                                                        }`}>
+                                                                : 'bg-red-50 text-red-700'
+                                                            }`}>
                                                             Điểm: {norm}/10
                                                         </Badge>
                                                     )}
@@ -519,11 +518,10 @@ export default function ParentProgressClient({ studentName, stats, history, feed
                                         </p>
                                     </div>
                                     {norm && (
-                                        <div className={`text-center px-4 py-2 rounded-xl ${
-                                            parseFloat(norm) >= 8 ? 'bg-emerald-50 text-emerald-700'
+                                        <div className={`text-center px-4 py-2 rounded-xl ${parseFloat(norm) >= 8 ? 'bg-emerald-50 text-emerald-700'
                                             : parseFloat(norm) >= 6 ? 'bg-amber-50 text-amber-700'
-                                            : 'bg-red-50 text-red-700'
-                                        }`}>
+                                                : 'bg-red-50 text-red-700'
+                                            }`}>
                                             <p className="text-2xl font-black">{norm}</p>
                                             <p className="text-[10px] font-medium">/ 10 điểm</p>
                                         </div>
