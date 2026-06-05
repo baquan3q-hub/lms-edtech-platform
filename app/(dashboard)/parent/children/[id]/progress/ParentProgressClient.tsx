@@ -12,6 +12,11 @@ import {
     YAxis,
     CartesianGrid,
     Tooltip,
+    RadarChart,
+    Radar,
+    PolarGrid,
+    PolarAngleAxis,
+    PolarRadiusAxis,
 } from "recharts";
 import {
     TrendingUp, Users, BookOpen, Clock, Target, Award, Star,
@@ -55,18 +60,21 @@ interface ScoreHistory {
     type?: string;
 }
 
-interface SkillItem {
+interface CompetencyCriterion {
     key: string;
     label: string;
     value: number;
+    fullMark: number;
     icon: string;
+    description: string;
 }
 
 interface CompetencyData {
-    skills: SkillItem[];
-    strengths: SkillItem[];
-    weaknesses: SkillItem[];
+    criteria: CompetencyCriterion[];
     overallScore: number;
+    totalExams: number;
+    totalSessions: number;
+    totalPointsRaw: number;
 }
 
 interface ParentProgressClientProps {
@@ -96,10 +104,10 @@ export default function ParentProgressClient({ studentName, stats, history, feed
     };
 
     const getCompetencyLabel = (value: number) => {
-        if (value >= 80) return { text: "Xuất sắc", color: "text-emerald-600 bg-emerald-50" };
-        if (value >= 60) return { text: "Tốt", color: "text-blue-600 bg-blue-50" };
-        if (value >= 40) return { text: "Trung bình", color: "text-amber-600 bg-amber-50" };
-        return { text: "Cần cải thiện", color: "text-red-600 bg-red-50" };
+        if (value >= 80) return { text: "Xuất sắc", color: "text-emerald-600 bg-emerald-50", barColor: "bg-emerald-500" };
+        if (value >= 60) return { text: "Tốt", color: "text-blue-600 bg-blue-50", barColor: "bg-blue-500" };
+        if (value >= 40) return { text: "Trung bình", color: "text-amber-600 bg-amber-50", barColor: "bg-amber-500" };
+        return { text: "Cần cải thiện", color: "text-red-600 bg-red-50", barColor: "bg-red-500" };
     };
 
     const CustomTooltip = ({ active, payload, label }: any) => {
@@ -190,99 +198,61 @@ export default function ParentProgressClient({ studentName, stats, history, feed
                 </Card>
             </div>
 
-            {/* ===================== NĂNG LỰC THEO MÔN + ĐIỂM MẠNH/YẾU ===================== */}
-            {competencyData && (
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-                    {/* Skill Mastery Bar Chart */}
-                    {competencyData.skills.length > 0 && (
-                        <Card className="lg:col-span-3 shadow-sm overflow-hidden">
-                            <CardHeader className="bg-gradient-to-r from-indigo-50 to-purple-50 border-b border-indigo-100">
+            {/* ===================== BẢN ĐỒ NĂNG LỰC (RADAR CHART) ===================== */}
+            {competencyData && competencyData.criteria && competencyData.criteria.length > 0 && (
+                <Card className="py-0 gap-0 shadow-sm overflow-hidden border-violet-200/60 bg-gradient-to-br from-violet-50/20 to-indigo-50/10">
+                    <CardHeader className="bg-gradient-to-r from-violet-50 to-indigo-50/80 border-b border-violet-100 py-5">
+                        <div className="flex items-center justify-between">
+                            <div>
                                 <CardTitle className="flex items-center gap-2">
-                                    <Target className="w-5 h-5 text-indigo-600" /> Mức độ Thành thạo theo Môn
+                                    <Star className="w-5 h-5 text-violet-600" /> Bản đồ Năng lực
                                 </CardTitle>
-                                <CardDescription>
-                                    Điểm trung bình (%) của từng lớp/môn học dựa trên các bài kiểm tra
-                                </CardDescription>
-                            </CardHeader>
-                            <CardContent className="pt-6 pb-2">
-                                <div className="h-[300px] w-full">
+                                <CardDescription>Đánh giá toàn diện dựa trên 3 tiêu chí</CardDescription>
+                            </div>
+                            <div className={`px-3 py-1.5 rounded-xl text-sm font-black ${getCompetencyLabel(competencyData.overallScore).color}`}>
+                                {competencyData.overallScore}/100
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-5">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                            <div className="flex items-center justify-center lg:col-span-7">
+                                <div className="w-full max-w-[400px] aspect-square">
                                     <ResponsiveContainer width="100%" height="100%">
-                                        <BarChart data={competencyData.skills} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
-                                            <XAxis type="number" domain={[0, 100]} tick={{ fill: '#64748b', fontSize: 11 }} unit="%" />
-                                            <YAxis dataKey="label" type="category" width={120} tick={{ fill: '#334155', fontSize: 12, fontWeight: 600 }} />
-                                            <Tooltip
-                                                formatter={(value: any) => [`${value}%`, 'Thành thạo']}
-                                                contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                                            />
-                                            <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={28}>
-                                                {competencyData.skills.map((skill) => (
-                                                    <Cell key={skill.key} fill={skill.value >= 80 ? '#10b981' : skill.value >= 60 ? '#6366f1' : skill.value >= 40 ? '#f59e0b' : '#ef4444'} />
-                                                ))}
-                                            </Bar>
-                                        </BarChart>
+                                        <RadarChart cx="50%" cy="50%" outerRadius="68%" margin={{ top: 10, right: 45, bottom: 10, left: 45 }} data={competencyData.criteria}>
+                                            <PolarGrid stroke="#e2e8f0" />
+                                            <PolarAngleAxis dataKey="label" tick={{ fill: '#475569', fontSize: 12, fontWeight: 700 }} />
+                                            <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fill: '#94a3b8', fontSize: 10 }} tickCount={6} />
+                                            <Radar name="Năng lực" dataKey="value" stroke="#7c3aed" fill="#7c3aed" fillOpacity={0.25} strokeWidth={2.5} />
+                                        </RadarChart>
                                     </ResponsiveContainer>
                                 </div>
-                            </CardContent>
-                        </Card>
-                    )}
-
-                    {/* Strengths & Weaknesses Panel */}
-                    <Card className={`${competencyData.skills.length > 0 ? 'lg:col-span-2' : 'lg:col-span-5'} shadow-sm flex flex-col`}>
-                        <CardHeader className="bg-gradient-to-r from-emerald-50 to-amber-50 border-b border-emerald-100">
-                            <CardTitle className="flex items-center gap-2">
-                                <Award className="w-5 h-5 text-emerald-600" /> Điểm mạnh &amp; Lỗ hổng Kiến thức
-                            </CardTitle>
-                        </CardHeader>
-                        <CardContent className="p-5 flex-1 flex flex-col gap-6">
-                            {/* Strengths */}
-                            <div>
-                                <h4 className="text-sm font-bold text-emerald-700 flex items-center gap-1.5 mb-3">
-                                    <CheckCircle2 className="w-4 h-4" /> Bài làm tốt
-                                </h4>
-                                {competencyData.strengths.length > 0 ? (
-                                    <div className="space-y-2">
-                                        {competencyData.strengths.map(s => (
-                                            <div key={s.key} className="flex items-center gap-3 p-3 bg-emerald-50/70 rounded-xl border border-emerald-100">
-                                                <span className="text-xl">{s.icon}</span>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-bold text-emerald-800 truncate">{s.label}</p>
-                                                    <p className="text-xs text-emerald-600">Đạt điểm giỏi {s.value} lần</p>
-                                                </div>
-                                                <Badge className="bg-emerald-100 text-emerald-700 border-none text-xs shrink-0">🌟 Giỏi</Badge>
-                                            </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-slate-400 italic">Chưa có bài đạt điểm giỏi (≥8.0)</p>
-                                )}
                             </div>
-
-                            {/* Weaknesses */}
-                            <div>
-                                <h4 className="text-sm font-bold text-amber-700 flex items-center gap-1.5 mb-3">
-                                    <AlertTriangle className="w-4 h-4" /> Lỗ hổng kiến thức
-                                </h4>
-                                {competencyData.weaknesses.length > 0 ? (
-                                    <div className="space-y-2">
-                                        {competencyData.weaknesses.map(w => (
-                                            <div key={w.key} className="flex items-center gap-3 p-3 bg-amber-50/70 rounded-xl border border-amber-100">
-                                                <span className="text-xl">{w.icon}</span>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-sm font-bold text-amber-800 truncate">{w.label}</p>
-                                                    <p className="text-xs text-amber-600">Xuất hiện trong {w.value} bài phân tích</p>
-                                                </div>
-                                                <Badge className="bg-amber-100 text-amber-700 border-none text-xs shrink-0">⚠️ Cần ôn</Badge>
+                            <div className="space-y-3 lg:col-span-5">
+                                {competencyData.criteria.map((c) => {
+                                    const lb = getCompetencyLabel(c.value);
+                                    return (
+                                        <div key={c.key} className="bg-white rounded-xl p-3 border border-violet-100/80 shadow-sm">
+                                            <div className="flex items-center justify-between mb-1.5">
+                                                <span className="text-sm font-bold text-slate-800">{c.icon} {c.label}</span>
+                                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${lb.color}`}>{c.value}/100</span>
                                             </div>
-                                        ))}
-                                    </div>
-                                ) : (
-                                    <p className="text-sm text-emerald-500 font-medium">🎉 Tuyệt vời! Chưa phát hiện lỗ hổng kiến thức nào.</p>
-                                )}
+                                            <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                                <div className={`h-1.5 rounded-full ${lb.barColor}`} style={{ width: `${c.value}%` }} />
+                                            </div>
+                                            <p className="text-[10px] text-slate-500 mt-1">{c.description}</p>
+                                        </div>
+                                    );
+                                })}
+                                <div className="bg-violet-50/50 rounded-xl p-2.5 border border-violet-100/60">
+                                    <p className="text-[10px] text-violet-700">
+                                        <span className="font-bold">ℹ️</span> Điểm số (40%) + Chăm chỉ (30%) + Thái độ (30%)
+                                    </p>
+                                </div>
                             </div>
-                        </CardContent>
-                    </Card>
-                </div>
+                        </div>
+                    </CardContent>
+                </Card>
             )}
 
             {/* ===================== NHẬN XÉT TỪ GIÁO VIÊN ===================== */}

@@ -15,6 +15,11 @@ import {
     CartesianGrid,
     Tooltip,
     ResponsiveContainer,
+    RadarChart,
+    Radar,
+    PolarGrid,
+    PolarAngleAxis,
+    PolarRadiusAxis,
 } from "recharts";
 import {
     TrendingUp, BookOpen, Clock, Target, Star, SearchX,
@@ -58,18 +63,21 @@ interface ScoreHistory {
     type?: string;
 }
 
-interface SkillItem {
+interface CompetencyCriterion {
     key: string;
     label: string;
     value: number;
+    fullMark: number;
     icon: string;
+    description: string;
 }
 
 interface CompetencyData {
-    skills: SkillItem[];
-    strengths: SkillItem[];
-    weaknesses: SkillItem[];
+    criteria: CompetencyCriterion[];
     overallScore: number;
+    totalExams: number;
+    totalSessions: number;
+    totalPointsRaw: number;
 }
 
 interface PointsData {
@@ -117,10 +125,10 @@ export default function ParentProgressClient({ students, activeStudentId, active
     };
 
     const getCompetencyLabel = (value: number) => {
-        if (value >= 80) return { text: "Xuất sắc", color: "text-emerald-600 bg-emerald-50" };
-        if (value >= 60) return { text: "Tốt", color: "text-blue-600 bg-blue-50" };
-        if (value >= 40) return { text: "Trung bình", color: "text-amber-600 bg-amber-50" };
-        return { text: "Cần cải thiện", color: "text-red-600 bg-red-50" };
+        if (value >= 80) return { text: "Xuất sắc", color: "text-emerald-600 bg-emerald-50", barColor: "bg-emerald-500" };
+        if (value >= 60) return { text: "Tốt", color: "text-blue-600 bg-blue-50", barColor: "bg-blue-500" };
+        if (value >= 40) return { text: "Trung bình", color: "text-amber-600 bg-amber-50", barColor: "bg-amber-500" };
+        return { text: "Cần cải thiện", color: "text-red-600 bg-red-50", barColor: "bg-red-500" };
     };
 
     const openFeedbackDetail = (fb: any) => {
@@ -254,7 +262,7 @@ export default function ParentProgressClient({ students, activeStudentId, active
                             <p className="text-3xl lg:text-4xl font-black text-slate-800 leading-none">
                                 {competencyData?.overallScore ?? '—'}<span className="text-lg font-bold text-slate-400">/100</span>
                             </p>
-                            <p className="text-[11px] text-slate-400 font-medium mt-1.5">chỉ số tổng hợp</p>
+                            <p className="text-[11px] text-slate-400 font-medium mt-1.5">3 tiêu chí đánh giá</p>
                         </div>
                     </div>
                 )}
@@ -533,6 +541,121 @@ export default function ParentProgressClient({ students, activeStudentId, active
                         </div>
                     )}
 
+                    {/* ===================== BẢN ĐỒ NĂNG LỰC (RADAR CHART) ===================== */}
+                    {competencyData && competencyData.criteria && competencyData.criteria.length > 0 && (
+                        <Card className="p-0 gap-0 shadow-sm overflow-hidden border-violet-200/60 bg-gradient-to-br from-violet-50/20 to-indigo-50/10">
+                            <CardHeader className="bg-gradient-to-r from-violet-50 to-indigo-50/80 border-b border-violet-100 py-5">
+                                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                    <div>
+                                        <CardTitle className="flex items-center gap-2 text-base">
+                                            <Star className="w-5 h-5 text-violet-600" /> Bản đồ Năng lực
+                                        </CardTitle>
+                                        <CardDescription className="text-xs mt-1">Đánh giá toàn diện dựa trên 3 tiêu chí: Điểm số, Chăm chỉ và Thái độ</CardDescription>
+                                    </div>
+                                    <div className={`px-3 py-1.5 rounded-xl text-sm font-black ${getCompetencyLabel(competencyData.overallScore).color}`}>
+                                        {competencyData.overallScore}/100 · {getCompetencyLabel(competencyData.overallScore).text}
+                                    </div>
+                                </div>
+                            </CardHeader>
+                            <CardContent className="p-5">
+                                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                                    {/* Cột trái: Radar Chart */}
+                                    <div className="flex items-center justify-center lg:col-span-7">
+                                        <div className="w-full max-w-[420px] aspect-square">
+                                            <ResponsiveContainer width="100%" height="100%">
+                                                <RadarChart cx="50%" cy="50%" outerRadius="68%" margin={{ top: 10, right: 45, bottom: 10, left: 45 }} data={competencyData.criteria}>
+                                                    <PolarGrid stroke="#e2e8f0" />
+                                                    <PolarAngleAxis
+                                                        dataKey="label"
+                                                        tick={{ fill: '#475569', fontSize: 12, fontWeight: 700 }}
+                                                    />
+                                                    <PolarRadiusAxis
+                                                        angle={90}
+                                                        domain={[0, 100]}
+                                                        tick={{ fill: '#94a3b8', fontSize: 10 }}
+                                                        tickCount={6}
+                                                    />
+                                                    <Radar
+                                                        name="Năng lực"
+                                                        dataKey="value"
+                                                        stroke="#7c3aed"
+                                                        fill="#7c3aed"
+                                                        fillOpacity={0.25}
+                                                        strokeWidth={2.5}
+                                                        dot={{ r: 5, fill: '#7c3aed', stroke: '#fff', strokeWidth: 2 }}
+                                                    />
+                                                    <Tooltip
+                                                        content={({ active, payload }: any) => {
+                                                            if (active && payload && payload.length) {
+                                                                const item = payload[0].payload;
+                                                                const label = getCompetencyLabel(item.value);
+                                                                return (
+                                                                    <div className="bg-white border border-violet-100 rounded-lg shadow-lg p-3">
+                                                                        <p className="text-sm font-bold text-slate-800">{item.icon} {item.label}</p>
+                                                                        <p className="text-violet-600 font-black text-lg">{item.value}/100</p>
+                                                                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${label.color}`}>{label.text}</span>
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            return null;
+                                                        }}
+                                                    />
+                                                </RadarChart>
+                                            </ResponsiveContainer>
+                                        </div>
+                                    </div>
+
+                                    {/* Cột phải: Giải thích chi tiết */}
+                                    <div className="space-y-3 lg:col-span-5">
+                                        {competencyData.criteria.map((criterion) => {
+                                            const label = getCompetencyLabel(criterion.value);
+                                            return (
+                                                <div key={criterion.key} className="bg-white rounded-xl p-3 border border-violet-100/80 shadow-sm">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-base">{criterion.icon}</span>
+                                                            <h4 className="text-sm font-bold text-slate-800">{criterion.label}</h4>
+                                                        </div>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-lg font-black text-slate-800">{criterion.value}</span>
+                                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${label.color}`}>{label.text}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="w-full bg-slate-100 rounded-full h-2 mb-2 overflow-hidden">
+                                                        <div
+                                                            className={`h-2 rounded-full transition-all duration-700 ease-out ${label.barColor}`}
+                                                            style={{ width: `${criterion.value}%` }}
+                                                        />
+                                                    </div>
+                                                    <p className="text-[11px] text-slate-500">{criterion.description}</p>
+                                                    {criterion.key === 'academic' && competencyData.totalExams > 0 && (
+                                                        <p className="text-[10px] text-slate-400 mt-1">Dựa trên {competencyData.totalExams} bài kiểm tra & bài tập</p>
+                                                    )}
+                                                    {criterion.key === 'diligence' && competencyData.totalSessions > 0 && (
+                                                        <p className="text-[10px] text-slate-400 mt-1">Dựa trên {competencyData.totalSessions} buổi học</p>
+                                                    )}
+                                                    {criterion.key === 'attitude' && (
+                                                        <p className="text-[10px] text-slate-400 mt-1">
+                                                            Điểm tích lũy từ giáo viên: {competencyData.totalPointsRaw > 0 ? '+' : ''}{competencyData.totalPointsRaw} điểm
+                                                        </p>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+
+                                        {/* Ghi chú giải thích */}
+                                        <div className="bg-violet-50/50 rounded-xl p-3 border border-violet-100/60">
+                                            <p className="text-[11px] text-violet-700 leading-relaxed">
+                                                <span className="font-bold">ℹ️ Cách tính:</span> Chỉ số tổng hợp = Điểm số (40%) + Chăm chỉ (30%) + Thái độ (30%). 
+                                                Thái độ được đánh giá dựa trên điểm tích lũy mà giáo viên trao cho con trong quá trình học.
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
+
                     {/* ===================== NHẬN XÉT TỪ GIÁO VIÊN ===================== */}
                     {feedbackList.length > 0 && (
                         <Card className="p-0 gap-0 shadow-sm overflow-hidden border-purple-100/60">
@@ -620,8 +743,8 @@ export default function ParentProgressClient({ students, activeStudentId, active
 
                     {/* ===================== AI TỔNG KẾT HỌC TẬP (CUỐI TRANG — SUMMARY) ===================== */}
                     {competencyData && (
-                        <Card className="shadow-sm overflow-hidden border-violet-200/60 bg-gradient-to-br from-violet-50/30 to-indigo-50/20">
-                            <CardHeader className="bg-gradient-to-r from-violet-50 to-indigo-50/80 border-b border-violet-100 py-7">
+                        <Card className="shadow-sm overflow-hidden border-violet-200/60 bg-gradient-to-br from-violet-50/30 to-indigo-50/20 py-0 gap-0">
+                            <CardHeader className="bg-gradient-to-r from-violet-50 to-indigo-50/80 border-b border-violet-100 py-5 px-6">
                                 <div className="flex items-center justify-between">
                                     <div>
                                         <CardTitle className="flex items-center gap-2 text-base">
