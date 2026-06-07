@@ -33,6 +33,7 @@ interface SessionDetail {
 interface ExportData {
     month: number;
     year: number;
+    cycle?: "month" | "year" | "since_start";
     classSummaries: ClassSummary[];
     studentsHighAbsence: HighAbsenceStudent[];
     sessionDetails?: SessionDetail[];
@@ -116,7 +117,12 @@ export async function exportAttendanceExcel(data: ExportData) {
     }
 
     // Xuất file
-    const fileName = `Diemdanh_ToanTruong_T${data.month}_${data.year}.xlsx`;
+    let fileName = `Diemdanh_ToanTruong_T${data.month}_${data.year}.xlsx`;
+    if (data.cycle === "year") {
+        fileName = `Diemdanh_ToanTruong_Nam_${data.year}.xlsx`;
+    } else if (data.cycle === "since_start") {
+        fileName = `Diemdanh_ToanTruong_TuLucDiHoc.xlsx`;
+    }
     XLSX.writeFile(wb, fileName);
 
     return fileName;

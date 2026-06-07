@@ -14,20 +14,21 @@ import TeacherBarChart from "../charts/TeacherBarChart";
 interface Props {
     month: number;
     year: number;
+    cycle: "month" | "year" | "since_start";
 }
 
-export default function TeacherTab({ month, year }: Props) {
+export default function TeacherTab({ month, year, cycle }: Props) {
     const [data, setData] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [expandedTeachers, setExpandedTeachers] = useState<Set<string>>(new Set());
 
     useEffect(() => {
         loadData();
-    }, [month, year]);
+    }, [month, year, cycle]);
 
     const loadData = async () => {
         setLoading(true);
-        const { data: stats, error } = await getTeacherAttendanceStats(month, year);
+        const { data: stats, error } = await getTeacherAttendanceStats(month, year, cycle);
         if (error) toast.error("Lỗi tải thống kê giáo viên");
         setData(stats || []);
         setLoading(false);
@@ -71,7 +72,12 @@ export default function TeacherTab({ month, year }: Props) {
                 <GraduationCap className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-bold text-gray-900">Chưa có dữ liệu</h3>
                 <p className="text-gray-500 text-sm">
-                    Không có giáo viên nào có buổi dạy trong tháng {month}/{year}.
+                    {cycle === "month"
+                        ? `Không có giáo viên nào có buổi dạy trong tháng ${month}/${year}.`
+                        : cycle === "year"
+                        ? `Không có giáo viên nào có buổi dạy trong năm ${year}.`
+                        : "Không có giáo viên nào có buổi dạy từ trước đến nay."
+                    }
                 </p>
             </div>
         );

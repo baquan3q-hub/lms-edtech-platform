@@ -18,9 +18,10 @@ import StudentDetailDialog from "../StudentDetailDialog";
 interface Props {
     month: number;
     year: number;
+    cycle: "month" | "year" | "since_start";
 }
 
-export default function StudentTab({ month, year }: Props) {
+export default function StudentTab({ month, year, cycle }: Props) {
     const [data, setData] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
@@ -31,11 +32,11 @@ export default function StudentTab({ month, year }: Props) {
 
     useEffect(() => {
         loadData();
-    }, [month, year]);
+    }, [month, year, cycle]);
 
     const loadData = async () => {
         setLoading(true);
-        const { data: stats, error } = await getStudentCrossClassAttendance(month, year);
+        const { data: stats, error } = await getStudentCrossClassAttendance(month, year, cycle);
         if (error) toast.error("Lỗi tải thống kê học sinh");
         setData(stats || []);
         setLoading(false);
@@ -97,7 +98,12 @@ export default function StudentTab({ month, year }: Props) {
                 <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-bold text-gray-900">Chưa có dữ liệu</h3>
                 <p className="text-gray-500 text-sm">
-                    Không có dữ liệu điểm danh học sinh trong tháng {month}/{year}.
+                    {cycle === "month"
+                        ? `Không có dữ liệu điểm danh học sinh trong tháng ${month}/${year}.`
+                        : cycle === "year"
+                        ? `Không có dữ liệu điểm danh học sinh trong năm ${year}.`
+                        : "Không có dữ liệu điểm danh học sinh từ trước đến nay."
+                    }
                 </p>
             </div>
         );
@@ -322,6 +328,7 @@ export default function StudentTab({ month, year }: Props) {
                 onOpenChange={setDialogOpen}
                 month={month}
                 year={year}
+                cycle={cycle}
             />
         </div>
     );

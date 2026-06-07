@@ -3,9 +3,10 @@ interface ExportClassData {
     month: number;
     year: number;
     sessions: any[];
+    cycle?: "month" | "year" | "since_start";
 }
 
-export async function exportClassSessionsExcel({ className, month, year, sessions }: ExportClassData) {
+export async function exportClassSessionsExcel({ className, month, year, sessions, cycle }: ExportClassData) {
     const XLSX = await import("xlsx");
     const wb = XLSX.utils.book_new();
 
@@ -43,9 +44,15 @@ export async function exportClassSessionsExcel({ className, month, year, session
 
     if (studentList.length === 0) {
         // Nếu không có học sinh nào, tạo sheet trống
-        const ws = XLSX.utils.json_to_sheet([{ "Thông báo": "Chưa có dữ liệu điểm danh nào trong tháng này." }]);
+        const ws = XLSX.utils.json_to_sheet([{ "Thông báo": "Chưa có dữ liệu điểm danh nào trong chu kỳ này." }]);
         XLSX.utils.book_append_sheet(wb, ws, "Chi tiết điểm danh");
-        XLSX.writeFile(wb, `Diemdanh_${className}_T${month}_${year}.xlsx`);
+        let fileName = `Diemdanh_${className}_T${month}_${year}.xlsx`;
+        if (cycle === "year") {
+            fileName = `Diemdanh_${className}_Nam_${year}.xlsx`;
+        } else if (cycle === "since_start") {
+            fileName = `Diemdanh_${className}_TuLucDiHoc.xlsx`;
+        }
+        XLSX.writeFile(wb, fileName);
         return;
     }
 
@@ -111,5 +118,11 @@ export async function exportClassSessionsExcel({ className, month, year, session
     const wsLegend = XLSX.utils.json_to_sheet(legendRows);
     XLSX.utils.book_append_sheet(wb, wsLegend, "Ghi chú ký hiệu");
 
-    XLSX.writeFile(wb, `Diemdanh_${className}_T${month}_${year}.xlsx`);
+    let fileName = `Diemdanh_${className}_T${month}_${year}.xlsx`;
+    if (cycle === "year") {
+        fileName = `Diemdanh_${className}_Nam_${year}.xlsx`;
+    } else if (cycle === "since_start") {
+        fileName = `Diemdanh_${className}_TuLucDiHoc.xlsx`;
+    }
+    XLSX.writeFile(wb, fileName);
 }

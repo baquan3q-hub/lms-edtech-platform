@@ -50,9 +50,10 @@ interface Props {
     onOpenChange: (open: boolean) => void;
     month: number;
     year: number;
+    cycle: "month" | "year" | "since_start";
 }
 
-export default function StudentDetailDialog({ student, open, onOpenChange, month, year }: Props) {
+export default function StudentDetailDialog({ student, open, onOpenChange, month, year, cycle }: Props) {
     const [sending, setSending] = useState(false);
 
     if (!student) return null;
@@ -170,7 +171,12 @@ export default function StudentDetailDialog({ student, open, onOpenChange, month
                             </span>
                         </div>
                         <p className="text-xs text-gray-400 mt-1">
-                            Tháng {month}/{year} — {o.total} lượt điểm danh
+                            {cycle === "month"
+                                ? `Tháng ${month}/${year}`
+                                : cycle === "year"
+                                ? `Cả năm ${year}`
+                                : "Từ lúc bắt đầu đi học"
+                            } — {o.total} lượt điểm danh
                         </p>
                     </div>
 

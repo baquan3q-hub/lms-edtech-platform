@@ -28,9 +28,10 @@ import { exportClassSessionsExcel } from "../export/exportClassSessionsExcel";
 interface Props {
     month: number;
     year: number;
+    cycle: "month" | "year" | "since_start";
 }
 
-export default function ClassDetailTab({ month, year }: Props) {
+export default function ClassDetailTab({ month, year, cycle }: Props) {
     const [classes, setClasses] = useState<any[]>([]);
     const [selectedClassId, setSelectedClassId] = useState("");
     const [loading, setLoading] = useState(true);
@@ -65,11 +66,11 @@ export default function ClassDetailTab({ month, year }: Props) {
     useEffect(() => {
         if (!selectedClassId) return;
         loadClassSessions();
-    }, [selectedClassId, month, year]);
+    }, [selectedClassId, month, year, cycle]);
 
     const loadClassSessions = async () => {
         setSessionsLoading(true);
-        const { data: sessData, error } = await getClassAttendanceSessions(selectedClassId, month, year);
+        const { data: sessData, error } = await getClassAttendanceSessions(selectedClassId, month, year, cycle);
         if (error) toast.error("Lỗi tải buổi điểm danh");
         const allSess = sessData || [];
         setSessions(allSess);
@@ -106,7 +107,8 @@ export default function ClassDetailTab({ month, year }: Props) {
                 className: selectedClassName,
                 month,
                 year,
-                sessions
+                sessions,
+                cycle,
             });
             toast.success("Xuất file Excel thành công!");
         } catch (err) {
@@ -122,7 +124,7 @@ export default function ClassDetailTab({ month, year }: Props) {
             return;
         }
         setIsResetting(true);
-        const { success, error, deletedSessions, deletedRecords } = await resetClassAttendanceData(selectedClassId, month, year);
+        const { success, error, deletedSessions, deletedRecords } = await resetClassAttendanceData(selectedClassId, month, year, cycle);
         if (success) {
             toast.success(`Đã reset: xóa ${deletedSessions} buổi, ${deletedRecords} bản ghi`);
             setResetDialogOpen(false);
@@ -205,7 +207,12 @@ export default function ClassDetailTab({ month, year }: Props) {
                         <div className="bg-white rounded-xl border border-gray-200 p-5 shadow-sm">
                             <div className="flex items-center justify-between mb-3">
                                 <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                                    Thống kê lớp — Tháng {month}/{year}
+                                    {cycle === "month"
+                                        ? `Thống kê lớp — Tháng ${month}/${year}`
+                                        : cycle === "year"
+                                        ? `Thống kê lớp — Cả năm ${year}`
+                                        : "Thống kê lớp — Từ lúc đi học"
+                                    }
                                 </h4>
                                 <div className="flex justify-end gap-2 text-right">
                                     <Button
@@ -332,7 +339,7 @@ export default function ClassDetailTab({ month, year }: Props) {
                             Reset điểm danh lớp
                         </DialogTitle>
                         <DialogDescription>
-                            Thao tác này sẽ xóa <strong>toàn bộ</strong> dữ liệu điểm danh của lớp trong tháng {month}/{year}.
+                            Thao tác này sẽ xóa <strong>toàn bộ</strong> dữ liệu điểm danh của lớp trong {cycle === "month" ? `tháng ${month}/${year}` : cycle === "year" ? `năm ${year}` : "tất cả thời gian"}.
                             Không thể hoàn tác.
                         </DialogDescription>
                     </DialogHeader>

@@ -673,14 +673,22 @@ export async function getApprovedAbsencesForDate(classId: string, date: string) 
 // ==========================================
 
 /** Thống kê tổng quan điểm danh cho Admin */
-export async function getAttendanceOverview(month: number, year: number, classId?: string) {
+export async function getAttendanceOverview(month: number, year: number, classId?: string, cycle: "month" | "year" | "since_start" = "month") {
     try {
         const adminSupabase = createAdminClient();
 
-        const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-        const endDate = month === 12
+        let startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+        let endDate = month === 12
             ? `${year + 1}-01-01`
             : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+
+        if (cycle === "year") {
+            startDate = `${year}-01-01`;
+            endDate = `${year + 1}-01-01`;
+        } else if (cycle === "since_start") {
+            startDate = "1970-01-01";
+            endDate = "9999-12-31";
+        }
 
         // Lấy sessions
         let sessionQuery = adminSupabase
@@ -1139,14 +1147,22 @@ export async function getAllClassesForAdmin() {
 // ==========================================
 
 /** Thống kê điểm danh theo từng giáo viên */
-export async function getTeacherAttendanceStats(month: number, year: number) {
+export async function getTeacherAttendanceStats(month: number, year: number, cycle: "month" | "year" | "since_start" = "month") {
     try {
         const adminSupabase = createAdminClient();
 
-        const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-        const endDate = month === 12
+        let startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+        let endDate = month === 12
             ? `${year + 1}-01-01`
             : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+
+        if (cycle === "year") {
+            startDate = `${year}-01-01`;
+            endDate = `${year + 1}-01-01`;
+        } else if (cycle === "since_start") {
+            startDate = "1970-01-01";
+            endDate = "9999-12-31";
+        }
 
         const today = new Date().toISOString().split("T")[0];
 
@@ -1329,14 +1345,22 @@ export async function getTeacherAttendanceStats(month: number, year: number) {
 // ==========================================
 
 /** Thống kê điểm danh xuyên lớp cho từng học sinh */
-export async function getStudentCrossClassAttendance(month: number, year: number) {
+export async function getStudentCrossClassAttendance(month: number, year: number, cycle: "month" | "year" | "since_start" = "month") {
     try {
         const adminSupabase = createAdminClient();
 
-        const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-        const endDate = month === 12
+        let startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+        let endDate = month === 12
             ? `${year + 1}-01-01`
             : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+
+        if (cycle === "year") {
+            startDate = `${year}-01-01`;
+            endDate = `${year + 1}-01-01`;
+        } else if (cycle === "since_start") {
+            startDate = "1970-01-01";
+            endDate = "9999-12-31";
+        }
 
         // 1. Lấy tất cả enrollments active + student info — 1 query
         const { data: enrollments, error: enrErr } = await adminSupabase
@@ -1704,7 +1728,7 @@ export async function getDailyAttendanceOverview(date: string) {
 // ==========================================
 
 /** Admin reset toàn bộ ĐD của 1 lớp trong 1 tháng */
-export async function resetClassAttendanceData(classId: string, month: number, year: number) {
+export async function resetClassAttendanceData(classId: string, month: number, year: number, cycle: "month" | "year" | "since_start" = "month") {
     try {
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
@@ -1718,10 +1742,18 @@ export async function resetClassAttendanceData(classId: string, month: number, y
         }
 
         // Tính khoảng ngày
-        const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-        const endDate = month === 12
+        let startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+        let endDate = month === 12
             ? `${year + 1}-01-01`
             : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+
+        if (cycle === "year") {
+            startDate = `${year}-01-01`;
+            endDate = `${year + 1}-01-01`;
+        } else if (cycle === "since_start") {
+            startDate = "1970-01-01";
+            endDate = "9999-12-31";
+        }
 
         // 1. Lấy attendance_sessions của lớp trong tháng
         const { data: sessions } = await adminSupabase

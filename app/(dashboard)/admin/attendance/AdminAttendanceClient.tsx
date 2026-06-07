@@ -23,6 +23,7 @@ import TeacherLeaveTab from "./tabs/TeacherLeaveTab";
 
 export default function AdminAttendanceClient() {
     const now = new Date();
+    const [cycle, setCycle] = useState<"month" | "year" | "since_start">("month");
     const [month, setMonth] = useState(now.getMonth() + 1);
     const [year, setYear] = useState(now.getFullYear());
     const [loading, setLoading] = useState(true);
@@ -53,11 +54,11 @@ export default function AdminAttendanceClient() {
 
     useEffect(() => {
         loadOverview();
-    }, [month, year]);
+    }, [month, year, cycle]);
 
     const loadOverview = async () => {
         setLoading(true);
-        const { data: overview, error } = await getAttendanceOverview(month, year);
+        const { data: overview, error } = await getAttendanceOverview(month, year, undefined, cycle);
         if (error) toast.error("Lỗi tải thống kê");
         setData(overview);
         setLoading(false);
@@ -69,6 +70,7 @@ export default function AdminAttendanceClient() {
             await exportAttendanceExcel({
                 month,
                 year,
+                cycle,
                 classSummaries: data.classSummaries || [],
                 studentsHighAbsence: data.studentsHighAbsence || [],
             });
@@ -100,31 +102,48 @@ export default function AdminAttendanceClient() {
             {/* Filters + Export */}
             <div className="flex flex-wrap gap-3 items-end bg-white p-4 rounded-xl border border-gray-200 shadow-sm">
                 <div>
-                    <label className="text-xs font-medium text-gray-500 mb-1 block">Tháng</label>
-                    <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
-                        <SelectTrigger className="w-[110px]">
+                    <label className="text-xs font-medium text-gray-500 mb-1 block">Chu kỳ theo dõi</label>
+                    <Select value={cycle} onValueChange={(v: any) => setCycle(v)}>
+                        <SelectTrigger className="w-[150px]">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            {months.map((m) => (
-                                <SelectItem key={m} value={String(m)}>Tháng {m}</SelectItem>
-                            ))}
+                            <SelectItem value="month">Theo Tháng</SelectItem>
+                            <SelectItem value="year">Chu kỳ Năm</SelectItem>
+                            <SelectItem value="since_start">Từ lúc đi học</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
-                <div>
-                    <label className="text-xs font-medium text-gray-500 mb-1 block">Năm</label>
-                    <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-                        <SelectTrigger className="w-[100px]">
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {[year - 1, year, year + 1].map((y) => (
-                                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
+                {cycle === "month" && (
+                    <div>
+                        <label className="text-xs font-medium text-gray-500 mb-1 block">Tháng</label>
+                        <Select value={String(month)} onValueChange={(v) => setMonth(Number(v))}>
+                            <SelectTrigger className="w-[110px]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {months.map((m) => (
+                                    <SelectItem key={m} value={String(m)}>Tháng {m}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
+                {(cycle === "month" || cycle === "year") && (
+                    <div>
+                        <label className="text-xs font-medium text-gray-500 mb-1 block">Năm</label>
+                        <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+                            <SelectTrigger className="w-[100px]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {[year - 1, year, year + 1].map((y) => (
+                                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
                 <div className="ml-auto">
                     <Button
                         variant="outline"
@@ -181,27 +200,27 @@ export default function AdminAttendanceClient() {
 
                 {/* Tab 1: Overview */}
                 <div className={activeTab === "overview" ? "mt-0 block animate-in fade-in duration-200" : "hidden"}>
-                    <OverviewTab month={month} year={year} data={data} loading={loading} />
+                    <OverviewTab month={month} year={year} data={data} loading={loading} cycle={cycle} />
                 </div>
 
                 {/* Tab 2: Teachers */}
                 {visitedTabs.teachers && (
                     <div className={activeTab === "teachers" ? "mt-0 block animate-in fade-in duration-200" : "hidden"}>
-                        <TeacherTab month={month} year={year} />
+                        <TeacherTab month={month} year={year} cycle={cycle} />
                     </div>
                 )}
 
                 {/* Tab 3: Students */}
                 {visitedTabs.students && (
                     <div className={activeTab === "students" ? "mt-0 block animate-in fade-in duration-200" : "hidden"}>
-                        <StudentTab month={month} year={year} />
+                        <StudentTab month={month} year={year} cycle={cycle} />
                     </div>
                 )}
 
                 {/* Tab 4: Class Detail */}
                 {visitedTabs.classes && (
                     <div className={activeTab === "classes" ? "mt-0 block animate-in fade-in duration-200" : "hidden"}>
-                        <ClassDetailTab month={month} year={year} />
+                        <ClassDetailTab month={month} year={year} cycle={cycle} />
                     </div>
                 )}
 

@@ -150,14 +150,22 @@ export async function deleteAttendancePoint(pointId: string, classId: string) {
 // =========================================================
 // Admin: Lấy lịch sử điểm danh theo lớp (drill-down)
 // =========================================================
-export async function getClassAttendanceSessions(classId: string, month: number, year: number) {
+export async function getClassAttendanceSessions(classId: string, month: number, year: number, cycle: "month" | "year" | "since_start" = "month") {
     try {
         const adminSupabase = createAdminClient();
 
-        const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
-        const endDate = month === 12
+        let startDate = `${year}-${String(month).padStart(2, "0")}-01`;
+        let endDate = month === 12
             ? `${year + 1}-01-01`
             : `${year}-${String(month + 1).padStart(2, "0")}-01`;
+
+        if (cycle === "year") {
+            startDate = `${year}-01-01`;
+            endDate = `${year + 1}-01-01`;
+        } else if (cycle === "since_start") {
+            startDate = "1970-01-01";
+            endDate = "9999-12-31";
+        }
 
         // 1. Lấy attendance_sessions đã điểm danh
         const { data: sessions, error } = await adminSupabase

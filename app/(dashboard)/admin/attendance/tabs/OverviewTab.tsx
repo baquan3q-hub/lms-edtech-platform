@@ -25,9 +25,10 @@ interface Props {
     year: number;
     data: any;
     loading: boolean;
+    cycle: "month" | "year" | "since_start";
 }
 
-export default function OverviewTab({ month, year, data, loading }: Props) {
+export default function OverviewTab({ month, year, data, loading, cycle }: Props) {
     const [trendData, setTrendData] = useState<any[]>([]);
     const [trendLoading, setTrendLoading] = useState(true);
     const [trendPeriod, setTrendPeriod] = useState<string>("this_month");
@@ -63,7 +64,12 @@ export default function OverviewTab({ month, year, data, loading }: Props) {
                 <CalendarDays className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-bold text-gray-900">Chưa có dữ liệu</h3>
                 <p className="text-gray-500 text-sm">
-                    Không có buổi điểm danh nào trong tháng {month}/{year}.
+                    {cycle === "month"
+                        ? `Không có buổi điểm danh nào trong tháng ${month}/${year}.`
+                        : cycle === "year"
+                        ? `Không có buổi điểm danh nào trong năm ${year}.`
+                        : "Không có buổi điểm danh nào từ trước đến nay."
+                    }
                 </p>
             </div>
         );
@@ -162,7 +168,7 @@ export default function OverviewTab({ month, year, data, loading }: Props) {
                                         open: true, classId: c.classId,
                                         className: c.className, sessions: [], loading: true,
                                     });
-                                    const res = await getClassAttendanceSessions(c.classId, month, year);
+                                    const res = await getClassAttendanceSessions(c.classId, month, year, cycle);
                                     setDrillDown(prev => ({
                                         ...prev, sessions: res.data || [], loading: false,
                                     }));
@@ -272,7 +278,12 @@ export default function OverviewTab({ month, year, data, loading }: Props) {
                             <CalendarDays className="w-5 h-5 text-indigo-500" />
                             Lịch sử điểm danh — {drillDown.className}
                             <Badge className="ml-2 bg-gray-100 text-gray-600 border-0">
-                                Tháng {month}/{year}
+                                {cycle === "month"
+                                    ? `Tháng ${month}/${year}`
+                                    : cycle === "year"
+                                    ? `Năm ${year}`
+                                    : "Từ lúc đi học"
+                                }
                             </Badge>
                         </DialogTitle>
                     </DialogHeader>
