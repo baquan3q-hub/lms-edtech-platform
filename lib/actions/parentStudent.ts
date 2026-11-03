@@ -53,7 +53,7 @@ export async function fetchStudentsForLinking() {
 
         // Lấy enrollments để biết lớp
         const studentIds = (students || []).map(s => s.id);
-        let enrollmentMap: Record<string, string[]> = {};
+        const enrollmentMap: Record<string, string[]> = {};
         if (studentIds.length > 0) {
             const { data: enrollments } = await supabase
                 .from("enrollments")
@@ -533,7 +533,7 @@ export async function fetchParentDashboardData(studentId: string) {
                 .gte("session_date", lastWeekStr)
                 .order("session_date", { ascending: true });
 
-            let mergedSessions: any[] = (realSessions || []).map((s: any) => {
+            const mergedSessions: any[] = (realSessions || []).map((s: any) => {
                 // Lấy room_name từ schedule map nếu session không có room riêng
                 const dayOfWeek = new Date(s.session_date + 'T00:00:00').getDay();
                 const roomKey = `${s.class_id}-${dayOfWeek}`;
@@ -548,7 +548,7 @@ export async function fetchParentDashboardData(studentId: string) {
             // Sử dụng ngày hôm nay làm mốc, lùi lại đủ để lấy buổi gần nhất đã qua
             for (const schedule of upcomingSchedules) {
                 // Bắt đầu từ 1 tuần trước hôm nay
-                let d = new Date(lastWeek);
+                const d = new Date(lastWeek);
                 d.setHours(0, 0, 0, 0);
 
                 // Tìm ngày gần nhất khớp với day_of_week (0=CN, 1=T2, ..., 6=T7)
@@ -713,7 +713,7 @@ export async function fetchParentDashboardData(studentId: string) {
             .filter((n: any) => n.metadata?.announcementId)
             .map((n: any) => n.metadata.announcementId);
 
-        let announcementMap = new Map<string, any>();
+        const announcementMap = new Map<string, any>();
         if (announcementIds.length > 0) {
             const { data: annDetails } = await supabase
                 .from("announcements")
@@ -965,7 +965,7 @@ export async function fetchParentNotifications(
             .filter((n: any) => n.metadata?.announcementId)
             .map((n: any) => n.metadata.announcementId);
 
-        let announcementMap = new Map<string, any>();
+        const announcementMap = new Map<string, any>();
         if (announcementIds.length > 0) {
             const { data: annDetails } = await adminSupabase
                 .from("announcements")

@@ -8,18 +8,19 @@ export async function fetchTasksStatus(teacherId: string) {
         const supabase = createAdminClient();
 
         // 1. Get Teacher's Classes
-        const { data: classes } = await supabase
+        const { data: classes, error: classesError } = await supabase
             .from("classes")
             .select("id, name, course:courses(name)")
             .eq("teacher_id", teacherId)
             .eq("status", "active");
+        if (classesError) throw classesError;
 
         if (!classes || classes.length === 0) return { tasks: [], error: null };
 
         const classIds = classes.map((c: any) => c.id);
 
         // 2. Fetch Enrollments with Student detail
-        const { data: enrollments } = await supabase
+        const enrollmentsQuery = supabase
             .from("enrollments")
             .select(`
                 class_id,
@@ -29,11 +30,18 @@ export async function fetchTasksStatus(teacherId: string) {
             .in("class_id", classIds)
             .eq("status", "active");
 
-        const students = enrollments || [];
-
         // 3. Fetch Assignments and Exams for these classes
-        const { data: assignments } = await supabase.from("assignments").select("id, class_id, title").in("class_id", classIds);
-        const { data: exams } = await supabase.from("exams").select("id, class_id, title").in("class_id", classIds);
+        const [enrollmentsResult, assignmentsResult, examsResult] = await Promise.all([
+            enrollmentsQuery,
+            supabase.from("assignments").select("id, class_id, title").in("class_id", classIds),
+            supabase.from("exams").select("id, class_id, title").in("class_id", classIds),
+        ]);
+        for (const result of [enrollmentsResult, assignmentsResult, examsResult]) {
+            if (result.error) throw result.error;
+        }
+        const students = enrollmentsResult.data || [];
+        const assignments = assignmentsResult.data;
+        const exams = examsResult.data;
 
         const assignmentIds = assignments?.map((a: any) => a.id) || [];
         const examIds = exams?.map((e: any) => e.id) || [];
@@ -47,19 +55,32 @@ export async function fetchTasksStatus(teacherId: string) {
         if (examIds.length > 0) examSubQuery = examSubQuery.in("exam_id", examIds);
         else examSubQuery = examSubQuery.limit(0);
 
-        const [{ data: subs }, { data: examSubs }] = await Promise.all([subQuery, examSubQuery]);
+        const [subsResult, examSubsResult] = await Promise.all([subQuery, examSubQuery]);
+        if (subsResult.error) throw subsResult.error;
+        if (examSubsResult.error) throw examSubsResult.error;
+        const subs = subsResult.data;
+        const examSubs = examSubsResult.data;
+        const submittedAssignments = new Set((subs || []).map(s => `${s.assignment_id}:${s.student_id}`));
+        const submittedExams = new Set((examSubs || []).map(s => `${s.exam_id}:${s.student_id}`));
+        const enrollmentsByClass = new Map<string, typeof students>();
+        for (const student of students) {
+            const group = enrollmentsByClass.get(student.class_id) || [];
+            group.push(student);
+            enrollmentsByClass.set(student.class_id, group);
+        }
+        const classesById = new Map(classes.map(c => [c.id, c]));
 
         // Build Task List
         const taskStats: any[] = [];
 
         assignments?.forEach((a: any) => {
-            const classEnrollments = students.filter((s:any) => s.class_id === a.class_id);
+            const classEnrollments = enrollmentsByClass.get(a.class_id) || [];
             const totalExpected = classEnrollments.length;
             let submitted = 0;
             const missingStudents: any[] = [];
 
             classEnrollments.forEach((enroll:any) => {
-                const hasSubmitted = subs?.some((s: any) => s.assignment_id === a.id && s.student_id === enroll.student_id);
+                const hasSubmitted = submittedAssignments.has(`${a.id}:${enroll.student_id}`);
                 if (hasSubmitted) submitted++;
                 else {
                     missingStudents.push({
@@ -70,7 +91,7 @@ export async function fetchTasksStatus(teacherId: string) {
                 }
             });
 
-            const courseData = classes.find((c: any) => c.id === a.class_id)?.course as any;
+            const courseData = classesById.get(a.class_id)?.course as { name: string } | { name: string }[] | null;
             const courseName = (Array.isArray(courseData) ? courseData[0]?.name : courseData?.name) || "Lớp học";
 
             taskStats.push({
@@ -85,13 +106,13 @@ export async function fetchTasksStatus(teacherId: string) {
         });
 
         exams?.forEach((e: any) => {
-            const classEnrollments = students.filter((s:any) => s.class_id === e.class_id);
+            const classEnrollments = enrollmentsByClass.get(e.class_id) || [];
             const totalExpected = classEnrollments.length;
             let submitted = 0;
             const missingStudents: any[] = [];
 
             classEnrollments.forEach((enroll:any) => {
-                const hasSubmitted = examSubs?.some((s: any) => s.exam_id === e.id && s.student_id === enroll.student_id);
+                const hasSubmitted = submittedExams.has(`${e.id}:${enroll.student_id}`);
                 if (hasSubmitted) submitted++;
                 else {
                     missingStudents.push({
@@ -102,7 +123,7 @@ export async function fetchTasksStatus(teacherId: string) {
                 }
             });
 
-            const courseData = classes.find((c: any) => c.id === e.class_id)?.course as any;
+            const courseData = classesById.get(e.class_id)?.course as { name: string } | { name: string }[] | null;
             const courseName = (Array.isArray(courseData) ? courseData[0]?.name : courseData?.name) || "Lớp học";
 
             taskStats.push({

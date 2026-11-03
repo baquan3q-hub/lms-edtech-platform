@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { submitHomework } from "@/lib/actions/homework";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +15,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { isGradePublished } from "@/lib/modules/assessment/dto";
+import { homeworkAnswersSchema } from "@/lib/modules/assessment/homework-dto";
+import { readLocalDraft, saveLocalDraft, deleteLocalDraft } from "@/lib/learning/draft-store";
 
 const typeConfig: Record<string, { label: string; icon: any; color: string; bg: string }> = {
     multiple_choice: { label: "Trắc nghiệm", icon: ListChecks, color: "text-indigo-600", bg: "bg-indigo-50" },
@@ -27,15 +30,21 @@ export default function HomeworkSubmitClient({
     homework,
     existingSubmission,
     classId,
+    draftOwner,
 }: {
     homework: any;
     existingSubmission: any;
     classId: string;
+    draftOwner: string;
 }) {
     const router = useRouter();
     const questions: any[] = homework.questions || [];
-    const isGraded = existingSubmission?.status === "graded";
-    const isSubmitted = existingSubmission?.status === "submitted" || isGraded;
+    const [submission, setSubmission] = useState<any>(existingSubmission);
+    const isGraded = isGradePublished(submission?.grading_status);
+    const isSubmitted = Boolean(submission?.id);
+    const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
+    const [draftLoaded, setDraftLoaded] = useState(false);
+    const [draftMessage, setDraftMessage] = useState("");
 
     // Initialize answers from existing submission or empty
     const [answers, setAnswers] = useState<any[]>(() => {
@@ -51,6 +60,21 @@ export default function HomeworkSubmitClient({
         }));
     });
     const [submitting, setSubmitting] = useState(false);
+    useEffect(() => {
+        let active = true;
+        void readLocalDraft(draftOwner, homework.id).then(local => {
+            if (!active || !local || isSubmitted) return;
+            const result = homeworkAnswersSchema.safeParse(local.answers);
+            if (result.success) { setAnswers(result.data); if(local.requestKey) setRequestKey(local.requestKey); setDraftMessage("Đã khôi phục bản nháp trên thiết bị."); }
+        }).catch(() => {}).finally(() => { if(active) setDraftLoaded(true); });
+        return () => { active=false; };
+    }, [draftOwner,homework.id,isSubmitted]);
+    useEffect(() => {
+        if (!draftLoaded || isSubmitted) return;
+        void saveLocalDraft({owner:draftOwner,attemptId:homework.id,baseVersion:0,answers,savedAt:Date.now(),requestKey})
+            .then(() => setDraftMessage("Đã giữ bản nháp trên thiết bị. Kết nối mạng để nộp bài."))
+            .catch(() => setDraftMessage("Chưa lưu được bản nháp trên thiết bị. Giữ trang mở để tránh mất nội dung."));
+    }, [answers,draftLoaded,isSubmitted,draftOwner,homework.id,requestKey]);
 
     // Upload state
     const [uploading, setUploading] = useState<Record<number, boolean>>({});
@@ -94,7 +118,7 @@ export default function HomeworkSubmitClient({
         try {
             const supabase = createClient();
             const ext = file.name.split('.').pop();
-            const fileName = `student_submissions/${homework.id}_${Date.now()}_${Math.random().toString(36).slice(2)}.${ext}`;
+            const fileName = `student_submissions/${homework.id}_${crypto.randomUUID()}.${ext}`;
 
             // Upload to Supabase Storage
             const { error } = await supabase.storage
@@ -150,22 +174,25 @@ export default function HomeworkSubmitClient({
         }
 
         setSubmitting(true);
-        const res = await submitHomework(homework.id, answers);
+        const res = await submitHomework(homework.id, answers, requestKey);
         if (res.error) {
             toast.error("Lỗi: " + res.error);
         } else {
             toast.success("Nộp bài thành công!");
+            await deleteLocalDraft(draftOwner,homework.id).catch(() => {});
+            if (res.data) {
+                setSubmission(res.data);
+            }
 
-            // Trigger AI behavior analysis sau khi nộp homework (Đã gỡ bỏ vì chỉ chạy cho exam)
+            // Trigger AI behavior tracking sau khi nộp homework
             await tracker.trackSubmission({ score: res.data?.score });
-
-            router.refresh();
         }
         setSubmitting(false);
     };
 
     return (
         <div className="max-w-3xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {draftMessage && !isSubmitted && <p role="status" className="rounded-lg border border-slate-200 bg-white p-3 text-sm text-slate-600">{draftMessage}</p>}
             <Link
                 href={`/student/classes/${classId}`}
                 className="flex items-center text-sm font-medium text-slate-500 hover:text-indigo-600 transition-colors w-fit"
@@ -192,10 +219,10 @@ export default function HomeworkSubmitClient({
                 {isGraded && (
                     <div className="mt-4 p-4 bg-emerald-50 rounded-xl border border-emerald-200">
                         <p className="text-sm font-bold text-emerald-800">
-                            Điểm: <span className="text-lg">{existingSubmission.score}</span>/{homework.total_points}
+                            Điểm: <span className="text-lg">{submission?.score}</span>/{homework.total_points}
                         </p>
-                        {existingSubmission.feedback && (
-                            <p className="text-sm text-emerald-700 mt-1">Nhận xét: {existingSubmission.feedback}</p>
+                        {submission?.feedback && (
+                            <p className="text-sm text-emerald-700 mt-1">Nhận xét: {submission.feedback}</p>
                         )}
                     </div>
                 )}
@@ -205,9 +232,9 @@ export default function HomeworkSubmitClient({
                              <Clock className="w-4 h-4 text-amber-600" />
                              <p className="text-sm font-semibold text-amber-700">Đã nộp — đang chờ giáo viên chấm phần tự luận/thực hành</p>
                         </div>
-                        {existingSubmission.score !== null && existingSubmission.score !== undefined && (
+                        {submission?.score !== null && submission?.score !== undefined && (
                             <p className="text-sm font-bold text-amber-800">
-                                Điểm trắc nghiệm tạm tính: <span className="text-lg">{existingSubmission.score}</span>/{homework.total_points}
+                                Điểm trắc nghiệm tạm tính: <span className="text-lg">{submission.score}</span>/{homework.total_points}
                             </p>
                         )}
                     </div>

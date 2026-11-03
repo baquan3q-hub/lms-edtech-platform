@@ -58,8 +58,8 @@ export default function TeacherStudentsClient() {
                     <Users className="w-6 h-6 text-white" />
                 </div>
                 <div>
-                    <h1 className="text-2xl font-extrabold text-slate-900">Quản lý Học viên</h1>
-                    <p className="text-sm text-slate-500">Xem thông tin chi tiết học viên và phụ huynh trong các lớp của bạn</p>
+                    <h1 className="text-2xl font-extrabold text-slate-900">Quản lý Học sinh</h1>
+                    <p className="text-sm text-slate-500">Xem thông tin chi tiết học sinh và phụ huynh trong các lớp của bạn</p>
                 </div>
             </div>
 
@@ -94,7 +94,7 @@ export default function TeacherStudentsClient() {
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <div className="p-4 bg-white rounded-xl border border-slate-200 text-center">
                     <p className="text-3xl font-black text-indigo-600">{filteredStudents.length}</p>
-                    <p className="text-xs text-slate-500 font-medium mt-1">Học viên</p>
+                    <p className="text-xs text-slate-500 font-medium mt-1">Học sinh</p>
                 </div>
                 <div className="p-4 bg-white rounded-xl border border-slate-200 text-center">
                     <p className="text-3xl font-black text-emerald-600">{classes.length}</p>
@@ -122,7 +122,7 @@ export default function TeacherStudentsClient() {
             ) : filteredStudents.length === 0 ? (
                 <div className="bg-white rounded-xl border border-slate-200 p-12 text-center">
                     <Users className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-                    <p className="text-slate-500 font-medium">Không tìm thấy học viên nào.</p>
+                    <p className="text-slate-500 font-medium">Không tìm thấy học sinh nào.</p>
                 </div>
             ) : (
                 <div className="space-y-3">
@@ -174,7 +174,7 @@ export default function TeacherStudentsClient() {
                                         {/* Student Detail */}
                                         <div>
                                             <h4 className="text-sm font-bold text-slate-800 mb-3 border-l-4 border-indigo-500 pl-2">
-                                                Thông tin Học viên
+                                                Thông tin Học sinh
                                             </h4>
                                             <div className="space-y-2 text-sm">
                                                 <div className="flex items-center gap-2 text-slate-600">
@@ -205,7 +205,7 @@ export default function TeacherStudentsClient() {
                                                     </div>
                                                 )}
                                                 {!student.profile && (
-                                                    <p className="text-xs text-slate-400 italic mt-2">Học viên chưa cập nhật thông tin cá nhân.</p>
+                                                    <p className="text-xs text-slate-400 italic mt-2">Học sinh chưa cập nhật thông tin cá nhân.</p>
                                                 )}
                                             </div>
                                         </div>

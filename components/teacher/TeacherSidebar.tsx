@@ -26,10 +26,10 @@ const menuGroups = [
             { icon: LayoutDashboard, label: "Tổng quan", href: "/teacher" },
             { icon: BookOpen, label: "Quản lý lớp học", href: "/teacher/classes" },
             { icon: CalendarDays, label: "Lịch dạy", href: "/teacher/schedule" },
-            { icon: Users, label: "Quản lý Học viên", href: "/teacher/students" },
+            { icon: Users, label: "Quản lý Học sinh", href: "/teacher/students" },
             { icon: FileSignature, label: "Ngân hàng Tài liệu", href: "/teacher/lessons" },
             { icon: FileBarChart, label: "Báo cáo & Nhận xét", href: "/teacher/reports" },
-            { icon: Activity, label: "Hành vi Học tập", href: "/teacher/behavior" },
+            { icon: Activity, label: "Hỗ trợ học sinh", href: "/teacher/insights" },
         ]
     },
     {
@@ -72,9 +72,9 @@ export default function TeacherSidebar({ userName = "Giáo viên", userEmail = "
                 {!isCollapsed && (
                     <div className="flex flex-col overflow-hidden whitespace-nowrap">
                         <span className="text-xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent">
-                            Teacher Portal
+                            EduSchool
                         </span>
-                        <span className="text-[10px] text-slate-500 font-bold tracking-wider">LMS PLATFORM</span>
+                        <span className="text-[10px] text-slate-500 font-bold tracking-wider">CỔNG GIÁO VIÊN</span>
                     </div>
                 )}
 

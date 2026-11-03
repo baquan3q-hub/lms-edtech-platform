@@ -1,3 +1,42 @@
+# EduSchool LMS K12
+
+Nền tảng học tập cho nhà trường K12, thí điểm THPT với Toán–Văn–Anh. Web dùng Next.js 16.4 / React 19.3 / TypeScript; Supabase cung cấp database, Auth và Storage; worker Python xử lý số liệu học tập.
+
+**Trạng thái:** đã triển khai phần nền tảng tái thiết và các luồng lõi; chưa nghiệm thu pilot hoặc nâng cấp database thật. Xem [phạm vi đã làm, API, staging và backlog](docs/REBUILD_K12_IMPLEMENTATION.md).
+
+## Phát triển và kiểm tra
+
+Yêu cầu Node.js 24, npm; Python 3.12+ và uv cho worker. Docker cần khi chạy Supabase local hoặc container triển khai.
+
+```sh
+npm ci
+npm run dev
+npm run typecheck
+npm run lint
+npm test
+npm run test:db
+npm run test:e2e
+uv sync --project workers/analytics
+uv run --directory workers/analytics python -m unittest -v
+```
+
+Sao chép các tên biến trong `.env.example` vào cấu hình local riêng. Không đưa service role key hoặc DSN worker vào biến NEXT_PUBLIC.
+
+## Database và triển khai
+
+- `npm run db:prepare` chuẩn bị project Supabase local riêng và in lệnh khởi động. Không reset database thật bằng recipe dựng mới.
+- `node scripts/db/inventory.mjs` kiểm kê metadata hiện tại bằng GET chỉ đọc.
+- Nâng cấp có bốn migration ngày 03/11/2026; cần thử trên bản sao staging và đối soát trước production.
+- `docker compose --env-file .env.runtime up --build` chạy web/worker sau khi cấu hình đúng quyền và môi trường. Docker image chưa được kiểm chứng trên máy không có Docker.
+- App React Native/Expo và các gate pilot triển khai sau khi web/staging ổn định.
+
+## Tài liệu lịch sử
+
+Mô tả dưới đây thuộc mô hình trung tâm giáo dục cũ; không dùng làm phạm vi hoặc bằng chứng nghiệm thu K12 hiện tại.
+
+<details>
+<summary>README lịch sử</summary>
+
 # 🎓 LMS EdTech Platform - Hệ Thống Quản Lý & Vận Hành Trung Tâm Giáo Dục Toàn Diện
 
 [![Next.js Version](https://img.shields.io/badge/Next.js-16.1.6-purple.svg?style=flat&logo=nextdotjs)](https://nextjs.org/)
@@ -186,3 +225,5 @@ lms-edtech-platform/
 * **Họ và tên:** Bùi Anh Quân (quanba)
 * **Vai trò:** Product Owner, Solution Architect, UI/UX ,Developer, QA.
 * **Mục tiêu:** Cung cấp giải pháp số hóa toàn diện giúp kết nối chặt chẽ giữa Trung tâm - Giáo viên - Học sinh - Phụ huynh trên cơ sở tối ưu hóa học tập bằng Trí tuệ nhân tạo (AI).
+
+</details>

@@ -1,8 +1,12 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import ExamEditorClient from "../../ExamEditorClient";
+import { requireResourceAccess } from "@/lib/auth/authorize";
+import { notFound } from "next/navigation";
 
 export default async function EditExamPage({ params }: { params: Promise<{ id: string; examId: string }> }) {
     const { id: classId, examId } = await params;
+    const access = await requireResourceAccess("exams", examId, "teach");
+    if (access.resource.class_id !== classId) notFound();
 
     const supabase = createAdminClient();
     const { data: exam } = await supabase

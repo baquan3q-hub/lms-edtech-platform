@@ -1,5 +1,6 @@
 "use client";
 
+import { endLearningSession } from "@/lib/learning/tracker-client";
 import { LogOut } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
@@ -9,6 +10,7 @@ export default function ParentLogoutButton() {
     const router = useRouter();
 
     const handleLogout = async () => {
+        await endLearningSession();
         await supabase.auth.signOut();
         router.push("/login");
         router.refresh();

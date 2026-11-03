@@ -257,7 +257,7 @@ export default async function ClassDetailPage({
 
 
 
-                {/* ===== TAB: HỌC VIÊN ===== */}
+                {/* ===== TAB: HỌC SINH ===== */}
                 <TabsContent value="students" className="mt-6">
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                         <div className="p-6 border-b border-slate-100 flex items-center justify-between gap-4">
@@ -337,7 +337,7 @@ export default async function ClassDetailPage({
                             Điểm danh lớp học
                         </h3>
                         <p className="text-slate-500 mt-1 pl-4 text-sm">
-                            Đánh dấu tình trạng chuyên cần của học viên. Chọn ngày và lưu điểm danh.
+                            Đánh dấu tình trạng chuyên cần của học sinh. Chọn ngày và lưu điểm danh.
                         </p>
                     </div>
                     <AttendanceClient
@@ -392,16 +392,16 @@ export default async function ClassDetailPage({
                     </Suspense>
                 </TabsContent>
 
-                {/* ===== TAB: TIẾN ĐỘ HỌC VIÊN ===== */}
+                {/* ===== TAB: TIẾN ĐỘ HỌC SINH ===== */}
                 <TabsContent value="progress" className="mt-6">
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
                             <div>
                                 <h3 className="text-lg font-bold text-slate-900 flex items-center">
-                                    <BarChart3 className="w-5 h-5 mr-2 text-indigo-500" /> Tiến độ Học viên
+                                    <BarChart3 className="w-5 h-5 mr-2 text-indigo-500" /> Tiến độ Học sinh
                                 </h3>
                                 <p className="text-sm text-slate-500 mt-1">
-                                    Theo dõi tiến độ hoàn thành bài học và điểm trắc nghiệm của từng học viên
+                                    Theo dõi tiến độ hoàn thành bài học và điểm trắc nghiệm của từng học sinh
                                 </p>
                             </div>
                         </div>

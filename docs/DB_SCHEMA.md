@@ -2,6 +2,10 @@
 
 Last reviewed: 2026-05-27
 
+## Tài liệu schema do chủ dự án cung cấp (24/09/2026)
+
+[Bản snapshot schema và RLS](DB_SCHEMA_SNAPSHOT_2026-09-24.md) là nội dung chủ dự án gửi để lưu cùng repository. File giữ nguyên bản gốc: mô tả cột của **63 bảng** và một phần danh sách RLS policy ở dạng Markdown. Đây là tài liệu tham chiếu để tra cứu cấu trúc, **không phải SQL migration thực thi**. Nguồn xuất, thời điểm trích từ database và mức độ khớp với môi trường đang chạy chưa được xác minh. Khi cần thay đổi database, đối chiếu bản snapshot với schema thực tế và bộ migration được khôi phục trước khi viết/chạy SQL.
+
 ## 1. Nguồn schema
 
 Schema hiện nằm rải rác trong:
@@ -87,7 +91,7 @@ Khi thêm/sửa bảng:
 4. Bật RLS trừ khi có lý do kỹ thuật được ghi rõ.
 5. Thêm policy cho admin, teacher, student, parent theo phạm vi dữ liệu.
 6. Cập nhật `types/database.ts` nếu dùng type thủ công/generated.
-7. Cập nhật tài liệu này và `API_SPEC.md` nếu có endpoint liên quan.
+7. Cập nhật tài liệu này và đặc tả tính năng tương ứng; nếu thay đổi luồng kỹ thuật thì cập nhật thêm `ARCHITECTURE.md` và `TEST_PLAN.md`.
 
 ## 7. Index đề xuất cần kiểm tra
 
@@ -110,4 +114,3 @@ Khi thêm/sửa bảng:
 - Submission nên có constraint chống nộp trùng nếu nghiệp vụ chỉ cho một lần nộp.
 - AI analysis nên lưu version/model/prompt hash nếu dùng để ra quyết định quan trọng.
 - Invite code phải có expiry và không lộ cho user không có quyền.
-

@@ -64,13 +64,13 @@ export default function CoursesTableClient({ courses }: { courses: any[] }) {
             {/* Table */}
             {filtered.length === 0 ? (
                 <div className="p-8 text-center text-gray-500 text-sm">
-                    Không có khóa học nào phù hợp với bộ lọc.
+                    Không có môn học nào phù hợp với bộ lọc.
                 </div>
             ) : (
                 <Table>
                     <TableHeader>
                         <TableRow className="border-gray-100 hover:bg-transparent bg-gray-50/50">
-                            <TableHead className="text-gray-500 font-medium w-[25%]">Tên khóa học</TableHead>
+                            <TableHead className="text-gray-500 font-medium w-[25%]">Tên môn học / Chương trình</TableHead>
                             <TableHead className="text-gray-500 font-medium w-[20%]">Mô tả</TableHead>
                             <TableHead className="text-gray-500 font-medium w-[12%]">Hình thức</TableHead>
                             <TableHead className="text-gray-500 font-medium w-[20%]">Lớp học</TableHead>

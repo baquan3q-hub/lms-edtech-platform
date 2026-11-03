@@ -104,9 +104,9 @@ export async function createUser(formData: FormData) {
             console.log(`[createUser] TODO: Gửi email thông báo tài khoản đến ${email}`);
             // Khi tích hợp Resend, gọi API ở đây:
             // await resend.emails.send({
-            //     from: 'E-Learning Platform <noreply@yourdomain.com>',
+            //     from: 'EduSchool LMS <noreply@yourdomain.com>',
             //     to: email,
-            //     subject: 'Tài khoản E-Learning của bạn đã được tạo',
+            //     subject: 'Tài khoản EduSchool LMS của bạn đã được tạo',
             //     html: `<p>Xin chào ${fullName},</p><p>Tài khoản đã được tạo. Email: ${email}, Mật khẩu: ${password}</p>`
             // });
         }

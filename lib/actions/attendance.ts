@@ -148,226 +148,225 @@ export async function saveAttendanceRecords(
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { success: false, error: "Unauthorized" };
+        if (!records.length || new Set(records.map(r => r.student_id)).size !== records.length ||
+            records.some(r => !["present", "absent", "late", "excused"].includes(r.status))) {
+            return { success: false, error: "Dữ liệu điểm danh không hợp lệ" };
+        }
 
         const adminSupabase = createAdminClient();
+        const [sessionResult, classResult, actorResult, enrollmentResult, previousResult] = await Promise.all([
+            adminSupabase.from("attendance_sessions")
+                .select("id, class_id, teacher_id, session_date").eq("id", sessionId).single(),
+            adminSupabase.from("classes")
+                .select("name, teacher_id, teacher:users!teacher_id(full_name)").eq("id", classId).single(),
+            adminSupabase.from("users").select("role").eq("id", user.id).single(),
+            adminSupabase.from("enrollments").select("student_id")
+                .eq("class_id", classId).eq("status", "active"),
+            adminSupabase.from("attendance_records")
+                .select("student_id, status, note").eq("session_id", sessionId),
+        ]);
+        if (sessionResult.error || classResult.error || actorResult.error ||
+            enrollmentResult.error || previousResult.error) {
+            throw sessionResult.error || classResult.error || actorResult.error ||
+                enrollmentResult.error || previousResult.error;
+        }
+        const session = sessionResult.data;
+        const classInfo = classResult.data;
+        if (session.class_id !== classId ||
+            (actorResult.data.role !== "admin" &&
+             classInfo.teacher_id !== user.id && session.teacher_id !== user.id)) {
+            return { success: false, error: "Bạn không có quyền điểm danh lớp này" };
+        }
+        const enrolledStudents = new Set((enrollmentResult.data || []).map(e => e.student_id));
+        const previousRecords = new Map((previousResult.data || []).map(r => [r.student_id, r]));
+        if (records.some(r => !enrolledStudents.has(r.student_id) && !previousRecords.has(r.student_id))) {
+            return { success: false, error: "Danh sách có học sinh không thuộc lớp" };
+        }
+
+        const changedRecords = records.filter(r => previousRecords.get(r.student_id)?.status !== r.status);
+        const recordsToWrite = records.filter(r => {
+            const previous = previousRecords.get(r.student_id);
+            return !previous || previous.status !== r.status || (previous.note || null) !== (r.note || null);
+        });
         const now = new Date().toISOString();
-
-        const recordsToUpsert = records.map((r) => ({
-            session_id: sessionId,
-            student_id: r.student_id,
-            status: r.status,
-            note: r.note || null,
-            marked_by: user.id,
-            marked_at: now,
-            updated_by: user.id,
-            updated_at: now,
-        }));
-
-        const { error } = await adminSupabase
-            .from("attendance_records")
-            .upsert(recordsToUpsert, { onConflict: "session_id,student_id" });
-
-        if (error) throw error;
-
-        // --- Add Notifications ---
-        // 1. Notify students & parents who are absent/late
-        for (const r of records) {
-            if (r.status === "absent" || r.status === "late") {
-                const statusVn = r.status === "absent" ? "vắng mặt" : "đi trễ";
-                const message = `Bạn được đánh dấu ${statusVn} trong buổi học ngày hôm nay.`;
-
-                await adminSupabase.from("notifications").insert({
-                    user_id: r.student_id,
-                    title: `Thông báo điểm danh: ${statusVn}`,
-                    message: message,
-                    type: "attendance",
-                    link: "/student/attendance"
-                });
-
-                const { data: parents } = await adminSupabase
-                    .from("parent_students")
-                    .select("parent_id")
-                    .eq("student_id", r.student_id);
-
-                if (parents) {
-                    for (const p of parents) {
-                        await adminSupabase.from("notifications").insert({
-                            user_id: p.parent_id,
-                            title: `Thông báo điểm danh con: ${statusVn}`,
-                            message: `Con bạn được đánh dấu ${statusVn} trong buổi học hôm nay.`,
-                            type: "attendance",
-                            link: "/parent"
-                        });
-                    }
-                }
-            }
-        }
-
-        // 2. Tính toán tổng kết và gửi notification cho Admin
-        const presentCount = records.filter(r => r.status === "present").length;
-        const absentCount = records.filter(r => r.status === "absent").length;
-        const lateCount = records.filter(r => r.status === "late").length;
-        const excusedCount = records.filter(r => r.status === "excused").length;
-        const totalStudents = records.length;
-        const attendanceRate = calcAttendanceRateFormatted(presentCount, lateCount, excusedCount, absentCount);
-
-        // Lấy thông tin lớp và giáo viên
-        const { data: classInfo } = await adminSupabase
-            .from("classes")
-            .select("name, teacher_id, teacher:users!teacher_id(full_name)")
-            .eq("id", classId)
-            .single();
-
-        const teacherName = classInfo
-            ? (Array.isArray(classInfo.teacher) ? classInfo.teacher[0]?.full_name : (classInfo.teacher as any)?.full_name) || "Giáo viên"
-            : "Giáo viên";
-
-        const summary = {
-            sessionId,
-            classId,
-            className: classInfo?.name || classId,
-            teacherName,
-            totalStudents,
-            presentCount,
-            absentCount,
-            lateCount,
-            excusedCount,
-            attendanceRate,
-        };
-
-        // Gửi notification cho tất cả Admin
-        const { data: admins } = await adminSupabase
-            .from("users")
-            .select("id")
-            .eq("role", "admin");
-
-        if (admins && admins.length > 0) {
-            const adminNotifications = admins.map(admin => ({
-                user_id: admin.id,
-                title: `Điểm danh hoàn tất — ${summary.className}`,
-                message: `GV ${teacherName} vừa điểm danh. Có mặt: ${presentCount}/${totalStudents} (${attendanceRate}%)`,
-                type: "attendance_completed",
-                metadata: summary,
-            }));
-            await adminSupabase.from("notifications").insert(adminNotifications);
-        }
-
-        // 3. Auto-sync teaching_status trên class_sessions
-        // Khi GV xác nhận lưu điểm danh → bổi đó được tính là "đã dạy"
-        const { data: attendanceSession } = await adminSupabase
-            .from("attendance_sessions")
-            .select("session_date")
-            .eq("id", sessionId)
-            .single();
-
-        if (attendanceSession) {
-            const taughtAt = new Date().toISOString();
-            // Tìm class_session khớp ngày + lớp
-            const { data: matchingSession } = await adminSupabase
-                .from("class_sessions")
-                .select("id, substitute_teacher_id")
-                .eq("class_id", classId)
-                .eq("session_date", attendanceSession.session_date)
-                .maybeSingle();
-
-            if (matchingSession) {
-                const isSubstitute = matchingSession.substitute_teacher_id === user.id;
-                await adminSupabase
-                    .from("class_sessions")
-                    .update({
-                        teaching_status: isSubstitute ? "substitute" : "taught",
-                        actual_teacher_id: user.id,
-                        taught_at: taughtAt,
-                        updated_at: taughtAt,
-                    })
-                    .eq("id", matchingSession.id);
-            }
-        }
-
-        // 4. Tính điểm chuyên cần (Gamification)
-        const POINTS_RULES: Record<string, number> = {
-            present: 10,
-            late: 5,
-            excused: 8,
-            absent: 0,
-        };
-
-        const pointsToInsert = records
-            .filter(r => POINTS_RULES[r.status] > 0)
-            .map(r => ({
-                student_id: r.student_id,
-                class_id: classId,
+        if (recordsToWrite.length) {
+            const { error: upsertError } = await adminSupabase.from("attendance_records").upsert(
+            recordsToWrite.map(r => ({
                 session_id: sessionId,
-                points_earned: POINTS_RULES[r.status] || 0,
-                reason: r.status,
-            }));
-
-        if (pointsToInsert.length > 0) {
-            await adminSupabase.from("attendance_points").insert(pointsToInsert);
+                student_id: r.student_id,
+                status: r.status,
+                note: r.note || null,
+                marked_by: user.id,
+                marked_at: now,
+                updated_by: user.id,
+                updated_at: now,
+            })),
+            { onConflict: "session_id,student_id" }
+            );
+            if (upsertError) throw upsertError;
         }
 
-        // 4. Kiểm tra streak và cấp thành tựu
-        for (const r of records) {
-            if (r.status === "present") {
-                // Đếm chuỗi "present" liên tiếp gần nhất
-                const { data: recentRecords } = await adminSupabase
-                    .from("attendance_records")
-                    .select("status, session:attendance_sessions!session_id(session_date)")
-                    .eq("student_id", r.student_id)
-                    .order("marked_at", { ascending: false })
-                    .limit(10);
-
-                let streak = 0;
-                for (const rec of (recentRecords || [])) {
-                    if (rec.status === "present") {
-                        streak++;
-                    } else {
-                        break;
-                    }
+        // Các phần hậu xử lý độc lập chạy song song. Điểm danh đã lưu ngay cả khi
+        // một dịch vụ phụ (thông báo/điểm thưởng) gặp lỗi.
+        const notify = async () => {
+            if (!changedRecords.length) return;
+            const absentOrLate = changedRecords.filter(r => r.status === "absent" || r.status === "late");
+            const [parentResult, adminResult] = await Promise.all([
+                absentOrLate.length
+                    ? adminSupabase.from("parent_students").select("student_id, parent_id")
+                        .in("student_id", absentOrLate.map(r => r.student_id))
+                    : Promise.resolve({ data: [], error: null }),
+                adminSupabase.from("users").select("id").eq("role", "admin"),
+            ]);
+            if (parentResult.error || adminResult.error) throw parentResult.error || adminResult.error;
+            const parentsByStudent = new Map<string, string[]>();
+            for (const link of parentResult.data || []) {
+                const parents = parentsByStudent.get(link.student_id) || [];
+                parents.push(link.parent_id);
+                parentsByStudent.set(link.student_id, parents);
+            }
+            const notifications: Record<string, unknown>[] = [];
+            for (const record of absentOrLate) {
+                const statusVn = record.status === "absent" ? "vắng mặt" : "đi trễ";
+                notifications.push({
+                    user_id: record.student_id,
+                    title: `Thông báo điểm danh: ${statusVn}`,
+                    message: `Bạn được đánh dấu ${statusVn} trong buổi học ngày hôm nay.`,
+                    type: "attendance",
+                    link: "/student/attendance",
+                });
+                for (const parentId of parentsByStudent.get(record.student_id) || []) {
+                    notifications.push({
+                        user_id: parentId,
+                        title: `Thông báo điểm danh con: ${statusVn}`,
+                        message: `Con bạn được đánh dấu ${statusVn} trong buổi học hôm nay.`,
+                        type: "attendance",
+                        link: "/parent",
+                    });
                 }
+            }
+            const presentCount = records.filter(r => r.status === "present").length;
+            const absentCount = records.filter(r => r.status === "absent").length;
+            const lateCount = records.filter(r => r.status === "late").length;
+            const excusedCount = records.filter(r => r.status === "excused").length;
+            const attendanceRate = calcAttendanceRateFormatted(presentCount, lateCount, excusedCount, absentCount);
+            const teacher = Array.isArray(classInfo.teacher) ? classInfo.teacher[0] : classInfo.teacher;
+            const teacherName = teacher?.full_name || "Giáo viên";
+            const summary = {
+                sessionId, classId, className: classInfo.name || classId, teacherName,
+                totalStudents: records.length, presentCount, absentCount, lateCount, excusedCount,
+                attendanceRate,
+            };
+            for (const admin of adminResult.data || []) {
+                notifications.push({
+                    user_id: admin.id,
+                    title: `Điểm danh hoàn tất — ${summary.className}`,
+                    message: `GV ${teacherName} vừa điểm danh. Có mặt: ${presentCount}/${records.length} (${attendanceRate}%)`,
+                    type: "attendance_completed",
+                    metadata: summary,
+                });
+            }
+            if (notifications.length) {
+                const { error } = await adminSupabase.from("notifications").insert(notifications);
+                if (error) throw error;
+            }
+        };
 
-                const streakAchievements = [
-                    { min: 10, type: "streak_10", bonus: 80 },
-                    { min: 5, type: "streak_5", bonus: 30 },
-                    { min: 3, type: "streak_3", bonus: 15 },
-                ];
+        const syncTeachingStatus = async () => {
+            const { data: matchingSession, error } = await adminSupabase.from("class_sessions")
+                .select("id, substitute_teacher_id")
+                .eq("class_id", classId).eq("session_date", session.session_date).maybeSingle();
+            if (error) throw error;
+            if (!matchingSession) return;
+            const taughtAt = new Date().toISOString();
+            const { error: updateError } = await adminSupabase.from("class_sessions").update({
+                teaching_status: matchingSession.substitute_teacher_id === user.id ? "substitute" : "taught",
+                actual_teacher_id: user.id, taught_at: taughtAt, updated_at: taughtAt,
+            }).eq("id", matchingSession.id);
+            if (updateError) throw updateError;
+        };
 
-                for (const sa of streakAchievements) {
-                    if (streak >= sa.min) {
-                        // Upsert achievement (UNIQUE constraint sẽ tự xử lý duplicate)
-                        await adminSupabase
-                            .from("student_achievements")
-                            .upsert({
-                                student_id: r.student_id,
-                                class_id: classId,
-                                achievement_type: sa.type,
-                            }, { onConflict: "student_id,class_id,achievement_type" });
+        const updatePointsAndAchievements = async () => {
+            if (!changedRecords.length) return;
+            // Thay thế điểm cơ bản của những học sinh đổi trạng thái, tránh cộng trùng khi lưu lại.
+            const changedStudentIds = changedRecords.map(r => r.student_id);
+            const { error: deleteError } = await adminSupabase.from("attendance_points").delete()
+                .eq("session_id", sessionId).in("student_id", changedStudentIds)
+                .in("reason", ["present", "late", "excused", "absent"]);
+            if (deleteError) throw deleteError;
+            const pointsRules: Record<string, number> = { present: 10, late: 5, excused: 8, absent: 0 };
+            const basePoints = changedRecords.filter(r => pointsRules[r.status] > 0).map(r => ({
+                student_id: r.student_id, class_id: classId, session_id: sessionId,
+                points_earned: pointsRules[r.status], reason: r.status,
+            }));
+            if (basePoints.length) {
+                const { error } = await adminSupabase.from("attendance_points").insert(basePoints);
+                if (error) throw error;
+            }
 
-                        // Bonus points (chỉ cộng lần đầu tiên đạt streak)
-                        const { data: existingBonus } = await adminSupabase
-                            .from("attendance_points")
-                            .select("id")
-                            .eq("student_id", r.student_id)
-                            .eq("class_id", classId)
-                            .eq("reason", sa.type)
-                            .maybeSingle();
-
-                        if (!existingBonus) {
-                            await adminSupabase.from("attendance_points").insert({
-                                student_id: r.student_id,
-                                class_id: classId,
-                                session_id: sessionId,
-                                points_earned: sa.bonus,
-                                reason: sa.type,
+            const presentStudents = changedRecords.filter(r => r.status === "present");
+            if (!presentStudents.length) return;
+            const streakRules = [
+                { min: 10, type: "streak_10", bonus: 80 },
+                { min: 5, type: "streak_5", bonus: 30 },
+                { min: 3, type: "streak_3", bonus: 15 },
+            ];
+            const achievements: { student_id: string; class_id: string; achievement_type: string;
+                session_id: string; points_earned: number; reason: string }[] = [];
+            // Giới hạn số truy vấn đồng thời để không dồn tải lên database.
+            for (let offset = 0; offset < presentStudents.length; offset += 8) {
+                const batch = presentStudents.slice(offset, offset + 8);
+                const results = await Promise.all(batch.map(r => adminSupabase.from("attendance_records")
+                    .select("status").eq("student_id", r.student_id)
+                    .order("marked_at", { ascending: false }).limit(10)));
+                for (let index = 0; index < batch.length; index++) {
+                    if (results[index].error) throw results[index].error;
+                    let streak = 0;
+                    for (const recent of results[index].data || []) {
+                        if (recent.status !== "present") break;
+                        streak++;
+                    }
+                    for (const rule of streakRules) {
+                        if (streak >= rule.min) {
+                            achievements.push({
+                                student_id: batch[index].student_id, class_id: classId,
+                                achievement_type: rule.type, session_id: sessionId,
+                                points_earned: rule.bonus, reason: rule.type,
                             });
                         }
                     }
                 }
             }
-        }
-        // -------------------------
+            if (!achievements.length) return;
+            const { error: achievementError } = await adminSupabase.from("student_achievements")
+                .upsert(achievements.map(({ student_id, class_id, achievement_type }) =>
+                    ({ student_id, class_id, achievement_type })),
+                    { onConflict: "student_id,class_id,achievement_type" });
+            if (achievementError) throw achievementError;
+            const { data: existingBonuses, error: bonusError } = await adminSupabase
+                .from("attendance_points").select("student_id, reason")
+                .eq("class_id", classId)
+                .in("student_id", presentStudents.map(r => r.student_id))
+                .in("reason", streakRules.map(r => r.type));
+            if (bonusError) throw bonusError;
+            const awarded = new Set((existingBonuses || []).map(p => `${p.student_id}:${p.reason}`));
+            const newBonuses = achievements.filter(a => !awarded.has(`${a.student_id}:${a.reason}`))
+                .map(({ student_id, class_id, session_id, points_earned, reason }) =>
+                    ({ student_id, class_id, session_id, points_earned, reason }));
+            if (newBonuses.length) {
+                const { error } = await adminSupabase.from("attendance_points").insert(newBonuses);
+                if (error) throw error;
+            }
+        };
 
+        const sideEffects = await Promise.allSettled([
+            notify(), syncTeachingStatus(), updatePointsAndAchievements(),
+        ]);
+        for (const effect of sideEffects) {
+            if (effect.status === "rejected") console.error("Attendance post-save effect failed:", effect.reason);
+        }
         revalidatePath(`/teacher/classes/${classId}`);
+        revalidatePath("/admin");
         return { success: true, error: null };
     } catch (error: any) {
         console.error("Lỗi saveAttendanceRecords:", error);
@@ -690,11 +689,11 @@ export async function getAttendanceOverview(month: number, year: number, classId
             endDate = "9999-12-31";
         }
 
-        // Lấy sessions
+        // Đếm đơn chờ duyệt đồng thời với việc tải buổi học.
         let sessionQuery = adminSupabase
             .from("attendance_sessions")
             .select(`
-                *,
+                id, class_id, session_date,
                 class:classes!class_id(id, name, teacher_id,
                     teacher:users!teacher_id(id, full_name)
                 )
@@ -705,8 +704,14 @@ export async function getAttendanceOverview(month: number, year: number, classId
 
         if (classId) sessionQuery = sessionQuery.eq("class_id", classId);
 
-        const { data: sessions, error: sessErr } = await sessionQuery;
+        const [{ data: sessions, error: sessErr }, { count: pendingRequests, error: pendingErr }] = await Promise.all([
+            sessionQuery,
+            adminSupabase.from("absence_requests")
+                .select("id", { count: "exact", head: true })
+                .eq("status", "pending"),
+        ]);
         if (sessErr) throw sessErr;
+        if (pendingErr) throw pendingErr;
 
         if (!sessions || sessions.length === 0) {
             return {
@@ -714,7 +719,7 @@ export async function getAttendanceOverview(month: number, year: number, classId
                     totalSessions: 0,
                     avgAttendanceRate: 0,
                     studentsHighAbsence: [],
-                    pendingRequests: 0,
+                    pendingRequests: pendingRequests || 0,
                     classSummaries: [],
                 },
                 error: null,
@@ -724,25 +729,41 @@ export async function getAttendanceOverview(month: number, year: number, classId
         const sessionIds = sessions.map((s: any) => s.id);
 
         // Lấy records
-        const { data: records } = await adminSupabase
+        const { data: records, error: recordsErr } = await adminSupabase
             .from("attendance_records")
-            .select("*")
+            .select("session_id, student_id, status")
             .in("session_id", sessionIds);
+        if (recordsErr) throw recordsErr;
 
         const allRecords = records || [];
+        const validSessionIds = new Set<string>();
+        const countsBySession = new Map<string, { present: number; absent: number; late: number; excused: number; total: number }>();
+        const studentAbsences: Record<string, number> = {};
+        const studentTotal: Record<string, number> = {};
+        let presentCount = 0;
+        let absentCount = 0;
+        let excusedCount = 0;
 
-        // Keep only valid sessions
-        const validSessionIds = new Set(allRecords.map(r => r.session_id));
+        // Mỗi bản ghi chỉ được duyệt một lần, kể cả khi xem toàn bộ năm.
+        for (const record of allRecords) {
+            validSessionIds.add(record.session_id);
+            const counts = countsBySession.get(record.session_id) || { present: 0, absent: 0, late: 0, excused: 0, total: 0 };
+            counts.total++;
+            if (record.status === "present") { counts.present++; presentCount++; }
+            else if (record.status === "absent") { counts.absent++; absentCount++; }
+            else if (record.status === "late") counts.late++;
+            else if (record.status === "excused") { counts.excused++; excusedCount++; }
+            countsBySession.set(record.session_id, counts);
+            studentTotal[record.student_id] = (studentTotal[record.student_id] || 0) + 1;
+            if (record.status === "absent") {
+                studentAbsences[record.student_id] = (studentAbsences[record.student_id] || 0) + 1;
+            }
+        }
+
         const validSessions = sessions.filter(s => validSessionIds.has(s.id));
-
-        // Tính thống kê — tỷ lệ chỉ dựa trên Đi học vs Vắng (có phép + không phép), không tính đi muộn
-        const presentCount = allRecords.filter((r: any) => r.status === "present").length;
-        const absentCount = allRecords.filter((r: any) => r.status === "absent").length;
-        const excusedCount = allRecords.filter((r: any) => r.status === "excused").length;
         const relevantTotal = presentCount + absentCount + excusedCount;
         const avgRate = relevantTotal > 0 ? Math.round((presentCount / relevantTotal) * 100) : 0;
 
-        // Tính theo lớp
         const classMap: Record<string, any> = {};
         for (const sess of validSessions) {
             const cid = sess.class_id;
@@ -755,36 +776,25 @@ export async function getAttendanceOverview(month: number, year: number, classId
                     totalSessions: 0,
                     totalPresent: 0,
                     totalAbsent: 0,
+                    totalLate: 0,
+                    totalExcused: 0,
                     totalRecords: 0,
                 };
             }
             classMap[cid].totalSessions++;
 
-            const sessRecords = allRecords.filter((r: any) => r.session_id === sess.id);
-            classMap[cid].totalRecords += sessRecords.length;
-            classMap[cid].totalPresent += sessRecords.filter((r: any) => r.status === "present").length;
-            classMap[cid].totalAbsent += sessRecords.filter((r: any) => r.status === "absent").length;
+            const counts = countsBySession.get(sess.id)!;
+            classMap[cid].totalRecords += counts.total;
+            classMap[cid].totalPresent += counts.present;
+            classMap[cid].totalAbsent += counts.absent;
+            classMap[cid].totalLate += counts.late;
+            classMap[cid].totalExcused += counts.excused;
         }
 
         const classSummaries = Object.values(classMap).map((c: any) => ({
             ...c,
-            attendanceRate: (() => {
-                const lateCount = (allRecords as any[]).filter((r: any) => r.session_id && validSessions.find((s: any) => s.id === r.session_id && s.class_id === c.classId) && r.status === 'late').length || 0;
-                const excusedCount = (allRecords as any[]).filter((r: any) => r.session_id && validSessions.find((s: any) => s.id === r.session_id && s.class_id === c.classId) && r.status === 'excused').length || 0;
-                return calcAttendanceRate(c.totalPresent, lateCount, excusedCount, c.totalAbsent);
-            })(),
+            attendanceRate: calcAttendanceRate(c.totalPresent, c.totalLate, c.totalExcused, c.totalAbsent),
         }));
-
-        // Học sinh vắng nhiều
-        const studentAbsences: Record<string, number> = {};
-        const studentTotal: Record<string, number> = {};
-        for (const r of allRecords) {
-            const sid = (r as any).student_id;
-            studentTotal[sid] = (studentTotal[sid] || 0) + 1;
-            if ((r as any).status === "absent") {
-                studentAbsences[sid] = (studentAbsences[sid] || 0) + 1;
-            }
-        }
 
         const studentsHighAbsence = Object.entries(studentAbsences)
             .filter(([sid, count]) => {
@@ -797,14 +807,6 @@ export async function getAttendanceOverview(month: number, year: number, classId
                 totalSessions: studentTotal[sid],
                 absentRate: Math.round((count / (studentTotal[sid] || 1)) * 100),
             }));
-
-        // Đơn chờ duyệt
-        let pendingQuery = adminSupabase
-            .from("absence_requests")
-            .select("id", { count: "exact", head: true })
-            .eq("status", "pending");
-
-        const { count: pendingRequests } = await pendingQuery;
 
         return {
             data: {
@@ -1041,13 +1043,20 @@ export async function getAttendanceTrendData(
         const allRecords = records || [];
 
         // Filter sessions that have at least one record (actually marked)
-        const validSessionIds = new Set(allRecords.map((r: any) => r.session_id));
+        const recordsBySession = new Map<string, typeof allRecords>();
+        for (const record of allRecords) {
+            const group = recordsBySession.get(record.session_id) || [];
+            group.push(record);
+            recordsBySession.set(record.session_id, group);
+        }
+        const validSessionIds = new Set(recordsBySession.keys());
         const validSessions = sessions.filter((s: any) => validSessionIds.has(s.id));
 
         // 3. Group sessions
         const weekMap: Record<string, {
             present: number; absent: number; late: number; excused: number; total: number;
         }> = {};
+        const sessionsPerPeriod: Record<string, number> = {};
 
         for (const sess of validSessions) {
             const d = new Date(sess.session_date + "T00:00:00");
@@ -1068,8 +1077,9 @@ export async function getAttendanceTrendData(
             if (!weekMap[key]) {
                 weekMap[key] = { present: 0, absent: 0, late: 0, excused: 0, total: 0 };
             }
+            sessionsPerPeriod[key] = (sessionsPerPeriod[key] || 0) + 1;
 
-            const sessRecords = allRecords.filter((r: any) => r.session_id === sess.id);
+            const sessRecords = recordsBySession.get(sess.id) || [];
             for (const r of sessRecords) {
                 weekMap[key].total++;
                 if (r.status === "present") weekMap[key].present++;
@@ -1090,22 +1100,7 @@ export async function getAttendanceTrendData(
                 excusedRate: relevantTotal > 0 ? Math.round((counts.excused / relevantTotal) * 100) : 0,
                 total: counts.total,
                 totalPresent: counts.present,
-                totalSessions: new Set(validSessions.filter(s => {
-                    // count unique sessions that fall into this period key
-                    const sd = new Date(s.session_date + "T00:00:00");
-                    const smonthNum = sd.getMonth() + 1;
-                    const sweekInMonth = Math.ceil(sd.getDate() / 7);
-                    
-                    let skey = "";
-                    if (period === "this_month") {
-                        skey = `Tuần ${sweekInMonth}`;
-                    } else if (period === "12_months") {
-                        skey = `Tháng ${smonthNum}/${sd.getFullYear().toString().slice(2)}`;
-                    } else {
-                        skey = `Tuần ${sweekInMonth} (Th 0${smonthNum})`.replace("010", "10").replace("011", "11").replace("012", "12");
-                    }
-                    return skey === periodKey;
-                }).map(s => s.id)).size,
+                totalSessions: sessionsPerPeriod[periodKey] || 0,
             };
         });
 
@@ -1577,8 +1572,8 @@ export async function getDailyAttendanceOverview(date: string) {
         const dateObj = new Date(date + "T00:00:00");
         const dayOfWeek = dateObj.getDay(); // JS: 0=Sun, 1=Mon...
 
-        // 2. Lấy tất cả lịch cố định cho ngày trong tuần này
-        const { data: schedules, error: schedErr } = await adminSupabase
+        // Lịch cố định và các phiên điểm danh độc lập, tải cùng lúc.
+        const schedulesQuery = adminSupabase
             .from("class_schedules")
             .select(`
                 id, day_of_week, start_time, end_time,
@@ -1591,7 +1586,21 @@ export async function getDailyAttendanceOverview(date: string) {
             .eq("day_of_week", dayOfWeek)
             .order("start_time");
 
+        const sessionsQuery = adminSupabase
+            .from("attendance_sessions")
+            .select(`
+                id, class_id, session_date, status, start_time, end_time,
+                teacher:users!teacher_id(full_name),
+                class:classes!class_id(name)
+            `)
+            .eq("session_date", date);
+
+        const [
+            { data: schedules, error: schedErr },
+            { data: sessions, error: sessErr },
+        ] = await Promise.all([schedulesQuery, sessionsQuery]);
         if (schedErr) throw schedErr;
+        if (sessErr) throw sessErr;
 
         // Exclude inactive classes
         const activeSchedules = (schedules || []).filter((s: any) => {
@@ -1599,26 +1608,16 @@ export async function getDailyAttendanceOverview(date: string) {
             return cls && cls.status === "active";
         });
 
-        // 3. Lấy tất cả attendance_sessions trong ngày date
-        const { data: sessions, error: sessErr } = await adminSupabase
-            .from("attendance_sessions")
-            .select(`
-                id, class_id, session_date, status, start_time, end_time,
-                teacher:users!teacher_id(full_name)
-            `)
-            .eq("session_date", date);
-
-        if (sessErr) throw sessErr;
-
         // 4. Lấy records cho các session trong ngày
         const sessionIds = (sessions || []).map(s => s.id);
-        let recordsMap: Record<string, { present: number; absent: number; late: number; excused: number; total: number }> = {};
+        const recordsMap: Record<string, { present: number; absent: number; late: number; excused: number; total: number }> = {};
 
         if (sessionIds.length > 0) {
-            const { data: records } = await adminSupabase
+            const { data: records, error: recordsErr } = await adminSupabase
                 .from("attendance_records")
                 .select("session_id, status")
                 .in("session_id", sessionIds);
+            if (recordsErr) throw recordsErr;
 
             // Group by session
             for (const r of (records || [])) {
@@ -1675,12 +1674,7 @@ export async function getDailyAttendanceOverview(date: string) {
                 const teacherObj = Array.isArray(sess.teacher) ? sess.teacher[0] : sess.teacher;
                 const stats = recordsMap[sess.id] || null;
 
-                // Lấy tên lớp
-                const { data: clsInfo } = await adminSupabase
-                    .from("classes")
-                    .select("name")
-                    .eq("id", sess.class_id)
-                    .single();
+                const clsInfo = Array.isArray(sess.class) ? sess.class[0] : sess.class;
 
                 classesForDay.push({
                     classId: sess.class_id,

@@ -116,7 +116,7 @@ export default function ImportStudentsDialog({ classId }: { classId: string }) {
 
             const successCount = importResults.filter(r => r.success).length;
             if (successCount > 0) {
-                toast.success(`Đã thêm thành công ${successCount}/${importResults.length} học viên!`);
+                toast.success(`Đã thêm thành công ${successCount}/${importResults.length} học sinh!`);
             }
         } catch (err) {
             toast.error("Đã xảy ra lỗi khi import.");
@@ -134,7 +134,7 @@ export default function ImportStudentsDialog({ classId }: { classId: string }) {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Students");
         ws["!cols"] = [{ wch: 30 }, { wch: 25 }];
-        XLSX.writeFile(wb, "mau_import_hocvien.xlsx");
+        XLSX.writeFile(wb, "mau_import_hocsinh.xlsx");
     };
 
     const validCount = parsedStudents.filter(s => s.valid).length;
@@ -152,10 +152,10 @@ export default function ImportStudentsDialog({ classId }: { classId: string }) {
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                         <FileSpreadsheet className="w-5 h-5 text-emerald-600" />
-                        Import Học viên từ Excel
+                        Import Học sinh từ Excel
                     </DialogTitle>
                     <DialogDescription>
-                        Tải lên file Excel chứa danh sách email học viên. Hệ thống sẽ tự động tìm và thêm vào lớp.
+                        Tải lên file Excel chứa danh sách email học sinh. Hệ thống sẽ tự động tìm và thêm vào lớp.
                     </DialogDescription>
                 </DialogHeader>
 
@@ -214,7 +214,7 @@ export default function ImportStudentsDialog({ classId }: { classId: string }) {
                                     </table>
                                 </div>
                                 <p className="text-xs text-blue-600 mt-2">
-                                    <strong>Lưu ý:</strong> Học viên cần có tài khoản (role = student) trong hệ thống trước. Email không tìm thấy sẽ báo lỗi.
+                                    <strong>Lưu ý:</strong> Học sinh cần có tài khoản (role = student) trong hệ thống trước. Email không tìm thấy sẽ báo lỗi.
                                 </p>
                             </div>
 
@@ -283,7 +283,7 @@ export default function ImportStudentsDialog({ classId }: { classId: string }) {
                     {step === "importing" && (
                         <div className="py-12 text-center">
                             <Loader2 className="w-10 h-10 text-emerald-500 mx-auto mb-4 animate-spin" />
-                            <p className="text-lg font-semibold text-gray-900">Đang thêm {validCount} học viên vào lớp...</p>
+                            <p className="text-lg font-semibold text-gray-900">Đang thêm {validCount} học sinh vào lớp...</p>
                             <p className="text-sm text-gray-500 mt-1">Vui lòng không đóng cửa sổ</p>
                         </div>
                     )}
@@ -355,7 +355,7 @@ export default function ImportStudentsDialog({ classId }: { classId: string }) {
                                 className="bg-emerald-600 hover:bg-emerald-700 text-white"
                             >
                                 <Upload className="w-4 h-4 mr-2" />
-                                Thêm {validCount} học viên
+                                Thêm {validCount} học sinh
                             </Button>
                         </>
                     )}

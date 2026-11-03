@@ -1,8 +1,12 @@
 "use server";
 
+import { requireActor, requireClassAccess, requireStudentAccess, requireResourceAccess } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { getGeminiModel } from "@/lib/gemini";
+import { AI_MODEL } from "@/lib/gemini";
+import { sessionMetrics, scoreTrend } from "@/lib/learning/behavior";
+import { generateBrief } from "@/lib/ai/generate-brief";
+import { missingBrief, formatBrief, PROMPT_VERSION } from "@/lib/ai/brief";
 
 // ============================================================
 // Behavior Analysis Engine
@@ -17,31 +21,34 @@ export async function analyzeStudentBehavior(
     studentId: string,
     classId: string,
     contextType: "quiz" | "exam" | "homework",
-    contextId: string
+    contextId: string,
+    attemptId?: string
 ) {
     try {
+        await requireStudentAccess(studentId); const actor = await requireClassAccess(classId); if (actor.role === "student" && actor.id !== studentId) throw new Error("Không có quyền.");
+
         const supabase = createAdminClient();
 
+        if (!attemptId) return {success:false, error:"Chưa có lần làm bài để phân tích."};
+        const {data: attempt} = await supabase.from("exam_attempts").select("id,exam_id,student_id,submitted_at").eq("id",attemptId).eq("exam_id",contextId).eq("student_id",studentId).maybeSingle();
+        if(!attempt?.submitted_at) return {success:false,error:"Bài làm chưa được nộp."};
+        await requireResourceAccess("exams",contextId);
         // 1. Thu thập activity logs của session vừa rồi
-        const sessionMetrics = await computeSessionMetrics(supabase, studentId, classId, contextType, contextId);
+        const sessionMetrics = await computeSessionMetrics(supabase, studentId, classId, contextType, contextId, attemptId);
         
         // 2. Thu thập lịch sử điểm số để so sánh
         const scoreHistory = await getStudentScoreHistory(supabase, studentId, classId);
 
         // 3. Thu thập behavior score cũ (nếu có)
-        const existingBehavior = await getExistingBehaviorScore(supabase, studentId, classId);
 
         // 4. Gọi AI phân tích
         const aiResult = await runAIAnalysis(sessionMetrics, scoreHistory, contextType);
 
         // 5. Lưu behavior score (dùng contextType + contextId làm period để tránh ghi đè dữ liệu)
-        const periodKey = `${contextType}_${contextId}`;
+        const periodKey = `${contextType}_${attemptId}`;
         await saveBehaviorScore(supabase, studentId, classId, periodKey, sessionMetrics, aiResult, scoreHistory);
 
         // 6. Tạo alert nếu cần
-        if (aiResult.gaming_score >= 0.7 || aiResult.anomaly_detected) {
-            await createBehaviorAlert(supabase, studentId, classId, aiResult, sessionMetrics, contextType);
-        }
 
         return { success: true, result: aiResult };
     } catch (error: any) {
@@ -53,318 +60,48 @@ export async function analyzeStudentBehavior(
 /**
  * Tính toán metrics từ raw activity logs của 1 session
  */
-async function computeSessionMetrics(
-    supabase: any,
-    studentId: string,
-    classId: string,
-    contextType: string,
-    contextId: string
-) {
-    // Lấy logs trong 2 giờ gần nhất cho context này
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-
-    const { data: logs } = await supabase
-        .from("student_activity_logs")
-        .select("*")
-        .eq("student_id", studentId)
-        .eq("context_type", contextType)
-        .eq("context_id", contextId)
-        .gte("created_at", twoHoursAgo)
-        .order("created_at", { ascending: true });
-
-    const allLogs = logs || [];
-
-    // Tính các metrics
-    const answerLogs = allLogs.filter((l: any) => l.activity_type === "quiz_answer");
-    const tabSwitchLogs = allLogs.filter((l: any) => l.activity_type === "tab_switch");
-    const idleEndLogs = allLogs.filter((l: any) => l.activity_type === "idle_end"); // Dùng idle_end thay vì idle_detected
-    const warningLogs = allLogs.filter((l: any) => l.activity_type === "cheat_warning");
-    const submitLogs = allLogs.filter((l: any) => l.activity_type.includes("_submit"));
-
-    // Tốc độ trả lời trung bình
-    const answerSpeeds = answerLogs
-        .map((l: any) => l.metadata?.answer_speed_ms)
-        .filter((s: any) => typeof s === "number");
-    const avgAnswerSpeedMs = answerSpeeds.length > 0
-        ? answerSpeeds.reduce((a: number, b: number) => a + b, 0) / answerSpeeds.length
-        : 0;
-
-    // Số lần rapid guess (< 3 giây)
-    const rapidGuessCount = answerLogs.filter((l: any) => l.metadata?.is_rapid_guess === true).length;
-
-    // Tổng tab switch
-    const tabSwitchCount = tabSwitchLogs.length;
-
-    // Warnings count  
-    const warningsCount = warningLogs.length;
-
-    // Total session duration (from submit log)
-    const totalDurationS = submitLogs.length > 0
-        ? submitLogs[submitLogs.length - 1].metadata?.total_duration_s || 0
-        : 0;
-
-    // Idle time tổng — dùng idle_end events với idle_duration_s thực tế
-    const totalIdleTimeS = idleEndLogs.reduce((acc: number, l: any) => 
-        acc + (l.metadata?.idle_duration_s || 0), 0);
-
-    // Tỷ lệ rapid guess
-    const rapidGuessPercent = answerLogs.length > 0
-        ? (rapidGuessCount / answerLogs.length) * 100
-        : 0;
-
-    return {
-        total_answers: answerLogs.length,
-        avg_answer_speed_ms: Math.round(avgAnswerSpeedMs),
-        rapid_guess_count: rapidGuessCount,
-        rapid_guess_percent: Math.round(rapidGuessPercent),
-        tab_switch_count: tabSwitchCount,
-        warnings_count: warningsCount,
-        total_duration_s: totalDurationS,
-        total_idle_time_s: totalIdleTimeS,
-        active_time_s: Math.max(0, totalDurationS - totalIdleTimeS),
-        total_events: allLogs.length,
-    };
+async function computeSessionMetrics(supabase: ReturnType<typeof createAdminClient>, studentId: string, classId: string, contextType: string, contextId: string, attemptId: string) {
+ const { data, error } = await supabase.from("student_activity_logs").select("activity_type,metadata,attempt_id,session_id,occurred_at").eq("student_id",studentId).eq("class_id",classId).eq("context_type",contextType).eq("context_id",contextId).eq("attempt_id",attemptId).order("occurred_at");
+ if(error) throw new Error("Không đọc được dữ liệu hoạt động.");
+ return sessionMetrics(data || [],attemptId);
 }
 
 /**
  * Lấy lịch sử điểm số gần đây của học sinh (kết hợp submissions + exam_submissions)
  */
-async function getStudentScoreHistory(supabase: any, studentId: string, classId: string) {
-    // Lấy 20 bài nộp gần nhất
-    const [{ data: subs }, { data: examSubs }] = await Promise.all([
-        supabase
-            .from("submissions")
-            .select("score, submitted_at, assignment:assignments(class_id, title, type)")
-            .eq("student_id", studentId)
-            .not("score", "is", null)
-            .order("submitted_at", { ascending: false })
-            .limit(20),
-        supabase
-            .from("exam_submissions")
-            .select("score, submitted_at, exam:exams(class_id, title, total_points)")
-            .eq("student_id", studentId)
-            .not("score", "is", null)
-            .order("submitted_at", { ascending: false })
-            .limit(20),
-    ]);
-
-    // Gộp và filter theo class nếu cần
-    const allScores: any[] = [];
-    
-    (subs || []).forEach((s: any) => {
-        const assignmentClass = Array.isArray(s.assignment) ? s.assignment[0] : s.assignment;
-        allScores.push({
-            score: Number(s.score),
-            type: "assignment",
-            title: assignmentClass?.title || "Bài tập",
-            submitted_at: s.submitted_at,
-            class_match: assignmentClass?.class_id === classId,
-        });
-    });
-
-    (examSubs || []).forEach((s: any) => {
-        const examData = Array.isArray(s.exam) ? s.exam[0] : s.exam;
-        const totalPoints = examData?.total_points || 10;
-        allScores.push({
-            score: Number(s.score),
-            score_normalized: (Number(s.score) / totalPoints) * 100,
-            type: "exam",
-            title: examData?.title || "Bài kiểm tra",
-            submitted_at: s.submitted_at,
-            class_match: examData?.class_id === classId,
-        });
-    });
-
-    // Sort by date
-    allScores.sort((a, b) => new Date(b.submitted_at).getTime() - new Date(a.submitted_at).getTime());
-
-    // Tính trend
-    const scores = allScores.map(s => s.score_normalized || s.score);
-    const recentScores = scores.slice(0, 5);
-    const olderScores = scores.slice(5, 10);
-
-    const avgRecent = recentScores.length > 0 ? recentScores.reduce((a, b) => a + b, 0) / recentScores.length : 0;
-    const avgOlder = olderScores.length > 0 ? olderScores.reduce((a, b) => a + b, 0) / olderScores.length : 0;
-
-    // Detect anomaly: điểm đột ngột tăng/giảm > 30%
-    let trend: "improving" | "stable" | "declining" | "volatile" = "stable";
-    let anomalyDetected = false;
-
-    if (recentScores.length >= 3 && olderScores.length >= 2) {
-        const diff = avgRecent - avgOlder;
-        if (diff > 20) trend = "improving";
-        else if (diff < -20) trend = "declining";
-
-        // Check variance — nếu điểm dao động quá lớn
-        const variance = recentScores.reduce((acc, s) => acc + Math.pow(s - avgRecent, 2), 0) / recentScores.length;
-        if (variance > 400) {
-            trend = "volatile";
-            anomalyDetected = true;
-        }
-
-        // Kiểm tra sự bất thường: điểm rất cao nhưng hành vi nghi ngờ
-        if (avgRecent > 80 && diff > 30) {
-            anomalyDetected = true; // Đột ngột tăng mạnh
-        }
-    }
-
-    return {
-        scores: allScores.slice(0, 10),
-        avg_recent: Math.round(avgRecent * 10) / 10,
-        avg_older: Math.round(avgOlder * 10) / 10,
-        trend,
-        anomaly_detected: anomalyDetected,
-        total_submissions: allScores.length,
-    };
+async function getStudentScoreHistory(supabase: ReturnType<typeof createAdminClient>, studentId: string, classId: string) {
+ const {data: exams,error: examError}=await supabase.from("exams").select("id").eq("class_id",classId);
+ if(examError) throw examError;
+ if(!exams?.length) return scoreTrend([],classId);
+ const {data,error}=await supabase.from("exam_submissions").select("score,total_points,submitted_at,grading_status").eq("student_id",studentId).in("exam_id",exams.map(e=>e.id)).eq("grading_status","graded").order("submitted_at",{ascending:false}).limit(20);
+ if(error) throw error;
+ return scoreTrend((data||[]).map(r=>({...r,class_id:classId,graded:true})),classId);
 }
 
 /**
  * Lấy behavior score hiện tại của student trong class
  */
-async function getExistingBehaviorScore(supabase: any, studentId: string, classId: string) {
-    const { data } = await supabase
-        .from("student_behavior_scores")
-        .select("*")
-        .eq("student_id", studentId)
-        .eq("class_id", classId)
-        .order("updated_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
 
-    return data;
-}
 
 /**
  * Gọi Gemini AI phân tích hành vi
  */
-async function runAIAnalysis(
-    sessionMetrics: any,
-    scoreHistory: any,
-    contextType: string
-) {
-    try {
-        const model = getGeminiModel("gemini-2.5-flash");
-
-        const prompt = `Bạn là AI chuyên phân tích hành vi học sinh trong hệ thống e-learning. Hãy phân tích dữ liệu sau và đưa ra đánh giá.
-
-=== Dữ liệu hoạt động session hiện tại (${contextType}) ===
-- Tổng số câu trả lời: ${sessionMetrics.total_answers}
-- Tốc độ trả lời trung bình: ${sessionMetrics.avg_answer_speed_ms}ms/câu
-- Số lần đoán nhanh (<3s): ${sessionMetrics.rapid_guess_count} (${sessionMetrics.rapid_guess_percent}%)
-- Số lần chuyển tab: ${sessionMetrics.tab_switch_count}
-- Số cảnh báo gian lận: ${sessionMetrics.warnings_count}
-- Thời gian làm bài tổng: ${sessionMetrics.total_duration_s}s
-- Thời gian idle (không thao tác): ${sessionMetrics.total_idle_time_s}s
-- Thời gian hoạt động thực tế: ${sessionMetrics.active_time_s}s
-
-=== Lịch sử điểm số ===
-- Điểm trung bình 5 bài gần nhất: ${scoreHistory.avg_recent}/100
-- Điểm trung bình 5 bài trước đó: ${scoreHistory.avg_older}/100
-- Xu hướng: ${scoreHistory.trend}
-- Phát hiện bất thường điểm: ${scoreHistory.anomaly_detected ? "CÓ" : "Không"}
-- Tổng bài đã nộp: ${scoreHistory.total_submissions}
-
-=== Yêu cầu phân tích ===
-Trả lời CHÍNH XÁC JSON format sau (KHÔNG thêm markdown, chỉ JSON thuần):
-{
-  "gaming_score": <số 0.0 đến 1.0, khả năng gaming the system>,
-  "risk_level": "<normal|warning|high_risk>",
-  "anomaly_detected": <true/false>,
-  "behaviors_detected": ["<danh sách hành vi bất thường nếu có>"],
-  "analysis_summary": "<mô tả ngắn gọn bằng tiếng Việt, 2-3 câu>",
-  "recommendation": "<lời khuyên cho giáo viên bằng tiếng Việt, 1-2 câu>"
-}
-
-Quy tắc đánh giá:
-- gaming_score < 0.3 → normal (học bình thường)
-- 0.3 ≤ gaming_score < 0.7 → warning (cần theo dõi)
-- gaming_score ≥ 0.7 → high_risk (nghi ngờ gian lận)
-- Rapid guess > 40% → cộng thêm 0.2 gaming_score
-- Tab switch > 5 lần → cộng thêm 0.15 gaming_score
-- Idle > 40% thời gian → cộng thêm 0.1 gaming_score
-- Điểm đột ngột tăng mạnh + hành vi bất thường → anomaly_detected = true`;
-
-        const result = await model.generateContent(prompt);
-        const responseText = result.response.text().trim();
-
-        // Parse JSON từ response (loại bỏ markdown code fences nếu có)
-        const jsonStr = responseText
-            .replace(/```json\s*/gi, "")
-            .replace(/```\s*/gi, "")
-            .trim();
-
-        const parsed = JSON.parse(jsonStr);
-
-        // Validate fields
-        return {
-            gaming_score: Math.min(1, Math.max(0, Number(parsed.gaming_score) || 0)),
-            risk_level: ["normal", "warning", "high_risk"].includes(parsed.risk_level) ? parsed.risk_level : "normal",
-            anomaly_detected: Boolean(parsed.anomaly_detected),
-            behaviors_detected: Array.isArray(parsed.behaviors_detected) ? parsed.behaviors_detected : [],
-            analysis_summary: parsed.analysis_summary || "Không có phân tích chi tiết.",
-            recommendation: parsed.recommendation || "Tiếp tục theo dõi.",
-        };
-    } catch (error: any) {
-        console.error("AI analysis error:", error);
-
-        // Fallback: tính gaming_score thủ công nếu AI fail
-        return computeFallbackScore(sessionMetrics, scoreHistory);
-    }
+async function runAIAnalysis(metrics: ReturnType<typeof sessionMetrics>, history: ReturnType<typeof scoreTrend>, contextType: string) {
+ const enough=metrics.data_status === "sufficient";
+ const signals: string[]=[];
+ if(enough && metrics.total_answers >= 10 && metrics.rapid_guess_percent > 40) signals.push("Nhiều câu được trả lời dưới 3 giây");
+ if(enough && metrics.tab_switch_count > 5) signals.push("Chuyển tab nhiều lần");
+ const fallback = enough ? { summary: signals.length ? "Có hoạt động cần giáo viên xem xét thêm." : "Đã ghi nhận hoạt động làm bài.", evidence: metrics.total_answers + " lượt trả lời; " + metrics.tab_switch_count + " lần chuyển tab.", next_action: "Đối chiếu bài làm và trao đổi với học sinh khi cần." } : missingBrief;
+ const generated = enough ? await generateBrief({metrics,history,contextType},fallback) : {brief:missingBrief,status:"not_requested"};
+ return { gaming_score: enough ? signals.length * 0.2 : null, risk_level: enough ? (signals.length ? "warning" : "normal") : null,
+ anomaly_detected:false, behaviors_detected:signals, analysis_summary:formatBrief(generated.brief), recommendation:generated.brief.next_action,
+ data_status:metrics.data_status, analysis_status:generated.status, prompt_version:PROMPT_VERSION, model:AI_MODEL };
 }
 
 /**
  * Fallback scoring nếu Gemini API không khả dụng
  */
-function computeFallbackScore(sessionMetrics: any, scoreHistory: any) {
-    let gamingScore = 0;
 
-    // Rapid guess
-    if (sessionMetrics.rapid_guess_percent > 60) gamingScore += 0.35;
-    else if (sessionMetrics.rapid_guess_percent > 40) gamingScore += 0.2;
-    else if (sessionMetrics.rapid_guess_percent > 20) gamingScore += 0.1;
-
-    // Tab switching
-    if (sessionMetrics.tab_switch_count > 10) gamingScore += 0.25;
-    else if (sessionMetrics.tab_switch_count > 5) gamingScore += 0.15;
-    else if (sessionMetrics.tab_switch_count > 2) gamingScore += 0.05;
-
-    // Idle ratio
-    const idleRatio = sessionMetrics.total_duration_s > 0
-        ? sessionMetrics.total_idle_time_s / sessionMetrics.total_duration_s
-        : 0;
-    if (idleRatio > 0.5) gamingScore += 0.15;
-    else if (idleRatio > 0.3) gamingScore += 0.08;
-
-    // Score anomaly
-    if (scoreHistory.anomaly_detected) gamingScore += 0.15;
-
-    gamingScore = Math.min(1, gamingScore);
-
-    let riskLevel: "normal" | "warning" | "high_risk" = "normal";
-    if (gamingScore >= 0.7) riskLevel = "high_risk";
-    else if (gamingScore >= 0.3) riskLevel = "warning";
-
-    const behaviors: string[] = [];
-    if (sessionMetrics.rapid_guess_percent > 40) behaviors.push("Đoán nhanh nhiều câu");
-    if (sessionMetrics.tab_switch_count > 5) behaviors.push("Chuyển tab nhiều lần");
-    if (idleRatio > 0.3) behaviors.push("Thời gian idle cao");
-    if (scoreHistory.anomaly_detected) behaviors.push("Điểm số bất thường");
-
-    return {
-        gaming_score: Math.round(gamingScore * 100) / 100,
-        risk_level: riskLevel,
-        anomaly_detected: scoreHistory.anomaly_detected,
-        behaviors_detected: behaviors,
-        analysis_summary: behaviors.length > 0
-            ? `Phát hiện ${behaviors.length} dấu hiệu bất thường: ${behaviors.join(", ")}.`
-            : "Không phát hiện hành vi bất thường.",
-        recommendation: gamingScore >= 0.7
-            ? "Cần trao đổi trực tiếp với học sinh và thông báo phụ huynh."
-            : gamingScore >= 0.3
-                ? "Nên theo dõi thêm trong các bài tiếp theo."
-                : "Học sinh hoạt động bình thường.",
-    };
-}
 
 /**
  * Lưu behavior score vào DB
@@ -390,9 +127,11 @@ async function saveBehaviorScore(
         total_sessions: 1,
         gaming_score: aiResult.gaming_score,
         risk_level: aiResult.risk_level,
+        data_status: aiResult.data_status,
+        analysis_status: aiResult.analysis_status,
         ai_analysis_json: aiResult,
         avg_score_recent: scoreHistory.avg_recent,
-        score_trend: scoreHistory.trend,
+        score_trend: scoreHistory.trend === "insufficient_data" ? "stable" : scoreHistory.trend,
         anomaly_detected: aiResult.anomaly_detected,
         updated_at: new Date().toISOString(),
     };
@@ -405,103 +144,14 @@ async function saveBehaviorScore(
         });
 
     if (error) {
-        console.error("Error saving behavior score:", error);
+        throw new Error("Không lưu được báo cáo hành vi.");
     }
 }
 
 /**
  * Tạo alert + gửi notification cho teacher & parent
  */
-async function createBehaviorAlert(
-    supabase: any,
-    studentId: string,
-    classId: string,
-    aiResult: any,
-    metrics: any,
-    contextType: string
-) {
-    // Lấy thông tin học sinh
-    const { data: student } = await supabase
-        .from("users")
-        .select("full_name")
-        .eq("id", studentId)
-        .single();
 
-    const studentName = student?.full_name || "Học sinh";
-
-    // Xác định loại alert
-    let alertType = "gaming_detected";
-    if (aiResult.anomaly_detected && aiResult.gaming_score < 0.7) alertType = "score_anomaly";
-    if (metrics.rapid_guess_percent > 60) alertType = "rapid_guessing";
-    if (metrics.tab_switch_count > 10) alertType = "tab_switching";
-
-    const severity = aiResult.gaming_score >= 0.7 ? "high" : aiResult.gaming_score >= 0.3 ? "medium" : "low";
-
-    const description = aiResult.analysis_summary;
-
-    // 1. Tạo alert record
-    const { data: alert } = await supabase.from("behavior_alerts").insert({
-        student_id: studentId,
-        class_id: classId,
-        alert_type: alertType,
-        severity,
-        description,
-        details_json: {
-            gaming_score: aiResult.gaming_score,
-            risk_level: aiResult.risk_level,
-            behaviors: aiResult.behaviors_detected,
-            recommendation: aiResult.recommendation,
-            metrics: {
-                rapid_guess_percent: metrics.rapid_guess_percent,
-                tab_switch_count: metrics.tab_switch_count,
-                active_time_s: metrics.active_time_s,
-                idle_time_s: metrics.total_idle_time_s,
-            },
-            context_type: contextType,
-        },
-        notified_teacher: true,
-        notified_parent: severity === "high",
-    }).select("id").single();
-
-    // 2. Gửi notification cho Teacher
-    const { data: classData } = await supabase
-        .from("classes")
-        .select("teacher_id, name, course:courses(name)")
-        .eq("id", classId)
-        .single();
-
-    if (classData?.teacher_id) {
-        const courseData = Array.isArray(classData.course) ? classData.course[0] : classData.course;
-        const className = courseData?.name || classData.name || "Lớp học";
-
-        await supabase.from("notifications").insert({
-            user_id: classData.teacher_id,
-            title: `⚠️ Cảnh báo hành vi: ${studentName}`,
-            message: `[${className}] ${description}\n\nĐề xuất: ${aiResult.recommendation}`,
-            type: "warning",
-            is_read: false,
-        });
-    }
-
-    // 3. Gửi notification cho Phụ huynh (nếu severity = high)
-    if (severity === "high") {
-        const { data: parentLinks } = await supabase
-            .from("parent_students")
-            .select("parent_id")
-            .eq("student_id", studentId);
-
-        if (parentLinks && parentLinks.length > 0) {
-            const parentNotifs = parentLinks.map((p: any) => ({
-                user_id: p.parent_id,
-                title: `🔔 Thông báo về hành vi học tập của con bạn`,
-                message: `Hệ thống AI phát hiện hành vi bất thường của ${studentName}:\n${description}\n\nĐề xuất: ${aiResult.recommendation}\n\nVui lòng liên hệ giáo viên để được tư vấn thêm.`,
-                type: "warning",
-                is_read: false,
-            }));
-            await supabase.from("notifications").insert(parentNotifs);
-        }
-    }
-}
 
 // ============================================================
 // Teacher Dashboard — Tổng hợp Hành vi học tập toàn lớp
@@ -513,6 +163,8 @@ async function createBehaviorAlert(
  */
 export async function fetchTeacherClassBehaviorOverview(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
+
         const supabase = createAdminClient();
 
         // 1. Lấy danh sách HS enrolled
@@ -534,7 +186,6 @@ export async function fetchTeacherClassBehaviorOverview(classId: string) {
             .select("*")
             .eq("class_id", classId)
             .in("student_id", studentIds)
-            .order("gaming_score", { ascending: false })
             .order("updated_at", { ascending: false });
 
         const scoreMap = new Map<string, any>();
@@ -849,6 +500,8 @@ export async function fetchTeacherClassBehaviorOverview(classId: string) {
  */
 export async function fetchStudentBehaviorHistory(studentId: string, classId: string) {
     try {
+        await requireStudentAccess(studentId); await requireClassAccess(classId);
+
         const supabase = createAdminClient();
 
         // 1. Lấy tất cả exam submissions
@@ -1008,6 +661,8 @@ export async function fetchStudentBehaviorHistory(studentId: string, classId: st
  */
 export async function fetchClassBehaviorScores(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
+
         const supabase = createAdminClient();
 
         // Lấy danh sách học sinh enrolled
@@ -1029,7 +684,6 @@ export async function fetchClassBehaviorScores(classId: string) {
             .select("*")
             .eq("class_id", classId)
             .in("student_id", studentIds)
-            .order("gaming_score", { ascending: false })
             .order("updated_at", { ascending: false });
 
         // Lấy alerts chưa resolved
@@ -1099,6 +753,8 @@ export async function fetchClassBehaviorScores(classId: string) {
  */
 export async function fetchStudentActivityDetail(studentId: string, classId: string, limit = 50) {
     try {
+        await requireStudentAccess(studentId); await requireClassAccess(classId);
+
         const supabase = createAdminClient();
 
         const { data: logs } = await supabase
@@ -1132,26 +788,29 @@ export async function fetchStudentActivityDetail(studentId: string, classId: str
  */
 export async function fetchSystemBehaviorAnalytics() {
     try {
+        await requireActor(["admin"]);
+
         const supabase = createAdminClient();
 
-        // 1. Tổng quan alerts
-        const { data: allAlerts, count: totalAlerts } = await supabase
-            .from("behavior_alerts")
-            .select("*", { count: "exact" })
-            .order("created_at", { ascending: false })
-            .limit(100);
+        // Alerts và điểm hành vi độc lập, tải cùng lúc.
+        const [alertsResult, scoresResult] = await Promise.all([
+            supabase.from("behavior_alerts")
+                .select("id, is_resolved, severity, created_at", { count: "exact" })
+                .order("created_at", { ascending: false }).limit(100),
+            supabase.from("student_behavior_scores")
+                .select("risk_level, gaming_score, student_id, class_id, updated_at")
+                .order("gaming_score", { ascending: false }).limit(200),
+        ]);
+        if (alertsResult.error) throw alertsResult.error;
+        if (scoresResult.error) throw scoresResult.error;
+        const { data: allAlerts, count: totalAlerts } = alertsResult;
+        const { data: allScores } = scoresResult;
 
         const alerts = allAlerts || [];
         const unresolvedAlerts = alerts.filter((a: any) => !a.is_resolved);
         const highRiskAlerts = alerts.filter((a: any) => a.severity === "high");
 
         // 2. Phân bố risk level
-        const { data: allScores } = await supabase
-            .from("student_behavior_scores")
-            .select("risk_level, gaming_score, student_id, class_id, updated_at, ai_analysis_json")
-            .order("gaming_score", { ascending: false })
-            .limit(200);
-
         const scores = allScores || [];
         const riskDistribution = {
             high_risk: scores.filter((s: any) => s.risk_level === "high_risk").length,
@@ -1164,15 +823,14 @@ export async function fetchSystemBehaviorAnalytics() {
         let topRiskStudents: any[] = [];
 
         if (topRiskStudentIds.length > 0) {
-            const { data: students } = await supabase
-                .from("users")
-                .select("id, full_name, avatar_url, email")
-                .in("id", topRiskStudentIds);
-
-            const { data: classesData } = await supabase
-                .from("classes")
-                .select("id, name, course:courses(name)")
-                .in("id", scores.slice(0, 10).map((s: any) => s.class_id));
+            const [{ data: students }, { data: classesData }] = await Promise.all([
+                supabase.from("users")
+                    .select("id, full_name, avatar_url, email")
+                    .in("id", topRiskStudentIds),
+                supabase.from("classes")
+                    .select("id, name, course:courses(name)")
+                    .in("id", scores.slice(0, 10).map((s: any) => s.class_id)),
+            ]);
 
             const studentMap = new Map((students || []).map((s: any) => [s.id, s]));
             const classMap = new Map((classesData || []).map((c: any) => [c.id, c]));
@@ -1245,6 +903,8 @@ export async function fetchSystemBehaviorAnalytics() {
  */
 export async function fetchTeacherBehaviorSummary(teacherId: string) {
     try {
+        const actor = await requireActor(["teacher", "admin"]); if (actor.role !== "admin" && actor.id !== teacherId) throw new Error("Không có quyền.");
+
         const supabase = createAdminClient();
 
         // Lấy classes của teacher
@@ -1307,6 +967,8 @@ export async function fetchTeacherBehaviorSummary(teacherId: string) {
  */
 export async function notifyParentAboutBehavior(studentId: string, customMessage: string) {
     try {
+        await requireStudentAccess(studentId, true);
+
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { error: "Unauthorized" };
@@ -1372,6 +1034,8 @@ export async function fetchAdminBehaviorDashboard(filters?: {
     classId?: string;
 }) {
     try {
+        await requireActor(["admin"]);
+
         const supabase = createAdminClient();
 
         // 1. Lấy classes + courses + teachers
@@ -1436,7 +1100,7 @@ export async function fetchAdminBehaviorDashboard(filters?: {
 
         // 4. Lấy thông tin students
         const studentIds = [...new Set(uniqueScores.map((s: any) => s.student_id))];
-        let studentsMap: Record<string, any> = {};
+        const studentsMap: Record<string, any> = {};
         if (studentIds.length > 0) {
             const { data: students } = await supabase
                 .from("users")

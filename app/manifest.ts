@@ -2,9 +2,9 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
     return {
-        name: 'E-Learning Platform',
-        short_name: 'ELearn',
-        description: 'Nền tảng học trực tuyến',
+        name: 'EduSchool LMS',
+        short_name: 'EduSchool',
+        description: 'Hệ thống quản lý học tập trường phổ thông',
         start_url: '/',
         display: 'standalone',
         background_color: '#ffffff',

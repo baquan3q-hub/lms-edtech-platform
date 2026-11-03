@@ -55,7 +55,7 @@ export default async function AdminClassStudentsPage({ params }: { params: Promi
                     <div>
                         <div className="flex items-center gap-3 mb-2">
                             <h2 className="text-2xl md:text-3xl font-extrabold text-slate-900">
-                                Quản lý Học viên: {classInfo.name ? `${classInfo.name} - ` : ""}{classInfo.course?.name || "Lớp học ẩn danh"}
+                                Quản lý Học sinh: {classInfo.name ? `${classInfo.name} - ` : ""}{classInfo.course?.name || "Lớp học ẩn danh"}
                             </h2>
                             <Badge variant="outline" className={`text-xs py-0.5 ${classInfo.status === 'active' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-slate-50 text-slate-600'}`}>
                                 {classInfo.status === 'active' ? 'Đang hoạt động' : 'Kết thúc'}

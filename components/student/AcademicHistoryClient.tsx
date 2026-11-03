@@ -21,6 +21,9 @@ interface AcademicHistoryClientProps {
 }
 
 export default function AcademicHistoryClient({ grades }: AcademicHistoryClientProps) {
+    // To handle toggling expansons
+    const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>({});
+
     if (!grades || grades.length === 0) {
         return (
             <div className="text-center p-12 bg-white rounded-2xl shadow-sm border border-slate-200">
@@ -58,15 +61,6 @@ export default function AcademicHistoryClient({ grades }: AcademicHistoryClientP
         const dateB = new Date(`${yB}-${mB}-${dB}`).getTime();
         return dateB - dateA; // Descending
     });
-
-    // To handle toggling expansons
-    const [expandedDates, setExpandedDates] = useState<Record<string, boolean>>(
-        // Expand the first two dates by default
-        sortedDates.reduce((acc, date, idx) => {
-            acc[date] = idx < 2;
-            return acc;
-        }, {} as Record<string, boolean>)
-    );
 
     const toggleDate = (date: string) => {
         setExpandedDates(prev => ({

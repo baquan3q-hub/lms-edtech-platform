@@ -48,12 +48,12 @@ export function BottomNav() {
             { href: "/teacher", label: "Tổng quan", icon: Home },
             { href: "/teacher/classes", label: "Lớp học", icon: BookOpen },
             { href: "/teacher/absence-requests", label: "Đơn nghỉ", icon: FileCheck },
-            { href: "/teacher/students", label: "Học viên", icon: Users },
+            { href: "/teacher/students", label: "Học sinh", icon: Users },
         ];
     } else if (role === "admin") {
         navItems = [
-            { href: "/admin", label: "Dashboard", icon: Home },
-            { href: "/admin/users", label: "Users", icon: Users },
+            { href: "/admin", label: "Tổng quan", icon: Home },
+            { href: "/admin/users", label: "Người dùng", icon: Users },
             { href: "/admin/classes", label: "Lớp học", icon: School },
             { href: "/admin/reports", label: "Báo cáo", icon: BarChart },
         ];

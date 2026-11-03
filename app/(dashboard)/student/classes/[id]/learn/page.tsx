@@ -30,7 +30,7 @@ export default async function StudentLearnIndex({ params }: { params: Promise<{ 
                 </div>
                 <h3 className="text-xl font-bold text-slate-800 mb-2">Chưa có bài học nào</h3>
                 <p className="text-slate-500 max-w-sm">
-                    Khóa học này hiện chưa có bài học nào được đăng tải. Vui lòng quay lại sau!
+                    Lớp học này hiện chưa có bài học nào được đăng tải. Vui lòng quay lại sau!
                 </p>
             </div>
         );

@@ -59,7 +59,7 @@ export default function AIInsightModal({ open, onOpenChange, submission, exam, s
                             <Sparkles className="w-5 h-5 text-purple-600" /> Phân tích bởi Gia Sư AI
                         </DialogTitle>
                         <DialogDescription className="text-indigo-700/70">
-                            Nhận xét hành vi học tập và gợi ý bài tập từ Gemini cho học viên này.
+                            Nhận xét hành vi học tập và gợi ý bài tập từ Gemini cho học sinh này.
                         </DialogDescription>
                     </DialogHeader>
 
@@ -92,7 +92,7 @@ export default function AIInsightModal({ open, onOpenChange, submission, exam, s
                                     <Sparkles className="w-8 h-8 text-indigo-300" />
                                 </div>
                                 <h3 className="font-bold text-slate-700 text-lg mb-2">Chưa có phân tích</h3>
-                                <p className="max-w-xs mx-auto text-sm">Hệ thống chưa tạo báo cáo tự động cho học viên này. Hãy bấm nút bên dưới để nhờ AI phân tích.</p>
+                                <p className="max-w-xs mx-auto text-sm">Hệ thống chưa tạo báo cáo tự động cho học sinh này. Hãy bấm nút bên dưới để nhờ AI phân tích.</p>
                                 <Button onClick={handleGenerate} className="mt-6 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-md">
                                     <Sparkles className="w-4 h-4 mr-2" /> Bắt đầu phân tích
                                 </Button>

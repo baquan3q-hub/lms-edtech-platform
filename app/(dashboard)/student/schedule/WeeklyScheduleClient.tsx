@@ -18,13 +18,13 @@ export default function WeeklyScheduleClient({ initialSchedules }: WeeklySchedul
                             <CalendarDays className="w-5 h-5" />
                             Thời khóa biểu lớp học
                         </h2>
-                        <p className="opacity-90 text-sm mt-1">Lịch học hàng tuần do giáo viên và trung tâm sắp xếp</p>
+                        <p className="opacity-90 text-sm mt-1">Lịch học hàng tuần do giáo viên và nhà trường sắp xếp</p>
                     </div>
                 </div>
                 <CardContent className="p-6">
                     <WeeklyTimetable
                         schedules={initialSchedules}
-                        emptyMessage="Bạn chưa có lịch học nào. Vui lòng liên hệ trung tâm để được xếp lớp."
+                        emptyMessage="Bạn chưa có lịch học nào. Vui lòng liên hệ nhà trường để được xếp lớp."
                     />
                 </CardContent>
             </Card>

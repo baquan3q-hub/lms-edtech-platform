@@ -49,7 +49,6 @@ export default function RoomManagerClient({ initialRooms }: { initialRooms: any[
                 setRooms(prev => [...prev, data]);
             }
             setIsEditing(false);
-            router.refresh();
         } catch (error: any) {
             alert("Lỗi: " + error.message);
         } finally {
@@ -63,7 +62,6 @@ export default function RoomManagerClient({ initialRooms }: { initialRooms: any[
             const { error } = await deleteRoom(roomId);
             if (error) throw new Error(error);
             setRooms(prev => prev.filter(r => r.id !== roomId));
-            router.refresh();
         } catch (error: any) {
             alert("Lỗi: " + error.message);
         }
@@ -73,7 +71,7 @@ export default function RoomManagerClient({ initialRooms }: { initialRooms: any[
         <div className="space-y-6">
             {!isEditing && (
                 <div className="flex justify-end mb-4">
-                    <Button onClick={handleAddNew} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm">
+                    <Button onClick={handleAddNew} className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm font-medium">
                         <Plus className="w-4 h-4 mr-2" /> Thêm Phòng Mới
                     </Button>
                 </div>
@@ -105,7 +103,7 @@ export default function RoomManagerClient({ initialRooms }: { initialRooms: any[
                     </div>
                     <div className="flex justify-end gap-2 mt-4">
                         <Button variant="outline" onClick={handleCancel} disabled={isSaving}>Hủy</Button>
-                        <Button onClick={handleSave} disabled={isSaving} className="bg-indigo-600 hover:bg-indigo-700 text-white">
+                        <Button onClick={handleSave} disabled={isSaving} className="bg-blue-600 hover:bg-blue-700 text-white font-medium">
                             {isSaving ? "Đang lưu..." : "Lưu lại"}
                         </Button>
                     </div>
@@ -118,8 +116,8 @@ export default function RoomManagerClient({ initialRooms }: { initialRooms: any[
                         rooms.map(room => (
                             <div key={room.id} className="bg-white border text-slate-800 border-slate-200 rounded-xl shadow-sm hover:shadow-md transition-all p-5 flex flex-col justify-between">
                                 <div>
-                                    <h3 className="font-bold text-lg mb-1 flex items-center gap-2">
-                                        <MapPin className="w-5 h-5 text-indigo-500" />
+                                    <h3 className="font-bold text-lg mb-1 flex items-center gap-2 text-slate-900">
+                                        <MapPin className="w-5 h-5 text-blue-600" />
                                         {room.name}
                                     </h3>
                                     <div className="flex items-center justify-between text-sm text-slate-500 mb-3 border-b border-slate-100 pb-3">
@@ -140,7 +138,7 @@ export default function RoomManagerClient({ initialRooms }: { initialRooms: any[
                                                     return (
                                                         <div key={schedule.id} className="bg-slate-50 rounded p-2 text-xs border border-slate-100">
                                                             <div className="bg-white border text-slate-800 border-slate-200">
-                                                                <div className="font-semibold text-indigo-700 mb-0.5 flex items-center gap-1.5 line-clamp-1">
+                                                                <div className="font-semibold text-blue-700 mb-0.5 flex items-center gap-1.5 line-clamp-1">
                                                                     <BookOpen className="w-3 h-3" />
                                                                     {schedule.class?.name || "Lớp ẩn"}
                                                                 </div>
@@ -164,7 +162,7 @@ export default function RoomManagerClient({ initialRooms }: { initialRooms: any[
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-100 shrink-0">
-                                    <Button variant="outline" size="sm" onClick={() => handleEdit(room)} className="flex-1 border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-indigo-600">
+                                    <Button variant="outline" size="sm" onClick={() => handleEdit(room)} className="flex-1 border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-blue-600">
                                         <Edit2 className="w-3.5 h-3.5 mr-1.5" /> Sửa
                                     </Button>
                                     <Button variant="outline" size="sm" onClick={() => handleDelete(room.id)} className="border-slate-200 text-red-600 hover:bg-red-50">

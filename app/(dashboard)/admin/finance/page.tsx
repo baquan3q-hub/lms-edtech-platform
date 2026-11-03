@@ -6,7 +6,7 @@ import { vi } from 'date-fns/locale'
 import {
   DollarSign, Clock, CheckCircle2, AlertTriangle, Plus,
   Loader2, FileText, Users, CreditCard, Banknote,
-  Send, X, BarChart3, CalendarDays, Pencil, Trash2, Eye, Bell
+  Send, X, BarChart3, CalendarDays, Pencil, Trash2, Eye, Bell, Search
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend
@@ -98,6 +98,7 @@ export default function AdminFinancePage() {
   const [payments, setPayments] = useState<PaymentRow[]>([])
   const [loading, setLoading] = useState(true)
   const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [searchQuery, setSearchQuery] = useState<string>('')
 
   // Dialog tạo học phí
   const [showCreateDialog, setShowCreateDialog] = useState(false)
@@ -161,9 +162,16 @@ export default function AdminFinancePage() {
   }, [fetchData])
 
   // Filter invoices
-  const filteredInvoices = statusFilter === 'all'
-    ? invoices
-    : invoices.filter(i => i.status === statusFilter)
+  const filteredInvoices = invoices.filter(i => {
+    const matchStatus = statusFilter === 'all' || i.status === statusFilter
+    if (!searchQuery.trim()) return matchStatus
+    const q = searchQuery.toLowerCase().trim()
+    const studentName = (i.users?.full_name || '').toLowerCase()
+    const className = (i.classes?.name || '').toLowerCase()
+    const invNum = (i.invoice_number || '').toLowerCase()
+    const feePlanName = (i.fee_plans?.name || '').toLowerCase()
+    return matchStatus && (studentName.includes(q) || className.includes(q) || invNum.includes(q) || feePlanName.includes(q))
+  })
 
   // ===========================
   // Tạo học phí mới
@@ -469,25 +477,46 @@ export default function AdminFinancePage() {
       {/* ===== TAB: Theo học sinh ===== */}
       {activeTab === 'student' && (
         <div className="space-y-4">
-          {/* Filter */}
-          <div className="flex gap-2 flex-wrap">
-            {[
-              { value: 'all', label: 'Tất cả' },
-              { value: 'unpaid', label: 'Chưa đóng' },
-              { value: 'overdue', label: 'Quá hạn' },
-              { value: 'paid', label: 'Đã đóng' },
-            ].map(f => (
-              <button
-                key={f.value}
-                onClick={() => setStatusFilter(f.value)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${statusFilter === f.value
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-              >
-                {f.label}
-              </button>
-            ))}
+          {/* Filter & Search */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+            <div className="flex gap-2 flex-wrap">
+              {[
+                { value: 'all', label: 'Tất cả' },
+                { value: 'unpaid', label: 'Chưa đóng' },
+                { value: 'overdue', label: 'Quá hạn' },
+                { value: 'paid', label: 'Đã đóng' },
+              ].map(f => (
+                <button
+                  key={f.value}
+                  onClick={() => setStatusFilter(f.value)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${statusFilter === f.value
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="relative min-w-[260px]">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Tìm học sinh, lớp, mã HĐ..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-9 pr-8 py-1.5 text-sm bg-white border border-slate-200 rounded-lg outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs p-0.5"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Table */}

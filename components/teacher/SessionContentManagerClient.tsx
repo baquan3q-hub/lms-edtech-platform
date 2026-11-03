@@ -105,7 +105,7 @@ export default function SessionContentManagerClient({
         setUploadProgress(0);
 
         try {
-            let uploadedNewAttachments: AttachmentInfo[] = [];
+            const uploadedNewAttachments: AttachmentInfo[] = [];
 
             if (files.length > 0) {
                 const supabase = createClient();

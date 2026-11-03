@@ -315,7 +315,7 @@ export default function EditContentClient({ classId, item, initialContent }: { c
         if (N === 0) return;
 
         const basePoints = Math.floor((10 / N) * 100) / 100;
-        let remainder = 10 - (basePoints * N);
+        const remainder = 10 - (basePoints * N);
 
         const formatted: QuizQuestion[] = generatedQuestions.map((gq, idx) => {
             const pts = idx === 0 ? Number((basePoints + remainder).toFixed(2)) : basePoints;
@@ -396,11 +396,7 @@ export default function EditContentClient({ classId, item, initialContent }: { c
             console.log('✅ Content saved successfully');
 
             toast.success("Lưu thay đổi thành công!");
-            router.refresh();
-            setTimeout(() => {
-                router.push(`/teacher/classes/${classId}/content`);
-            }, 500);
-
+            router.push(`/teacher/classes/${classId}/content`);
         } catch (e: any) {
             console.error(e);
             toast.error("Lỗi khi lưu: " + e.message);
@@ -428,8 +424,8 @@ export default function EditContentClient({ classId, item, initialContent }: { c
 
                 <div className="flex items-center justify-between border border-slate-200 p-4 rounded-xl bg-slate-50">
                     <div>
-                        <Label className="text-base font-bold text-slate-700">Hiển thị cho học viên (Publish)</Label>
-                        <p className="text-sm text-slate-500">Bật lên để học viên có thể nhìn thấy nội dung này</p>
+                        <Label className="text-base font-bold text-slate-700">Hiển thị cho học sinh (Publish)</Label>
+                        <p className="text-sm text-slate-500">Bật lên để học sinh có thể nhìn thấy nội dung này</p>
                     </div>
                     <Switch
                         checked={isPublished}

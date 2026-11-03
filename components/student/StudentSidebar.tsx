@@ -59,7 +59,7 @@ export default function StudentSidebar({ userName = "Học sinh", userEmail = ""
                         </div>
                         <div>
                             <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
-                                E-Learning
+                                EduSchool
                             </span>
                             <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Học sinh</p>
                         </div>
@@ -81,7 +81,7 @@ export default function StudentSidebar({ userName = "Học sinh", userEmail = ""
                         </div>
                         <div>
                             <span className="text-lg font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
-                                E-Learning
+                                EduSchool
                             </span>
                             <p className="text-[10px] text-slate-500 font-medium uppercase tracking-wider">Học sinh</p>
                         </div>

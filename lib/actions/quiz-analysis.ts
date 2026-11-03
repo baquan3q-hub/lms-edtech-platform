@@ -1,5 +1,6 @@
 "use server";
 
+import { requireResourceAccess, requireRecordAccess } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { sendNotificationToStudentAndParents } from "@/lib/notifications/send-notification";
@@ -10,6 +11,8 @@ import { sendNotificationToStudentAndParents } from "@/lib/notifications/send-no
 
 export async function fetchClassAnalysis(examId: string) {
     try {
+        await requireResourceAccess("exams", examId, "teach");
+
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("quiz_class_analysis")
@@ -27,6 +30,8 @@ export async function fetchClassAnalysis(examId: string) {
 
 export async function fetchIndividualAnalyses(examId: string) {
     try {
+        await requireResourceAccess("exams", examId, "teach");
+
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("quiz_individual_analysis")
@@ -44,6 +49,8 @@ export async function fetchIndividualAnalyses(examId: string) {
 
 export async function fetchIndividualAnalysesWithProgress(examId: string) {
     try {
+        await requireResourceAccess("exams", examId, "teach");
+
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("quiz_individual_analysis")
@@ -105,6 +112,8 @@ export async function fetchStudentFeedback(examId: string) {
 
 export async function approveAnalysis(analysisId: string) {
     try {
+        await requireRecordAccess("quiz_individual_analysis", analysisId);
+
         const adminSupabase = createAdminClient();
         const { error } = await adminSupabase
             .from("quiz_individual_analysis")
@@ -124,6 +133,8 @@ export async function editAnalysis(analysisId: string, data: {
     deadline?: string;
 }) {
     try {
+        await requireRecordAccess("quiz_individual_analysis", analysisId);
+
         const adminSupabase = createAdminClient();
 
         // Lấy thông tin bài kiểm tra để lấy user_id và title cho notification
@@ -392,6 +403,8 @@ export async function saveSupplementaryQuizDraft(data: {
     quizId?: string; // nếu đã có thì update
 }) {
     try {
+        await requireRecordAccess("quiz_individual_analysis", data.analysisId); await requireResourceAccess("exams", data.examId, "teach"); if (data.quizId) await requireRecordAccess("supplementary_quizzes", data.quizId);
+
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { data: null, error: "Unauthorized" };
@@ -438,6 +451,8 @@ export async function saveSupplementaryQuizDraft(data: {
 
 export async function sendSupplementaryQuiz(quizId: string) {
     try {
+        await requireRecordAccess("supplementary_quizzes", quizId);
+
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { success: false, error: "Unauthorized" };

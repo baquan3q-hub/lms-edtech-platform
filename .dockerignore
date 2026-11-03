@@ -1,0 +1,13 @@
+**/node_modules
+.git
+.next
+.local
+.env*
+tmp
+**/.venv
+**/__pycache__
+playwright-report
+test-results
+*.docx
+*.tsbuildinfo
+report.html

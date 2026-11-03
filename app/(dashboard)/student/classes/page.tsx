@@ -85,7 +85,7 @@ export default async function StudentClassesPage() {
 
                                         <div className="relative z-10 mt-auto">
                                             <h3 className="text-xl font-bold leading-tight text-white drop-shadow-md group-hover:text-indigo-100 transition-colors line-clamp-2">
-                                                {courseInfo?.name || "Khóa học chưa đặt tên"}
+                                                {courseInfo?.name || "Môn học chưa đặt tên"}
                                             </h3>
                                         </div>
                                     </div>
@@ -137,10 +137,12 @@ export default async function StudentClassesPage() {
                             <BookOpen className="w-10 h-10" />
                         </div>
                         <h3 className="text-xl font-bold text-slate-900 mb-2">Chưa có lớp học nào</h3>
-                        <p className="text-slate-500 font-medium max-w-sm mx-auto">Bạn chưa ghi danh vào bất kỳ lớp học nào trên hệ thống. Hãy đăng ký khóa học để bắt đầu hành trình ngay.</p>
-                        <Button className="mt-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-6">
-                            Khám phá khóa học
-                        </Button>
+                        <p className="text-slate-500 font-medium max-w-sm mx-auto">Bạn chưa được xếp vào lớp học nào trên hệ thống. Vui lòng liên hệ nhà trường để được xếp lớp.</p>
+                        <Link href="/student">
+                            <Button className="mt-8 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl px-6">
+                                Về Bảng điều khiển
+                            </Button>
+                        </Link>
                     </div>
                 )}
             </div>

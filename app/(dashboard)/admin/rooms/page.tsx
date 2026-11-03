@@ -17,10 +17,10 @@ export default async function AdminRoomsPage() {
 
             <div className="bg-white border text-slate-800 border-slate-200 rounded-xl shadow-sm p-6">
                 <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 border border-blue-100 flex items-center justify-center">
                         <LayoutGrid className="w-5 h-5" />
                     </div>
-                    <h2 className="text-lg font-bold">Danh sách phòng học hiện tại</h2>
+                    <h2 className="text-lg font-bold text-slate-900">Danh sách phòng học hiện tại</h2>
                 </div>
 
                 <RoomManagerClient initialRooms={rooms || []} />

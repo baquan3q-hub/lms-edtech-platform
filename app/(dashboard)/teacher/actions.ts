@@ -36,17 +36,22 @@ export async function fetchTeacherStats(teacherId: string) {
         const supabase = createAdminClient();
 
         // 1. Số lớp đang dạy (active)
-        const { count: classesCount } = await supabase
+        const classCountQuery = supabase
             .from("classes")
             .select("id", { count: "exact", head: true })
             .eq("teacher_id", teacherId)
             .eq("status", "active");
 
         // Lấy danh sách ID của các lớp do GV này dạy để truy vấn chéo
-        const { data: myClasses } = await supabase
+        const classIdsQuery = supabase
             .from("classes")
             .select("id")
             .eq("teacher_id", teacherId);
+        const [classCountResult, classIdsResult] = await Promise.all([classCountQuery, classIdsQuery]);
+        if (classCountResult.error) throw classCountResult.error;
+        if (classIdsResult.error) throw classIdsResult.error;
+        const { count: classesCount } = classCountResult;
+        const { data: myClasses } = classIdsResult;
             
         const classIds = myClasses?.map((c: any) => c.id) || [];
 
@@ -56,18 +61,25 @@ export async function fetchTeacherStats(teacherId: string) {
 
         if (classIds.length > 0) {
             // 2. Đếm tổng học sinh đang đăng ký
-            const { count: studentsCount } = await supabase
+            const studentsQuery = supabase
                 .from("enrollments")
                 .select("student_id", { count: "exact", head: true })
                 .in("class_id", classIds)
                 .eq("status", "active");
                 
-            totalStudents = studentsCount || 0;
-
             // 3. Đếm số lượng bài chờ chấm & Tính điểm trung bình
             // Phun ra các assignment và exam của GV
-            const { data: assignments } = await supabase.from("assignments").select("id").in("class_id", classIds);
-            const { data: exams } = await supabase.from("exams").select("id").in("class_id", classIds);
+            const [studentsResult, assignmentsResult, examsResult] = await Promise.all([
+                studentsQuery,
+                supabase.from("assignments").select("id").in("class_id", classIds),
+                supabase.from("exams").select("id").in("class_id", classIds),
+            ]);
+            for (const result of [studentsResult, assignmentsResult, examsResult]) {
+                if (result.error) throw result.error;
+            }
+            totalStudents = studentsResult.count || 0;
+            const assignments = assignmentsResult.data;
+            const exams = examsResult.data;
             
             const assignmentIds = assignments?.map((a: any) => a.id) || [];
             const examIds = exams?.map((e: any) => e.id) || [];
@@ -80,7 +92,11 @@ export async function fetchTeacherStats(teacherId: string) {
             if (examIds.length > 0) exSubQuery = exSubQuery.in("exam_id", examIds);
             else exSubQuery = exSubQuery.limit(0);
 
-            const [{ data: subsData }, { data: examsData }] = await Promise.all([subQuery, exSubQuery]);
+            const [subsResult, examSubsResult] = await Promise.all([subQuery, exSubQuery]);
+            if (subsResult.error) throw subsResult.error;
+            if (examSubsResult.error) throw examSubsResult.error;
+            const subsData = subsResult.data;
+            const examsData = examSubsResult.data;
             const allSubmissions = [...(subsData || []), ...(examsData || [])];
 
             let scoreSum = 0;

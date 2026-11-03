@@ -283,8 +283,8 @@ export default async function StudentClassDetailsPage({ params }: { params: Prom
                         </Link>
                     </div>
 
-                    <Badge className="bg-white/15 text-white hover:bg-white/25 border-none mb-3 text-xs">Khóa học đang diễn ra</Badge>
-                    <h1 className="text-2xl md:text-3xl font-extrabold mb-1 pr-48">{classInfo.course?.name || "Khóa học"}</h1>
+                    <Badge className="bg-white/15 text-white hover:bg-white/25 border-none mb-3 text-xs">Lớp đang học</Badge>
+                    <h1 className="text-2xl md:text-3xl font-extrabold mb-1 pr-48">{classInfo.course?.name || "Môn học"}</h1>
                     <p className="text-slate-300 text-sm font-medium">
                         Lớp: {classInfo.name || "—"}
                         {classInfo.teacher?.full_name && <span className="ml-2 text-slate-400">• GV: {classInfo.teacher.full_name}</span>}

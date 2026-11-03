@@ -117,7 +117,7 @@ export default function TeacherClassStudentsClient({ classId, className, student
 
     const exportExcel = async (filter: string) => {
         const XLSX = await import("xlsx");
-        let headers = ["STT", "Họ tên", "Email"];
+        const headers = ["STT", "Họ tên", "Email"];
         let rows: any[][] = [];
 
         if (filter === "ranking") {
@@ -253,7 +253,7 @@ export default function TeacherClassStudentsClient({ classId, className, student
                     <div className="flex items-center gap-4 bg-white p-3 rounded-xl border shadow-sm">
                         <div className="relative flex-1 max-w-sm">
                             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                            <Input placeholder="Tìm kiếm học viên..." className="pl-9 bg-slate-50" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+                            <Input placeholder="Tìm kiếm học sinh..." className="pl-9 bg-slate-50" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
                         </div>
                         <Badge variant="secondary" className="bg-indigo-50 text-indigo-700">{filteredReport.length} học sinh</Badge>
                     </div>
@@ -375,7 +375,7 @@ export default function TeacherClassStudentsClient({ classId, className, student
                                     <thead className="text-xs text-slate-500 uppercase bg-slate-50">
                                         <tr>
                                             <th className="px-4 py-3 font-medium w-14 text-center">Hạng</th>
-                                            <th className="px-4 py-3 font-medium">Học viên</th>
+                                            <th className="px-4 py-3 font-medium">Học sinh</th>
                                             <th className="px-4 py-3 font-medium text-center">ĐTB</th>
                                             <th className="px-4 py-3 font-medium text-center">KT</th>
                                             <th className="px-4 py-3 font-medium text-center">BT</th>

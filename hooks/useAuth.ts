@@ -1,5 +1,6 @@
 "use client";
 
+import { endLearningSession } from "@/lib/learning/tracker-client";
 import { useEffect, useState, useCallback } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { User } from "@supabase/supabase-js";
@@ -70,6 +71,7 @@ export function useAuth() {
     // Đăng xuất
     const signOut = useCallback(async () => {
         setState((prev) => ({ ...prev, loading: true }));
+        await endLearningSession();
         await supabase.auth.signOut();
         setState({ user: null, role: null, loading: false, error: null });
         // Redirect về trang login

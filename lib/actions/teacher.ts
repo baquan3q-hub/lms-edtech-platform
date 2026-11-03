@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
@@ -9,8 +10,7 @@ import { revalidatePath } from "next/cache";
 // ==========================================
 export async function fetchTeacherClassesWithDetails() {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
 
         if (!user) return { data: null, error: "Unauthorized" };
 
@@ -37,8 +37,7 @@ export async function fetchTeacherClassesWithDetails() {
 // Lấy danh sách bài giảng trong một lớp (dùng admin client)
 export async function fetchClassLessons(classId: string) {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
         if (!user) return { data: null, error: "Unauthorized" };
 
         const adminSupabase = createAdminClient();

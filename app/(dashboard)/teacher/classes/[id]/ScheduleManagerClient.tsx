@@ -156,7 +156,6 @@ export default function ScheduleManagerClient({
             }
 
             setIsEditing(false);
-            router.refresh(); // Để Server Components khác cập nhật
         } catch (e: any) {
             setErrorMsg(e.message || "Đã xảy ra lỗi");
         } finally {
@@ -174,7 +173,6 @@ export default function ScheduleManagerClient({
                 return;
             }
             setSchedules(prev => prev.filter(s => s.id !== scheduleId));
-            router.refresh();
         } catch (e: any) {
             alert("Lỗi: " + e.message);
         }

@@ -75,7 +75,6 @@ export default function ParentLinkStudentClient() {
             setCode("");
             setLookupResult(null);
             loadLinkedStudents();
-            router.refresh();
         }
         setConfirming(false);
     };
@@ -89,7 +88,6 @@ export default function ParentLinkStudentClient() {
         } else {
             toast.success("Đã xóa liên kết.");
             setLinkedStudents(prev => prev.filter(s => s.id !== linkId));
-            router.refresh();
         }
     };
 

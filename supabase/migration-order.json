@@ -1,0 +1,21 @@
+[
+  "202609240000_schema_baseline.sql",
+  "202609260001_school_scope.sql",
+  "202609260002_audit_outbox_idempotency.sql",
+  "202609260003_k12_catalog.sql",
+  "202609260004_k12_rosters.sql",
+  "202609240001_learning_reliability.sql",
+  "202609240002_activity_ingest.sql",
+  "202609240003_tracking_summary.sql",
+  "202609240004_video_progress.sql",
+  "202609260005_identity_import.sql",
+  "202609260006_learning_publication.sql",
+  "202609260007_school_attendance_interventions.sql",
+  "202609260008_reporting_projections.sql",
+  "202609260009_ai_jobs_scope.sql",
+  "202609270000_fix_rls_privilege_escalation.sql",
+  "202611030001_learning_foundation.sql",
+  "202611030002_submission_writes.sql",
+  "202611030003_access_policies.sql",
+  "202611030004_learning_read_models.sql"
+]

@@ -1,5 +1,6 @@
 "use server";
 
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotificationToClass } from "@/lib/notifications/send-notification";
@@ -130,8 +131,7 @@ export async function fetchTeacherAllAnnouncements() {
 // ============================================================
 export async function fetchTeacherGeneralAnnouncements() {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
         if (!user) return { error: "Chưa đăng nhập" };
 
         const adminSupabase = createAdminClient();

@@ -1,8 +1,9 @@
 "use client";
 
+import { endLearningSession } from "@/lib/learning/tracker-client";
 import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
-import { LogOut, Menu, GraduationCap } from "lucide-react";
+import { LogOut, Menu, GraduationCap, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
@@ -16,18 +17,26 @@ import NotificationBell from "@/components/shared/NotificationBell";
 interface AdminNavbarProps {
     userName?: string;
     userEmail?: string;
+    isSuperAdmin?: boolean;
 }
 
-export default function AdminNavbar({ userName = "Admin", userEmail }: AdminNavbarProps) {
+export default function AdminNavbar({ userName = "Admin", userEmail, isSuperAdmin = false }: AdminNavbarProps) {
     const router = useRouter();
     const pathname = usePathname();
     const supabase = createClient();
     const initials = userName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 
     async function handleLogout() {
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("app:navigation-start"));
+        }
+        await endLearningSession();
         const { error } = await supabase.auth.signOut();
         if (error) {
             toast.error("Đăng xuất thất bại", { description: error.message });
+            if (typeof window !== "undefined") {
+                window.dispatchEvent(new CustomEvent("app:navigation-end"));
+            }
             return;
         }
         router.push("/login");
@@ -50,7 +59,7 @@ export default function AdminNavbar({ userName = "Admin", userEmail }: AdminNavb
                                     <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 shrink-0">
                                         <GraduationCap className="w-4 h-4 text-white" />
                                     </div>
-                                    <span className="text-base font-bold text-gray-900">E-Learning Admin</span>
+                                    <span className="text-base font-bold text-gray-900">EduSchool Admin</span>
                                 </SheetTitle>
                             </SheetHeader>
                             <nav className="flex-1 overflow-y-auto p-4">
@@ -82,7 +91,15 @@ export default function AdminNavbar({ userName = "Admin", userEmail }: AdminNavb
                             </nav>
                         </SheetContent>
                     </Sheet>
-                    <h1 className="text-lg font-semibold text-gray-900 hidden sm:block">Admin Dashboard</h1>
+                    <div className="flex items-center gap-2">
+                        <h1 className="text-lg font-semibold text-gray-900 hidden sm:block">Admin Dashboard</h1>
+                        {isSuperAdmin && (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gradient-to-r from-amber-50 to-orange-50 text-amber-800 border border-amber-200 shadow-xs">
+                                <ShieldCheck className="w-3.5 h-3.5 text-amber-600" />
+                                Super Admin
+                            </span>
+                        )}
+                    </div>
                 </div>
                 <div className="flex items-center gap-3">
                     <NotificationBell />
@@ -94,7 +111,9 @@ export default function AdminNavbar({ userName = "Admin", userEmail }: AdminNavb
                             </AvatarFallback>
                         </Avatar>
                         <div className="hidden md:block">
-                            <p className="text-sm font-medium text-gray-900 leading-none">{userName}</p>
+                            <div className="flex items-center gap-1.5">
+                                <p className="text-sm font-medium text-gray-900 leading-none">{userName}</p>
+                            </div>
                             {userEmail && <p className="text-xs text-gray-400 mt-0.5">{userEmail}</p>}
                         </div>
                     </div>

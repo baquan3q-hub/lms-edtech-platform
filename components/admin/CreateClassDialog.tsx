@@ -12,7 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { createClass } from "@/lib/actions/academic";
 
-const classSchema = z.object({ course_id: z.string().min(1, "Vui lòng chọn khóa học."), teacher_id: z.string().min(1, "Vui lòng chọn giáo viên."), room: z.string().optional(), schedule: z.string().optional(), max_students: z.string().optional() });
+const classSchema = z.object({ course_id: z.string().min(1, "Vui lòng chọn môn học."), teacher_id: z.string().min(1, "Vui lòng chọn giáo viên."), room: z.string().optional(), schedule: z.string().optional(), max_students: z.string().optional() });
 interface ClassFormData { course_id: string; teacher_id: string; room?: string; schedule?: string; max_students?: string; }
 interface SelectOption { id: string; full_name?: string; name?: string; email?: string; }
 
@@ -38,13 +38,13 @@ export default function CreateClassDialog({ courses, teachers }: { courses: Sele
             <DialogContent className="bg-white border-gray-200 text-gray-900 sm:max-w-[520px]">
                 <DialogHeader>
                     <DialogTitle className="text-gray-900">Mở lớp học mới</DialogTitle>
-                    <DialogDescription className="text-gray-500">Tạo lớp học mới thuộc một khóa học và phân công giáo viên.</DialogDescription>
+                    <DialogDescription className="text-gray-500">Tạo lớp học mới thuộc một môn học và phân công giáo viên.</DialogDescription>
                 </DialogHeader>
                 <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
                     <div className="space-y-2">
-                        <Label className="text-gray-700 text-sm">Khóa học <span className="text-red-500">*</span></Label>
+                        <Label className="text-gray-700 text-sm">Môn học <span className="text-red-500">*</span></Label>
                         <Select onValueChange={(val) => setValue("course_id", val)} disabled={isLoading}>
-                            <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-900"><SelectValue placeholder="Chọn khóa học" /></SelectTrigger>
+                            <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-900"><SelectValue placeholder="Chọn môn học" /></SelectTrigger>
                             <SelectContent className="bg-white border-gray-200">{courses.map((c) => (<SelectItem key={c.id} value={c.id} className="text-gray-900 focus:bg-gray-100">{c.name}</SelectItem>))}</SelectContent>
                         </Select>
                         {errors.course_id && <p className="text-xs text-red-500">{errors.course_id.message}</p>}

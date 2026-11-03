@@ -1,8 +1,16 @@
 "use server";
 
+import { requireActor, requireClassAccess, requireResourceAccess, requireRecordAccess } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import { validateExam, gradeObjective, publicQuestions, answersSchema, questionSchema } from "@/lib/learning/grading";
+import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { createExamSnapshot } from "@/lib/exams/exam-snapshot";
+import { checkAttemptEligibility, calculateAttemptExpiry } from "@/lib/exams/attempt-manager";
+import { maskSubmissionForRole } from "@/lib/grading/score-visibility";
+import { DEFAULT_PILOT_SCHOOL_ID } from "@/lib/auth/actor-context";
+import { toStudentExam, toStudentSubmission, isGradePublished } from "@/lib/modules/assessment/dto";
 
 // ============================================================
 // TEACHER: CRUD Exams
@@ -20,15 +28,21 @@ export async function createExam(classId: string, data: {
     show_answers?: boolean;
 }) {
     try {
+        const actor = await requireClassAccess(classId, "teach");
+        const {data:examClass,error:classError}=await actor.db.from("classes").select("school_id").eq("id",classId).single();
+        if(classError||!examClass?.school_id)throw new Error("Không xác định được trường sở hữu lớp.");
+
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { data: null, error: "Unauthorized" };
 
+        validateExam(data.questions, data.total_points);
         const adminSupabase = createAdminClient();
         const { data: exam, error } = await adminSupabase
             .from("exams")
             .insert({
                 class_id: classId,
+                school_id: examClass.school_id,
                 title: data.title,
                 description: data.description || "",
                 questions: data.questions,
@@ -36,6 +50,7 @@ export async function createExam(classId: string, data: {
                 due_date: data.due_date || null,
                 total_points: data.total_points,
                 is_published: false,
+                publication_status: "draft",
                 is_strict_mode: data.is_strict_mode ?? false,
                 strict_mode_limit: data.strict_mode_limit ?? 0,
                 show_answers: data.show_answers ?? true,
@@ -67,6 +82,9 @@ export async function updateExam(examId: string, classId: string, data: {
     show_answers?: boolean;
 }) {
     try {
+        await requireClassAccess(classId, "teach"); const access = await requireResourceAccess("exams", examId, "teach"); if (access.resource.class_id !== classId) throw new Error("Sai lớp học.");
+
+        validateExam(data.questions, data.total_points);
         const adminSupabase = createAdminClient();
         const { error } = await adminSupabase
             .from("exams")
@@ -77,7 +95,8 @@ export async function updateExam(examId: string, classId: string, data: {
                 duration_minutes: data.duration_minutes,
                 due_date: data.due_date || null,
                 total_points: data.total_points,
-                is_published: data.is_published ?? false,
+                is_published: data.is_published ?? access.resource.is_published,
+                publication_status: (data.is_published ?? access.resource.is_published) ? "published" : "draft",
                 is_strict_mode: data.is_strict_mode ?? false,
                 strict_mode_limit: data.strict_mode_limit ?? 0,
                 show_answers: data.show_answers ?? true
@@ -97,6 +116,8 @@ export async function updateExam(examId: string, classId: string, data: {
 
 export async function deleteExam(examId: string, classId: string) {
     try {
+        await requireClassAccess(classId, "teach"); const access = await requireResourceAccess("exams", examId, "teach"); if (access.resource.class_id !== classId) throw new Error("Sai lớp học.");
+
         const adminSupabase = createAdminClient();
         const { error } = await adminSupabase.from("exams").delete().eq("id", examId);
         if (error) throw error;
@@ -111,6 +132,8 @@ export async function deleteExam(examId: string, classId: string) {
 
 export async function fetchClassExams(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
+
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("exams")
@@ -132,6 +155,8 @@ export async function fetchClassExams(classId: string) {
  */
 export async function fetchPendingExamGradingStats(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
+
         const adminSupabase = createAdminClient();
 
         const { data: examList } = await adminSupabase
@@ -169,6 +194,8 @@ export async function fetchPendingExamGradingStats(classId: string) {
 
 export async function fetchExamAnalytics(examId: string) {
     try {
+        await requireResourceAccess("exams", examId, "teach");
+
         const adminSupabase = createAdminClient();
 
         // 1. Lấy đề bài
@@ -184,6 +211,7 @@ export async function fetchExamAnalytics(examId: string) {
             .from("exam_submissions")
             .select("*, student:users!student_id(full_name, email)")
             .eq("exam_id", examId)
+            .eq("grading_status", "graded")
             .order("score", { ascending: false });
         if (subError) throw subError;
 
@@ -217,7 +245,7 @@ export async function fetchExamAnalytics(examId: string) {
                 }
                 // Kiểm tra đúng/sai
                 const correctOption = (q.options || []).find((o: any) => o.isCorrect);
-                if (studentAnswer?.selectedOptionId === correctOption?.id) {
+                if (correctOption && studentAnswer?.selectedOptionId === correctOption.id) {
                     correctCount++;
                 } else {
                     wrongCount++;
@@ -301,6 +329,8 @@ export async function fetchExamAnalytics(examId: string) {
 
 export async function fetchStudentExams(classId: string) {
     try {
+        await requireClassAccess(classId, "learn");
+
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { data: [], error: "Unauthorized" };
@@ -310,9 +340,9 @@ export async function fetchStudentExams(classId: string) {
         // Lấy exams đã publish
         const { data: exams, error } = await adminSupabase
             .from("exams")
-            .select("id, title, description, duration_minutes, due_date, total_points, is_published, created_at")
+            .select("id, title, description, duration_minutes, due_date, total_points, is_published, publication_status, max_attempts, created_at")
             .eq("class_id", classId)
-            .eq("is_published", true)
+            .eq("is_published", true).eq("publication_status", "published")
             .order("created_at", { ascending: false });
         if (error) throw error;
 
@@ -322,16 +352,18 @@ export async function fetchStudentExams(classId: string) {
         if (examIds.length > 0) {
             const { data } = await adminSupabase
                 .from("exam_submissions")
-                .select("exam_id, score, total_points, submitted_at, time_taken_seconds")
+                .select("id, exam_id, score, total_points, submitted_at, time_taken_seconds, grading_status, status")
                 .eq("student_id", user.id)
-                .in("exam_id", examIds);
+                .in("exam_id", examIds)
+                .order("submitted_at", { ascending: false });
             if (data) submissions = data;
         }
 
-        // Merge
+        // Merge và áp dụng mặt nạ bảo mật điểm số (Score Visibility Gate)
         const enriched = (exams || []).map(exam => {
-            const sub = (submissions || []).find(s => s.exam_id === exam.id);
-            return { ...exam, submission: sub || null };
+            const rawSub = (submissions || []).find(s => s.exam_id === exam.id);
+            const maskedSub = rawSub ? maskSubmissionForRole(rawSub, 'student') : null;
+            return { ...exam, submission: maskedSub };
         });
 
         return { data: enriched, error: null };
@@ -341,167 +373,110 @@ export async function fetchStudentExams(classId: string) {
     }
 }
 
-export async function fetchExamQuestions(examId: string, studentId?: string) {
+export async function fetchExamQuestions(examId: string, _studentId?: string) {
     try {
-        const adminSupabase = createAdminClient();
-        const { data: exam, error } = await adminSupabase
-            .from("exams")
-            .select("id, title, description, questions, duration_minutes, due_date, total_points, show_answers, is_strict_mode, strict_mode_limit")
-            .eq("id", examId)
-            .eq("is_published", true)
-            .single();
+        const { id, db, resource: exam } = await requireResourceAccess("exams", examId);
+        const { data: sub } = await db.from("exam_submissions").select("id, attempt_id, grading_status").eq("exam_id", examId).eq("student_id", id).order("submitted_at", { ascending:false }).limit(1).maybeSingle();
+        const { data: attempt } = await db.from("exam_attempts").select("snapshot").eq("exam_id", examId).eq("student_id", id).order("attempt_no", { ascending: false }).limit(1).maybeSingle();
+        const questions = z.array(questionSchema).parse(attempt?.snapshot?.questions || exam.questions_snapshot?.questions || exam.questions);
+        const isGradedAndAllowed = Boolean(sub && isGradePublished(sub.grading_status));
+        return { data: toStudentExam(exam, questions, isGradedAndAllowed), error: null };
+    } catch {
+        return { data: null, error: "Không thể tải đề hoặc bạn không có quyền truy cập." };
+    }
+}
 
-        if (error) throw error;
+export async function submitExamAnswers(examId: string, classId: string, answers: unknown, _startedAt: string, _timeTaken: number, attemptId?: string) {
+    try {
+        const { id, db, resource: exam } = await requireResourceAccess("exams", examId, "learn");
+        if (exam.class_id !== classId || !attemptId) throw new Error("Lần làm bài không hợp lệ.");
 
-        let hasSubmitted = false;
-        if (studentId) {
-             const { data: existing } = await adminSupabase
-                .from("exam_submissions")
-                .select("id")
-                .eq("exam_id", examId)
-                .eq("student_id", studentId)
-                .single();
-            if (existing) hasSubmitted = true;
-        }
+        const { data: attempt, error } = await db.from("exam_attempts").select("*").eq("id", attemptId).eq("student_id", id).eq("exam_id", examId).single();
+        if (error || !attempt) throw new Error("Không tìm thấy lần làm bài.");
 
-        // Strip isCorrect from options to prevent cheating if not submitted
-        let finalQuestions = exam.questions;
-        if (!hasSubmitted) {
-            finalQuestions = ((exam.questions || []) as any[]).map((q: any) => ({
-                ...q,
-                options: (q.options || []).map((o: any) => ({ id: o.id, text: o.text }))
-            }));
-        }
+        const questions = validateExam(attempt.snapshot.questions, attempt.snapshot.total_points);
+        const checked = gradeObjective(questions, answers);
 
+        const { data: submission, error: submitError } = await db.rpc("submit_learning_exam", {
+            p_student: id,
+            p_attempt: attemptId,
+            p_answers: checked.answers
+        });
+        if (submitError) throw submitError;
+
+        revalidatePath('/student/classes/' + classId);
+        revalidatePath('/teacher/classes/' + classId);
+
+        const isPublished = isGradePublished(submission.grading_status);
         return {
-            data: { ...exam, questions: finalQuestions },
+            data: {
+                submission: toStudentSubmission(submission),
+                score: isPublished ? submission.score : null,
+                totalPoints: submission.total_points,
+                questions: publicQuestions(questions, isPublished && exam.show_answers === true)
+            },
             error: null
         };
-    } catch (error: any) {
-        console.error("Error fetching exam questions:", error);
-        return { data: null, error: error.message };
+    } catch (err: any) {
+        return { data: null, error: err.message || "Không thể nộp bài. Bản nháp đã lưu vẫn được giữ; vui lòng thử lại." };
     }
 }
 
-export async function submitExamAnswers(examId: string, classId: string, answers: any[], startedAt: string, timeTaken: number) {
+export async function saveManualGrades(submissionId: string, newTotalScore: number, reason = "Giáo viên duyệt điểm", rubricGrades: unknown = null) {
+    const { gradeExamSubmission } = await import("@/lib/actions/grading");
+    return gradeExamSubmission({ submissionId, newScore: newTotalScore, reason, rubricGrades: rubricGrades as Record<string, unknown> | null, publishNow: true });
+}
+
+export async function beginExamAttempt(examId: string) {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return { data: null, error: "Unauthorized" };
+        const { id, db, resource: exam } = await requireResourceAccess("exams", examId, "learn");
+        validateExam(exam.questions, exam.total_points);
+        const { data: attempt, error } = await db.rpc("begin_school_exam", { p_student:id, p_exam:examId });
+        if (error || !attempt) throw error || new Error("Không thể mở lượt làm bài.");
+        return { data: { id:attempt.id as string, started_at:attempt.started_at as string, expires_at:attempt.expires_at as string,
+            draft_answers:answersSchema.parse(attempt.draft_answers), draft_version:Number(attempt.draft_version),
+            questions:publicQuestions(z.array(questionSchema).parse(attempt.snapshot.questions)),
+            total_points:Number(attempt.snapshot.total_points), attempt_no:Number(attempt.attempt_no) }, error:null };
+    } catch { return { data:null, error:"Không thể mở lượt làm bài. Kiểm tra hạn nộp và số lần được phép làm." }; }
+}
 
-        const adminSupabase = createAdminClient();
+export async function saveExamDraft(attemptId: string, input: unknown, version: number) {
+    try {
+        const actor = await requireActor(["student"]);
+        const answers = answersSchema.parse(input);
 
-        // Kiểm tra đã nộp chưa
-        const { data: existing } = await adminSupabase
-            .from("exam_submissions")
-            .select("id")
-            .eq("exam_id", examId)
-            .eq("student_id", user.id)
+        const { data: attempt } = await actor.db
+            .from("exam_attempts")
+            .select("exam_id, snapshot, expires_at")
+            .eq("id", attemptId)
+            .eq("student_id", actor.id)
             .single();
 
-        if (existing) return { data: null, error: "Bạn đã nộp bài kiểm tra này rồi." };
+        if (!attempt) throw new Error("Không tìm thấy bài.");
+        await requireResourceAccess("exams", attempt.exam_id, "learn");
 
-        // Lấy đề để chấm
-        const { data: exam } = await adminSupabase
-            .from("exams")
-            .select("questions, total_points, title")
-            .eq("id", examId)
-            .single();
-
-        if (!exam) return { data: null, error: "Không tìm thấy bài kiểm tra." };
-
-        const questions = (exam.questions || []) as any[];
-        let score = 0;
-        let hasEssay = false;
-
-        questions.forEach((q: any, idx: number) => {
-            if (q.type !== "ESSAY") {
-                const correctOption = (q.options || []).find((o: any) => o.isCorrect);
-                const studentAnswer = answers[idx];
-                if (studentAnswer?.selectedOptionId === correctOption?.id) {
-                    score += (q.points || 1);
-                }
-            } else {
-                hasEssay = true;
-            }
-        });
-
-        const gradingStatus = hasEssay ? 'pending' : 'graded';
-
-        // Lưu bài nộp
-        const { data: submission, error } = await adminSupabase
-            .from("exam_submissions")
-            .insert({
-                exam_id: examId,
-                student_id: user.id,
-                answers,
-                score,
-                total_points: exam.total_points,
-                started_at: startedAt,
-                submitted_at: new Date().toISOString(),
-                time_taken_seconds: timeTaken,
-                grading_status: gradingStatus
-            })
-            .select()
-            .single();
-
-        if (error) throw error;
-
-        revalidatePath(`/student/classes/${classId}`);
-        revalidatePath(`/teacher/classes/${classId}`);
-
-        // Gửi notification cho GV nếu có câu tự luận cần chấm
-        if (hasEssay) {
-            try {
-                const { data: classData } = await adminSupabase
-                    .from("classes")
-                    .select("teacher_id")
-                    .eq("id", classId)
-                    .single();
-
-                const { data: studentData } = await adminSupabase
-                    .from("users")
-                    .select("full_name")
-                    .eq("id", user.id)
-                    .single();
-
-                if (classData?.teacher_id) {
-                    await adminSupabase.from("notifications").insert({
-                        user_id: classData.teacher_id,
-                        title: `📚 Bài KT cần chấm: ${exam.title || 'Bài kiểm tra'}`,
-                        message: `Học sinh ${studentData?.full_name || 'N/A'} đã nộp bài kiểm tra "${exam.title}" có câu tự luận cần giáo viên chấm điểm thủ công.`,
-                        type: "warning",
-                        read: false,
-                    });
-                }
-            } catch (notifErr) {
-                console.error("Lỗi gửi notification cho GV (exam):", notifErr);
-            }
+        if (answers.length > attempt.snapshot.questions.length) {
+            throw new Error("Sai số câu trả lời.");
         }
 
-        return { data: { submission, score, totalPoints: exam.total_points }, error: null };
-    } catch (error: any) {
-        console.error("Error submitting exam:", error);
-        return { data: null, error: error.message };
+        const now = new Date().toISOString();
+        const { data, error } = await actor.db
+            .from("exam_attempts")
+            .update({ draft_answers: answers, draft_version: version + 1 })
+            .eq("id", attemptId)
+            .eq("student_id", actor.id)
+            .eq("draft_version", version)
+            .is("submitted_at", null)
+            .gt("expires_at", now)
+            .select("draft_version")
+            .maybeSingle();
+
+        if (error || !data) {
+            return { error: "Bản nháp đã thay đổi ở nơi khác hoặc bài đã hết giờ.", version };
+        }
+        return { error: null, version: data.draft_version };
+    } catch {
+        return { error: "Chưa lưu được bản nháp. Kiểm tra kết nối mạng.", version };
     }
 }
 
-export async function saveManualGrades(submissionId: string, newTotalScore: number) {
-    try {
-        const adminSupabase = createAdminClient();
-        const { error } = await adminSupabase
-            .from("exam_submissions")
-            .update({ 
-                score: newTotalScore, 
-                grading_status: 'graded' 
-            })
-            .eq("id", submissionId);
-            
-        if (error) throw error;
-        
-        return { success: true, error: null };
-    } catch (err: any) {
-        console.error("Error saving manual grades:", err);
-        return { success: false, error: err.message };
-    }
-}

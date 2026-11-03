@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Edit3 } from "lucide-react";
 import EditContentClient from "./EditContentClient";
+import { requireResourceAccess } from "@/lib/auth/authorize";
+import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +15,8 @@ export default async function EditItemContentPage({
 }) {
     const resolvedParams = await params;
     const { id: classId, itemId } = resolvedParams;
+    const access = await requireResourceAccess("course_items", itemId, "teach");
+    if (access.resource.class_id !== classId) notFound();
 
     const supabase = createAdminClient();
 

@@ -29,7 +29,7 @@ type QuestionType = "single_choice" | "multiple_choice" | "text" | "rating";
 
 const SCOPE_META: Record<ScopeType, { label: string; icon: any; color: string }> = {
     system: { label: "Toàn hệ thống", icon: Globe, color: "bg-rose-500" },
-    course: { label: "Khóa học", icon: GraduationCap, color: "bg-purple-500" },
+    course: { label: "Môn học", icon: GraduationCap, color: "bg-purple-500" },
     class: { label: "Lớp cụ thể", icon: BookOpen, color: "bg-blue-500" },
 };
 
@@ -140,7 +140,7 @@ export default function AdminSurveysClient() {
     const handleSubmit = async () => {
         if (!title.trim()) { toast.error("Vui lòng nhập tên khảo sát"); return; }
         if (questions.length === 0) { toast.error("Cần ít nhất 1 câu hỏi"); return; }
-        if (scope === "course" && !selectedCourseId) { toast.error("Chọn khóa học"); return; }
+        if (scope === "course" && !selectedCourseId) { toast.error("Chọn môn học"); return; }
         if (scope === "class" && !selectedClassId) { toast.error("Chọn lớp"); return; }
 
         for (const q of questions) {
@@ -352,10 +352,10 @@ export default function AdminSurveysClient() {
 
                         {scope === "course" && (
                             <div className="relative">
-                                <label className="text-sm font-semibold text-slate-700 mb-1.5 block">Khóa học *</label>
+                                <label className="text-sm font-semibold text-slate-700 mb-1.5 block">Môn học *</label>
                                 <select className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 pr-8 text-sm"
                                     value={selectedCourseId} onChange={(e) => setSelectedCourseId(e.target.value)}>
-                                    <option value="">— Chọn khóa —</option>
+                                    <option value="">— Chọn môn —</option>
                                     {courses.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
                                 </select>
                                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 bottom-3 pointer-events-none" />

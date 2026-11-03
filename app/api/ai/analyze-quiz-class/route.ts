@@ -1,9 +1,12 @@
+import { requireActor } from "@/lib/auth/authorize";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRotatingGeminiModel } from "@/lib/gemini";
 
 export async function POST(req: NextRequest) {
     try {
+        await requireActor(["teacher", "admin"]);
+
         const { examId, classId } = await req.json();
         if (!examId || !classId) {
             return NextResponse.json({ error: "Thiếu examId hoặc classId" }, { status: 400 });

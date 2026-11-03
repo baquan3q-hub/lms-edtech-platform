@@ -261,7 +261,7 @@ export async function fetchAdminAnnouncements(filters?: {
 
         // Lấy thống kê đọc cho mỗi thông báo
         const announcementIds = data?.map((a: any) => a.id) || [];
-        let readStats: Record<string, { total_read: number; total_confirmed: number }> = {};
+        const readStats: Record<string, { total_read: number; total_confirmed: number }> = {};
 
         if (announcementIds.length > 0) {
             const { data: reads } = await adminSupabase

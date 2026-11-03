@@ -1,9 +1,21 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireActorContext } from "@/lib/auth/actor-context";
+import { revalidatePath } from "next/cache";
+import { requireManagedUser } from "@/lib/auth/authorize";
+import { recordAuditEvent } from "@/lib/audit/audit-logger";
+import { z } from "zod";
+
+// Vai trò được phép gán qua giao diện quản trị.
+// 'super_admin' bị loại trừ có chủ đích: quyền chủ sở hữu nền tảng chỉ được
+// cấp qua email allowlist phía server, không cấp được từ form quản trị.
+const ASSIGNABLE_ROLES = ["admin", "teacher", "student", "parent"];
 
 export async function fetchUserDetails(userId: string) {
     try {
+        const managed=await requireManagedUser(userId);
+        const schoolIds=managed.role==="super_admin"?managed.memberships.map(m=>m.school_id):[managed.schoolId];
         const supabase = createAdminClient();
 
         // 1. Fetch Basic Profile
@@ -34,6 +46,7 @@ export async function fetchUserDetails(userId: string) {
                     course:courses(name, description)
                 `)
                 .eq("teacher_id", userId)
+                .in("school_id",schoolIds)
                 .order("created_at", { ascending: false });
             additionalData = { ...additionalData, classes };
 
@@ -43,19 +56,21 @@ export async function fetchUserDetails(userId: string) {
                 .from("enrollments")
                 .select(`
                     status, enrolled_at,
-                    class:classes(
-                        id, name, room, schedule, status,
+                    class:classes!inner(
+                        id, name, room, schedule, status, school_id,
                         course:courses(name),
                         teacher:users!classes_teacher_id_fkey(full_name)
                     )
                 `)
                 .eq("student_id", userId)
+                .in("class.school_id",schoolIds)
                 .order("enrolled_at", { ascending: false });
 
             // Phụ huynh đã liên kết
             const { data: parentLinks } = await supabase
                 .from("parent_students")
                 .select("id, parent_id, relationship, is_primary, created_at")
+                .in("school_id",schoolIds)
                 .eq("student_id", userId);
 
             let parents: any[] = [];
@@ -84,63 +99,35 @@ export async function fetchUserDetails(userId: string) {
 
 export async function deleteUser(userId: string) {
     try {
-        const supabase = createAdminClient();
-
-        // 1. Xóa Auth (Tài khoản Đăng nhập đăng ký trên hệ thống)
-        // Việc xóa Auth User trên Supabase sẽ MỚI là cách xóa triệt để. 
-        // Khi xóa file auth user có thể Trigger (nếu bạn có RLS FK) để xóa luôn Profile trong bảng Users.
-        const { error: authError } = await supabase.auth.admin.deleteUser(userId);
-
-        if (authError) {
-            console.error("Lỗi xóa Auth:", authError);
-            throw authError;
-        }
-
-        // 2. (Phòng hờ nếu trigger ko tự xóa) Xóa bản ghi trong Bảng Users
-        const { error: dbError } = await supabase
-            .from("users")
-            .delete()
-            .eq("id", userId);
-
-        if (dbError) throw dbError;
-
-        return { success: true, error: null };
-    } catch (error: any) {
-        console.error("Lỗi xóa tài khoản:", error);
-        return { success: false, error: error.message };
-    }
+        const actor=await requireManagedUser(userId);
+        if(actor.id===userId)return {success:false,error:"Không thể tự tạm dừng tài khoản của chính mình."};
+        const targets=actor.memberships.filter(m=>actor.role==="super_admin"||m.school_id===actor.schoolId);
+        if(!targets.length)return {success:false,error:"Không tìm thấy thành viên trường."};
+        const {error}=await actor.db.from("school_memberships").update({status:"suspended"}).in("id",targets.map(m=>m.id));
+        if(error)throw error;
+        for(const schoolId of new Set(targets.map(m=>m.school_id)))await recordAuditEvent({schoolId,actorId:actor.id,action:"membership.suspended",entityType:"user",entityId:userId,reason:"Quản trị trường tạm dừng quyền truy cập; bảo toàn dữ liệu học vụ"});
+        revalidatePath("/admin/users");
+        return {success:true,error:null};
+    } catch { return {success:false,error:"Không thể tạm dừng tài khoản hoặc tài khoản nằm ngoài phạm vi trường."}; }
 }
 
 export async function updateUser(userId: string, data: { full_name?: string; phone?: string; role?: string }) {
     try {
-        const supabase = createAdminClient();
-
-        // Cập nhật CSDL
-        const { error: dbError } = await supabase
-            .from("users")
-            .update({
-                full_name: data.full_name,
-                phone: data.phone,
-                role: data.role
-            })
-            .eq("id", userId);
-
-        if (dbError) throw dbError;
-
-        // Cập nhật Metadata trên Auth (tùy chọn nhưng khuyến nghị để đồng bộ JWT)
-        if (data.full_name || data.role) {
-            const { error: authError } = await supabase.auth.admin.updateUserById(
-                userId,
-                { user_metadata: { full_name: data.full_name, role: data.role } }
-            );
-            if (authError) {
-                console.warn("Cập nhật auth metadata lỗi (không quá nghiêm trọng):", authError);
-            }
+        const checked=z.object({full_name:z.string().trim().min(1).max(200).optional(),phone:z.string().max(30).optional(),role:z.enum(["admin","teacher","student","parent"]).optional()}).strict().parse(data);
+        const actor=await requireManagedUser(userId,checked.full_name!==undefined||checked.phone!==undefined);
+        if(checked.role) {
+            if(actor.id===userId)throw new Error("Không thể tự thay đổi vai trò.");
+            const memberships=actor.memberships.filter(m=>m.school_id===actor.schoolId);
+            if(memberships.length!==1)throw new Error("Cần chọn chính xác vai trò và trường cần điều chỉnh.");
+            const {error}=await actor.db.from("school_memberships").update({role:checked.role}).eq("id",memberships[0].id);
+            if(error)throw error;
         }
-
-        return { success: true, error: null };
-    } catch (error: any) {
-        console.error("Lỗi cập nhật user:", error);
-        return { success: false, error: error.message };
-    }
+        if(checked.full_name!==undefined||checked.phone!==undefined) {
+            const {error}=await actor.db.from("users").update({full_name:checked.full_name,phone:checked.phone}).eq("id",userId);
+            if(error)throw error;
+        }
+        if(actor.schoolId)await recordAuditEvent({schoolId:actor.schoolId,actorId:actor.id,action:"user.updated",entityType:"user",entityId:userId,afterState:checked});
+        revalidatePath("/admin/users");revalidatePath(`/admin/users/${userId}`);
+        return {success:true,error:null};
+    } catch { return {success:false,error:"Không thể cập nhật tài khoản. Kiểm tra phạm vi trường và vai trò được phép gán."}; }
 }

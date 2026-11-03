@@ -1,9 +1,12 @@
+import { requireActor } from "@/lib/auth/authorize";
 import { NextResponse } from "next/server";
 import { getRotatingGeminiModel } from "@/lib/gemini";
 import { createClient } from "@/lib/supabase/server";
 
 export async function POST(req: Request) {
     try {
+        await requireActor(["teacher", "admin"]);
+
         // 1. Kiểm tra xác thực (Chỉ cho phép Giáo viên/Admin truy cập)
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();

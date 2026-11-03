@@ -48,7 +48,7 @@ export async function fetchAdminGradeOverview() {
         const studentIds = new Set<string>();
         (enrollments || []).forEach(e => studentIds.add(e.student_id));
         
-        let studentsMap: Record<string, any> = {};
+        const studentsMap: Record<string, any> = {};
         if (studentIds.size > 0) {
             const { data: students } = await adminSupabase
                 .from("users")

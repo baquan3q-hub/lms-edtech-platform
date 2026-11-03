@@ -122,12 +122,13 @@ export default function AttendanceClient({ classId, className, students }: Atten
             setSessionId(session.id);
             setSessionStatus(session.status);
 
-            // Lấy records hiện có
-            const { data: records } = await getAttendanceRecords(session.id);
-
-            // Lấy danh sách đơn xin nghỉ đã duyệt
-            const { data: approvedAbsences } = await getApprovedAbsencesForDate(classId, date);
+            // Hai nguồn dữ liệu độc lập: tải cùng lúc để không cộng dồn độ trễ.
+            const [{ data: records }, { data: approvedAbsences }] = await Promise.all([
+                getAttendanceRecords(session.id),
+                getApprovedAbsencesForDate(classId, date),
+            ]);
             const approvedStudentIds = new Set(approvedAbsences.map((a: any) => a.student_id));
+            const recordsByStudent = new Map((records || []).map((r: any) => [r.student_id, r]));
 
             // Thử load draft từ localStorage
             let draft: Record<string, AttendanceState> | null = null;
@@ -139,7 +140,7 @@ export default function AttendanceClient({ classId, className, students }: Atten
             // Khởi tạo state
             const state: Record<string, AttendanceState> = {};
             students.forEach((student) => {
-                const existing = records.find((r: any) => r.student_id === student.student_id);
+                const existing = recordsByStudent.get(student.student_id) as any;
                 const hasDraft = draft && draft[student.student_id];
                 const hasApproved = approvedStudentIds.has(student.student_id);
 
@@ -257,7 +258,7 @@ export default function AttendanceClient({ classId, className, students }: Atten
             <div className="rounded-2xl border border-gray-200 bg-white p-12 text-center shadow-sm mt-6">
                 <Users className="w-12 h-12 text-gray-300 mx-auto mb-4" />
                 <h3 className="text-lg font-bold text-gray-900 mb-1">Chưa có học sinh</h3>
-                <p className="text-gray-500">Lớp học này hiện chưa có học viên nào được xếp vào.</p>
+                <p className="text-gray-500">Lớp học này hiện chưa có học sinh nào được xếp vào.</p>
             </div>
         );
     }

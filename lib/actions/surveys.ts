@@ -281,7 +281,7 @@ export async function fetchSurveys(filters?: { scope?: string; role?: string }) 
 
         // Lấy thống kê responses
         const surveyIds = data?.map((s: any) => s.id) || [];
-        let responseStats: Record<string, number> = {};
+        const responseStats: Record<string, number> = {};
 
         if (surveyIds.length > 0) {
             const { data: responses } = await adminSupabase
@@ -563,7 +563,7 @@ export async function fetchSurveysForParent(studentId: string) {
         const courseIds = [...new Set(enrollments?.map((e: any) => (e.classes as any)?.course_id).filter(Boolean) || [])];
 
         // Lấy tất cả active surveys phù hợp scope
-        let surveys: any[] = [];
+        const surveys: any[] = [];
 
         // System surveys
         const { data: systemSurveys } = await adminSupabase

@@ -37,28 +37,23 @@ export default function AdminGradesClient({ data }: AdminGradesClientProps) {
     const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
     const [isExporting, setIsExporting] = useState(false);
 
-    if (!data) {
-        return (
-            <div className="text-center py-20">
-                <BarChart3 className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-                <h3 className="text-lg font-bold text-slate-700">Không tải được dữ liệu</h3>
-                <p className="text-sm text-slate-500">Vui lòng thử lại sau.</p>
-            </div>
-        );
-    }
+    const classGrades = data?.classGrades;
+    const studentDetails = data?.studentDetails;
 
     // Filter classes by selected course
     const filteredClasses = useMemo(() => {
-        if (selectedCourse === "all") return data.classGrades;
-        return data.classGrades.filter((c: any) => c.courseId === selectedCourse);
-    }, [selectedCourse, data.classGrades]);
+        if (!classGrades) return [];
+        if (selectedCourse === "all") return classGrades;
+        return classGrades.filter((c: any) => c.courseId === selectedCourse);
+    }, [selectedCourse, classGrades]);
 
     // Filter students
     const filteredStudents = useMemo(() => {
-        let students = data.studentDetails || [];
+        if (!studentDetails || !classGrades) return [];
+        let students = studentDetails;
         if (selectedCourse !== "all") {
             students = students.filter((s: any) => {
-                const classInfo = data.classGrades.find((c: any) => c.classId === s.classId);
+                const classInfo = classGrades.find((c: any) => c.classId === s.classId);
                 return classInfo?.courseId === selectedCourse;
             });
         }
@@ -81,7 +76,7 @@ export default function AdminGradesClient({ data }: AdminGradesClientProps) {
             return sortDir === "asc" ? a.avgScore - b.avgScore : b.avgScore - a.avgScore;
         });
         return students;
-    }, [data.studentDetails, data.classGrades, selectedCourse, selectedClass, searchQuery, sortBy, sortDir]);
+    }, [studentDetails, classGrades, selectedCourse, selectedClass, searchQuery, sortBy, sortDir]);
 
     // Pie chart data
     const pieData = useMemo(() => {
@@ -103,6 +98,16 @@ export default function AdminGradesClient({ data }: AdminGradesClientProps) {
             "Tổng": c.overallAvg,
         }));
     }, [filteredClasses]);
+
+    if (!data) {
+        return (
+            <div className="text-center py-20">
+                <BarChart3 className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-slate-700">Không tải được dữ liệu</h3>
+                <p className="text-sm text-slate-500">Vui lòng thử lại sau.</p>
+            </div>
+        );
+    }
 
     const toggleSort = (field: "name" | "score") => {
         if (sortBy === field) {
@@ -137,7 +142,7 @@ export default function AdminGradesClient({ data }: AdminGradesClientProps) {
             "Họ và tên": s.studentName,
             "Email": s.studentEmail,
             "Lớp": s.className,
-            "Khóa học": s.courseName,
+            "Môn học": s.courseName,
             "Số bài đã nộp": s.totalSubmissions,
             "ĐTB": s.avgScore,
             "Xếp loại": s.rank
@@ -271,7 +276,7 @@ export default function AdminGradesClient({ data }: AdminGradesClientProps) {
                         value={selectedCourse}
                         onChange={e => { setSelectedCourse(e.target.value); setSelectedClass("all"); }}
                     >
-                        <option value="all">Tất cả khóa học</option>
+                        <option value="all">Tất cả môn học</option>
                         {(data.courses || []).map((c: any) => (
                             <option key={c.id} value={c.id}>{c.name}</option>
                         ))}
@@ -449,7 +454,7 @@ export default function AdminGradesClient({ data }: AdminGradesClientProps) {
                                         <span className="flex items-center gap-1">Học sinh <ArrowUpDown className="w-3 h-3" /></span>
                                     </th>
                                     <th className="py-3 px-4 text-left font-bold text-slate-600">Lớp</th>
-                                    <th className="py-3 px-4 text-left font-bold text-slate-600">Khóa học</th>
+                                    <th className="py-3 px-4 text-left font-bold text-slate-600">Môn học</th>
                                     <th className="py-3 px-4 text-center font-bold text-slate-600">Số bài</th>
                                     <th className="py-3 px-4 text-center font-bold text-slate-600 cursor-pointer hover:text-indigo-600" onClick={() => toggleSort("score")}>
                                         <span className="flex items-center justify-center gap-1">ĐTB <ArrowUpDown className="w-3 h-3" /></span>

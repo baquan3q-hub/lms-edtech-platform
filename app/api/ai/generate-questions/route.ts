@@ -1,3 +1,4 @@
+import { requireActor } from "@/lib/auth/authorize";
 import { NextRequest, NextResponse } from "next/server";
 import { callGeminiWithRetry } from "@/lib/gemini";
 
@@ -5,6 +6,8 @@ export const maxDuration = 60; // Allow more time for AI processing
 
 export async function POST(req: NextRequest) {
     try {
+        await requireActor(["teacher", "admin"]);
+
         const body = await req.json();
         const { prompt, difficulty = "Trung bình", numQuestions = 5, fileData, fileMimeType } = body;
 

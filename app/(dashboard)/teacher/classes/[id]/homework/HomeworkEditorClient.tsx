@@ -234,7 +234,6 @@ export default function HomeworkEditorClient({
                 toast.success("Đã tạo bài tập thành công!");
             }
             router.push(`/teacher/classes/${classId}`);
-            router.refresh();
         } catch (err: any) {
             toast.error("Lỗi: " + err.message);
         } finally {
@@ -467,7 +466,7 @@ export default function HomeworkEditorClient({
                                             />
                                         </div>
                                         <div className="p-3 bg-amber-50 rounded-lg border border-amber-100 text-xs text-amber-600">
-                                            📸 Học viên sẽ làm xong và gửi link minh chứng (ảnh chụp hoặc link hoàn thành).
+                                            📸 Học sinh sẽ làm xong và gửi link minh chứng (ảnh chụp hoặc link hoàn thành).
                                         </div>
                                     </div>
                                 )}

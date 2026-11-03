@@ -1,5 +1,6 @@
 "use server";
 
+import { requireResourceAccess } from "@/lib/auth/authorize";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
@@ -9,6 +10,7 @@ import { revalidatePath } from "next/cache";
  */
 export async function markItemCompleted(classId: string, itemId: string, score: number | null = null) {
     try {
+        const access = await requireResourceAccess("course_items", itemId, "learn");
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -16,6 +18,8 @@ export async function markItemCompleted(classId: string, itemId: string, score: 
             return { error: "Vui lòng đăng nhập" };
         }
 
+        if (access.resource.class_id !== classId || access.resource.type === "quiz" || score !== null) return {error:"Nội dung cần được chấm qua bài làm."};
+        if(access.resource.type === "video") { const {data} = await access.db.from("video_progress").select("coverage").eq("student_id",access.id).eq("item_id",itemId).maybeSingle(); if(!data || data.coverage<0.9) return {error:"Video chưa đạt 90% nội dung đã xem."}; }
         const adminSupabase = createAdminClient();
 
         // Kiểm tra xem đã có bản ghi progress chưa
@@ -82,6 +86,7 @@ export async function markItemCompleted(classId: string, itemId: string, score: 
  */
 export async function getQuizQuestions(itemId: string) {
     try {
+        await requireResourceAccess("course_items", itemId, "learn");
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -140,6 +145,7 @@ export async function getQuizQuestions(itemId: string) {
  */
 export async function submitQuiz(classId: string, itemId: string, answers: Record<string, string[]>) {
     try {
+        const access = await requireResourceAccess("course_items", itemId, "learn"); if(access.resource.class_id!==classId) throw new Error("Sai lớp học.");
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 

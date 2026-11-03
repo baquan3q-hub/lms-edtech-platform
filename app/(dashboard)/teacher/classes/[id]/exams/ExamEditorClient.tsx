@@ -227,7 +227,7 @@ export default function ExamEditorClient({
             }
         }
         
-        let currentTotal = questions.reduce((sum, q) => sum + q.points, 0);
+        const currentTotal = questions.reduce((sum, q) => sum + q.points, 0);
         if (Math.abs(currentTotal - 10) > 0.1) {
             toast.error(`Tổng số điểm phải bằng 10. Hiện tại là ${currentTotal.toFixed(2)}.`);
             return;
@@ -258,7 +258,6 @@ export default function ExamEditorClient({
 
             toast.success(existingExam ? "Cập nhật thành công!" : "Tạo bài kiểm tra thành công!");
             router.push(`/teacher/classes/${classId}`);
-            router.refresh();
         } catch (err: any) {
             toast.error("Lỗi: " + err.message);
         } finally {

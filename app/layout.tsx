@@ -4,6 +4,7 @@ import { Toaster } from "sonner";
 import "./globals.css";
 
 import QueryProvider from "@/lib/providers/QueryProvider";
+import GlobalNavigationProgress from "@/components/shared/GlobalNavigationProgress";
 
 const inter = Inter({
   variable: "--font-sans",
@@ -11,12 +12,12 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "E-Learning Platform",
-  description: "Nền tảng học trực tuyến thông minh",
+  title: "EduSchool LMS",
+  description: "Hệ thống quản lý học tập dành cho trường phổ thông",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "ELearn",
+    title: "EduSchool",
     startupImage: [
         "/icons/icon-512x512.png"
     ]
@@ -30,8 +31,7 @@ export const viewport: Viewport = {
   themeColor: "#0f172a",
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  userScalable: true,
   viewportFit: "cover",
 };
 
@@ -46,13 +46,8 @@ export default function RootLayout({
         className={`${inter.variable} font-sans antialiased bg-white text-black`}
         suppressHydrationWarning
       >
+        <GlobalNavigationProgress />
         <QueryProvider>
-          {/* Strip browser extension attributes before React hydrates */}
-          <script
-            dangerouslySetInnerHTML={{
-              __html: `document.querySelectorAll('[bis_skin_checked]').forEach(function(el){el.removeAttribute('bis_skin_checked')});`,
-            }}
-          />
           {children}
           <Toaster
             position="top-right"
@@ -67,4 +62,3 @@ export default function RootLayout({
     </html>
   );
 }
-

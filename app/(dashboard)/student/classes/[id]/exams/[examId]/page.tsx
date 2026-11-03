@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchExamQuestions } from "@/lib/actions/exam";
 import { redirect } from "next/navigation";
 import ExamTakingClient from "./ExamTakingClient";
+import { requireResourceAccess } from "@/lib/auth/authorize";
+import { toStudentSubmission } from "@/lib/modules/assessment/dto";
+import { notFound } from "next/navigation";
 
 export default async function StudentExamPage({ params }: { params: Promise<{ id: string; examId: string }> }) {
     const { id: classId, examId } = await params;
@@ -10,15 +13,17 @@ export default async function StudentExamPage({ params }: { params: Promise<{ id
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) redirect("/login");
+    const access = await requireResourceAccess("exams", examId, "read");
+    if (access.resource.class_id !== classId || access.role !== "student") notFound();
 
     // Kiểm tra đã nộp chưa
     const adminSupabase = createAdminClient();
     const { data: existingSubmission } = await adminSupabase
         .from("exam_submissions")
-        .select("*")
+        .select("id, exam_id, attempt_id, answers, score, total_points, time_taken_seconds, submitted_at, grading_status")
         .eq("exam_id", examId)
         .eq("student_id", user.id)
-        .single();
+        .order("submitted_at", { ascending: false }).limit(1).maybeSingle();
 
     // Lấy đề (đã strip đáp án đúng nếu chưa nộp)
     const { data: exam, error } = await fetchExamQuestions(examId, user.id);
@@ -36,7 +41,8 @@ export default async function StudentExamPage({ params }: { params: Promise<{ id
             <ExamTakingClient
                 exam={exam}
                 classId={classId}
-                alreadySubmitted={existingSubmission}
+                draftOwner={`${access.schoolId}:${user.id}`}
+                alreadySubmitted={existingSubmission ? toStudentSubmission(existingSubmission) : null}
             />
         </div>
     );

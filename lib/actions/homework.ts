@@ -1,8 +1,16 @@
 "use server";
 
+import { requireClassAccess, requireResourceAccess, requireRecordAccess } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { recordAuditEvent } from "@/lib/audit/audit-logger";
+import { produceOutboxEvent } from "@/lib/outbox/outbox-producer";
+import { withIdempotency } from "@/lib/idempotency/idempotency-manager";
+import { DEFAULT_PILOT_SCHOOL_ID } from "@/lib/auth/actor-context";
+import { maskSubmissionForRole } from "@/lib/grading/score-visibility";
+import { toStudentHomework, toStudentHomeworkSubmission, validateHomework, homeworkAnswersSchema } from "@/lib/modules/assessment/homework-dto";
+import { z } from "zod";
 
 // ============================================================
 // TEACHER: CRUD Homework
@@ -14,24 +22,40 @@ export async function createHomework(classId: string, data: {
     questions: any[];
     total_points: number;
     due_date?: string;
+    is_published?: boolean;
 }) {
     try {
+        await requireClassAccess(classId, "teach");
+        validateHomework(data.questions, data.total_points);
+
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { data: null, error: "Chưa đăng nhập" };
 
         const adminSupabase = createAdminClient();
 
+        // Lấy school_id từ class
+        const { data: cls } = await adminSupabase
+            .from("classes")
+            .select("school_id")
+            .eq("id", classId)
+            .single();
+
+        if(!cls?.school_id)throw new Error("Không xác định được trường sở hữu lớp.");
+        const schoolId = cls.school_id;
+
         const { data: hw, error } = await adminSupabase
             .from("homework")
             .insert({
                 class_id: classId,
+                school_id: schoolId,
                 title: data.title,
                 description: data.description || "",
                 questions: data.questions,
                 total_points: data.total_points,
                 due_date: data.due_date || null,
-                is_published: (data as any).is_published ?? true,
+                is_published: data.is_published ?? false,
+                publication_status: data.is_published ? "published" : "draft",
                 created_by: user.id,
             })
             .select()
@@ -55,6 +79,10 @@ export async function updateHomework(homeworkId: string, classId: string, data: 
     is_published?: boolean;
 }) {
     try {
+        const access = await requireResourceAccess("homework", homeworkId, "teach");
+        if (access.resource.class_id !== classId) throw new Error("Sai lớp học.");
+        validateHomework(data.questions, data.total_points);
+
         const adminSupabase = createAdminClient();
 
         const { error } = await adminSupabase
@@ -65,7 +93,8 @@ export async function updateHomework(homeworkId: string, classId: string, data: 
                 questions: data.questions,
                 total_points: data.total_points,
                 due_date: data.due_date || null,
-                is_published: data.is_published ?? false,
+                is_published: data.is_published ?? access.resource.is_published,
+                publication_status: (data.is_published ?? access.resource.is_published) ? "published" : "draft",
                 updated_at: new Date().toISOString(),
             })
             .eq("id", homeworkId);
@@ -81,6 +110,8 @@ export async function updateHomework(homeworkId: string, classId: string, data: 
 
 export async function deleteHomework(homeworkId: string, classId: string) {
     try {
+        await requireResourceAccess("homework", homeworkId, "teach");
+
         const adminSupabase = createAdminClient();
         const { error } = await adminSupabase.from("homework").delete().eq("id", homeworkId);
         if (error) throw error;
@@ -93,6 +124,8 @@ export async function deleteHomework(homeworkId: string, classId: string) {
 
 export async function fetchClassHomework(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
+
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("homework")
@@ -113,6 +146,8 @@ export async function fetchClassHomework(classId: string) {
  */
 export async function fetchPendingHomeworkGradingStats(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
+
         const adminSupabase = createAdminClient();
 
         // Lấy danh sách homework_id của lớp
@@ -149,6 +184,8 @@ export async function fetchPendingHomeworkGradingStats(classId: string) {
 
 export async function fetchHomeworkDetail(homeworkId: string) {
     try {
+        const access = await requireResourceAccess("homework", homeworkId);
+
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("homework")
@@ -156,7 +193,7 @@ export async function fetchHomeworkDetail(homeworkId: string) {
             .eq("id", homeworkId)
             .single();
         if (error) throw error;
-        return { data, error: null };
+        return { data: access.role === "student" || access.role === "parent" ? toStudentHomework(data) : data, error: null };
     } catch (error: any) {
         return { data: null, error: error.message };
     }
@@ -168,6 +205,8 @@ export async function fetchHomeworkDetail(homeworkId: string) {
 
 export async function fetchHomeworkSubmissions(homeworkId: string) {
     try {
+        await requireResourceAccess("homework", homeworkId, "teach");
+
         const adminSupabase = createAdminClient();
 
         const { data: hw } = await adminSupabase
@@ -196,29 +235,8 @@ export async function gradeSubmission(submissionId: string, data: {
     score: number;
     feedback?: string;
 }) {
-    try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return { success: false, error: "Chưa đăng nhập" };
-
-        const adminSupabase = createAdminClient();
-
-        const { error } = await adminSupabase
-            .from("homework_submissions")
-            .update({
-                score: data.score,
-                feedback: data.feedback || "",
-                status: "graded",
-                graded_at: new Date().toISOString(),
-                graded_by: user.id,
-            })
-            .eq("id", submissionId);
-
-        if (error) throw error;
-        return { success: true, error: null };
-    } catch (error: any) {
-        return { success: false, error: error.message };
-    }
+    const { gradeHomeworkSubmissionK12 } = await import("@/lib/actions/grading");
+    return gradeHomeworkSubmissionK12({ submissionId, newScore: data.score, feedback: data.feedback, publishNow: true });
 }
 
 // ============================================================
@@ -227,6 +245,8 @@ export async function gradeSubmission(submissionId: string, data: {
 
 export async function fetchStudentHomework(classId: string) {
     try {
+        await requireClassAccess(classId, "learn");
+
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { data: null, error: "Chưa đăng nhập" };
@@ -255,11 +275,14 @@ export async function fetchStudentHomework(classId: string) {
             submissions = subs || [];
         }
 
-        // Gắn submission vào homework
-        const result = (homeworkList || []).map((hw: any) => ({
-            ...hw,
-            submission: submissions.find((s: any) => s.homework_id === hw.id) || null,
-        }));
+        // Gắn submission vào homework kèm mặt nạ điểm số
+        const result = (homeworkList || []).map((hw: any) => {
+            const rawSub = submissions.find((s: any) => s.homework_id === hw.id);
+            return {
+                ...toStudentHomework(hw),
+                submission: rawSub ? toStudentHomeworkSubmission(rawSub) : null,
+            };
+        });
 
         return { data: result, error: null };
     } catch (error: any) {
@@ -267,161 +290,16 @@ export async function fetchStudentHomework(classId: string) {
     }
 }
 
-export async function submitHomework(homeworkId: string, answers: any[]) {
+export async function submitHomework(homeworkId: string, answers: any[], requestKey?: string) {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (!user) {
-            return { error: "Bạn chưa đăng nhập." };
-        }
-
-        const adminSupabase = createAdminClient();
-
-        // 1. Fetch homework details for auto-grading
-        const { data: homework, error: hwError } = await adminSupabase
-            .from("homework")
-            .select("questions, class_id, title")
-            .eq("id", homeworkId)
-            .single();
-
-        if (hwError || !homework) {
-            return { error: "Không tìm thấy bài tập." };
-        }
-
-        const questions = homework.questions as any[] || [];
-        
-        let autoScore = 0;
-        let requiresManualGrading = false;
-
-        // 2. Process answers and auto-grade MCQs
-        const processedAnswers = answers.map((answer: any) => {
-            const question = questions.find((q: any) => q.id === answer.question_id);
-            if (!question) return answer;
-
-            if (question.type === 'multiple_choice') {
-                const correctOption = question.options?.find((opt: any) => opt.isCorrect);
-                if (correctOption && answer.selected_option_id === correctOption.id) {
-                    autoScore += Number(question.points) || 0;
-                }
-            } else {
-                requiresManualGrading = true;
-            }
-
-            return answer;
-        });
-
-        // 3. Determine submission status
-        // If there are manual grading questions, status remains 'submitted' pending teacher review
-        // If all are MCQs, status is automatically 'graded'
-        const finalStatus = requiresManualGrading ? 'submitted' : 'graded';
-        const gradedAt = requiresManualGrading ? null : new Date().toISOString();
-
-        // 4. Check if a submission already exists to handle multiple attempts
-        const { data: existingSubmission, error: existingError } = await adminSupabase
-            .from("homework_submissions")
-            .select("*")
-            .eq("homework_id", homeworkId)
-            .eq("student_id", user.id)
-            .maybeSingle();
-
-        if (existingError) {
-             console.error("Lỗi khi kiểm tra bài nộp hiện tại:", existingError);
-             return { error: existingError.message };
-        }
-
-        if (existingSubmission) {
-            // Push current state into attempt_history
-            const currentHistory = Array.isArray(existingSubmission.attempt_history) 
-                ? existingSubmission.attempt_history 
-                : [];
-            
-            const historyEntry = {
-                answers: existingSubmission.answers,
-                score: existingSubmission.score,
-                status: existingSubmission.status,
-                submitted_at: existingSubmission.submitted_at,
-                graded_at: existingSubmission.graded_at,
-                feedback: existingSubmission.feedback,
-            };
-
-            const updatedHistory = [...currentHistory, historyEntry];
-            const newAttemptsCount = (existingSubmission.attempts || 1) + 1;
-
-            const { data, error } = await adminSupabase
-                .from("homework_submissions")
-                .update({
-                    answers: processedAnswers,
-                    score: autoScore,
-                    status: finalStatus,
-                    submitted_at: new Date().toISOString(),
-                    graded_at: gradedAt,
-                    attempts: newAttemptsCount,
-                    attempt_history: updatedHistory
-                })
-                .eq("id", existingSubmission.id)
-                .select()
-                .single();
-
-            if (error) throw error;
-            return { data, error: null };
-            
-        } else {
-            // First time submission
-            const { data, error } = await adminSupabase
-                .from("homework_submissions")
-                .insert({
-                    homework_id: homeworkId,
-                    student_id: user.id,
-                    answers: processedAnswers,
-                    score: autoScore,
-                    status: finalStatus,
-                    submitted_at: new Date().toISOString(),
-                    graded_at: gradedAt,
-                    attempts: 1,
-                    attempt_history: []
-                })
-                .select()
-                .single();
-
-            if (error) throw error;
-            return { data, error: null };
-        }
-
-        // 5. Notify teacher if manual grading is needed
-        if (requiresManualGrading && homework?.class_id) {
-            try {
-                // Lấy teacher_id từ class
-                const { data: classData } = await adminSupabase
-                    .from("classes")
-                    .select("teacher_id")
-                    .eq("id", homework!.class_id)
-                    .single();
-
-                // Lấy tên học sinh
-                const { data: studentData } = await adminSupabase
-                    .from("users")
-                    .select("full_name")
-                    .eq("id", user!.id)
-                    .single();
-
-                if (classData?.teacher_id) {
-                    await adminSupabase.from("notifications").insert({
-                        user_id: classData!.teacher_id,
-                        title: `📝 Bài nộp cần chấm: ${homework?.title || 'Bài tập'}`,
-                        message: `Học sinh ${studentData?.full_name || 'N/A'} đã nộp bài tập "${homework?.title || ''}" có câu tự luận/video cần giáo viên chấm điểm thủ công.`,
-                        type: "warning",
-                        read: false,
-                    });
-                }
-            } catch (notifErr) {
-                console.error("Lỗi gửi notification cho GV:", notifErr);
-            }
-        }
-
-    } catch (error: any) {
-        console.error("Lỗi nộp bài tập:", error);
-        return { error: error.message };
-    }
+        const { id, db } = await requireResourceAccess("homework", homeworkId, "learn");
+        const checked = homeworkAnswersSchema.parse(answers);
+        const key = z.uuid().parse(requestKey || crypto.randomUUID());
+        const { data, error } = await db.rpc("submit_school_homework", { p_student:id,p_homework:homeworkId,p_answers:checked,p_request_key:key });
+        if (error) throw error;
+        revalidatePath("/student", "layout");
+        revalidatePath("/teacher", "layout");
+        return { data:toStudentHomeworkSubmission(data),error:null };
+    } catch { return { data:null,error:"Không thể nộp bài. Bản nháp được giữ lại; kiểm tra kết nối, hạn nộp và số lần được phép làm." }; }
 }
 

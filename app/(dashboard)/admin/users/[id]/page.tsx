@@ -172,11 +172,11 @@ export default async function AdminUserDetailsPage({ params }: { params: Promise
             {profile.role === "student" && enrollments && (
                 <div className="mt-8">
                     <h3 className="text-lg font-bold text-slate-900 border-l-4 border-blue-500 pl-3 mb-4">
-                        Khóa học đang theo học ({enrollments.length})
+                        Lớp môn học đang theo học ({enrollments.length})
                     </h3>
                     {enrollments.length === 0 ? (
                         <div className="p-8 text-center text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                            Học sinh này chưa ghi danh vào lớp học nào.
+                            Học sinh này chưa được xếp vào lớp học nào.
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

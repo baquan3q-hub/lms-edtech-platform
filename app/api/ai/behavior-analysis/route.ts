@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
         }
 
         const body = await req.json();
-        const { classId, contextType, contextId } = body;
+        const { classId, contextType, contextId, attemptId } = body;
 
         if (!classId || !contextType || !contextId) {
             return NextResponse.json(
@@ -43,7 +43,8 @@ export async function POST(req: NextRequest) {
             user.id,
             classId,
             contextType,
-            contextId
+            contextId,
+            attemptId
         );
 
         return NextResponse.json({

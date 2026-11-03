@@ -49,7 +49,6 @@ export default function AdminUserActions({ userProfile }: { userProfile: any }) 
             if (result.success) {
                 toast.success("Đã xóa tài khoản vĩnh viễn.");
                 router.push("/admin/users");
-                router.refresh(); // Refresh bảng users
             } else {
                 toast.error(result.error || "Gặp lỗi khi xóa.");
             }

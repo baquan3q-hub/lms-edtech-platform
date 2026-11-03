@@ -29,7 +29,7 @@ export async function fetchTeacherClasses() {
 }
 
 /**
- * Lấy danh sách học viên + phụ huynh liên kết, theo classId (hoặc tất cả lớp của GV)
+ * Lấy danh sách học sinh + phụ huynh liên kết, theo classId (hoặc tất cả lớp của GV)
  */
 export async function fetchTeacherStudents(classId?: string) {
     try {

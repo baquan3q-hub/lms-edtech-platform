@@ -1,42 +1,21 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { requireActor, requireStudentAccess } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { calcAttendanceRate } from "@/lib/utils/attendance-rate";
 import { getGeminiModel } from "@/lib/gemini";
 
 export async function getStudentProgressStats(studentId: string) {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return { data: null, error: "Unauthorized" };
-
-        const adminSupabase = createAdminClient();
-
-        const { data: userData } = await adminSupabase
-            .from("users")
-            .select("role")
-            .eq("id", user.id)
-            .single();
-
-        if (userData?.role !== "admin") {
-            // 1. Kiểm tra quyền (Phụ huynh có được xem của studentId này không)
-            const { data: link, error: linkError } = await adminSupabase
-                .from("parent_students")
-                .select("id")
-                .eq("parent_id", user.id)
-                .eq("student_id", studentId)
-                .single();
-
-            if (linkError || !link) {
-                return { data: null, error: "Bạn không có quyền xem thông tin học sinh này" };
-            }
-        }
+        const actor = await requireActor(["parent", "admin"]);
+        await requireStudentAccess(studentId);
+        const adminSupabase = actor.db;
 
         // 2. Fetch active classes for the student
         const { data: enrollments, error: enrollError } = await adminSupabase
             .from("enrollments")
-            .select("class_id, classes(name, course_id, courses(name))")
+            .select("class_id, classes!inner(name, course_id, school_id, courses(name))")
+            .eq("classes.school_id", actor.schoolId)
             .eq("student_id", studentId)
             .eq("status", "active");
 
@@ -54,7 +33,9 @@ export async function getStudentProgressStats(studentId: string) {
         // Fetch scores for these classes
         const { data: examSubs } = await adminSupabase
             .from("exam_submissions")
-            .select("score, exams!inner(class_id, total_points)")
+            .select("score, exams!inner(class_id, total_points, school_id)")
+            .in("grading_status", ["published", "locked"])
+            .eq("exams.school_id", actor.schoolId)
             .eq("student_id", studentId)
             .in("exams.class_id", classIds);
 
@@ -96,7 +77,9 @@ export async function getStudentProgressStats(studentId: string) {
         // 3. Fetch real exam history from `exam_submissions`
         const { data: submissions, error: submissionsError } = await adminSupabase
             .from("exam_submissions")
-            .select("score, submitted_at, exams(title, total_points)")
+            .select("score, submitted_at, exams!inner(title, total_points, school_id)")
+            .in("grading_status", ["published", "locked"])
+            .eq("exams.school_id", actor.schoolId)
             .eq("student_id", studentId)
             .not("score", "is", null);
 
@@ -107,7 +90,9 @@ export async function getStudentProgressStats(studentId: string) {
         // 4. Fetch homework history
         const { data: hwSubmissions } = await adminSupabase
             .from("homework_submissions")
-            .select("score, submitted_at, homework(title, total_points)")
+            .select("score, submitted_at, homework!inner(title, total_points, school_id)")
+            .in("grading_status", ["published", "locked"])
+            .eq("homework.school_id", actor.schoolId)
             .eq("student_id", studentId)
             .not("score", "is", null);
 
@@ -178,29 +163,9 @@ export async function getStudentProgressStats(studentId: string) {
 // ============================================================
 export async function getStudentFeedbackList(studentId: string) {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return { data: [], error: "Unauthorized" };
-
-        const adminSupabase = createAdminClient();
-
-        const { data: userData } = await adminSupabase
-            .from("users")
-            .select("role")
-            .eq("id", user.id)
-            .single();
-
-        if (userData?.role !== "admin") {
-            // Verify parent access
-            const { data: link } = await adminSupabase
-                .from("parent_students")
-                .select("id")
-                .eq("parent_id", user.id)
-                .eq("student_id", studentId)
-                .single();
-
-            if (!link) return { data: [], error: "Access denied" };
-        }
+        const actor = await requireActor(["parent", "admin"]);
+        await requireStudentAccess(studentId);
+        const adminSupabase = actor.db;
 
         // Fetch sent feedback with exam info + improvement progress
         const { data: analyses, error } = await adminSupabase
@@ -235,41 +200,26 @@ export async function getStudentFeedbackList(studentId: string) {
 // ============================================================
 export async function getStudentCompetencyData(studentId: string) {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return { data: null, error: "Unauthorized" };
-
-        const adminSupabase = createAdminClient();
-
-        const { data: userData } = await adminSupabase
-            .from("users")
-            .select("role")
-            .eq("id", user.id)
-            .single();
-
-        if (userData?.role !== "admin") {
-            const { data: link } = await adminSupabase
-                .from("parent_students")
-                .select("id")
-                .eq("parent_id", user.id)
-                .eq("student_id", studentId)
-                .single();
-
-            if (!link) return { data: null, error: "Access denied" };
-        }
+        const actor = await requireActor(["parent", "admin"]);
+        await requireStudentAccess(studentId);
+        const adminSupabase = actor.db;
 
         // ---------- 1. NĂNG LỰC HỌC TẬP (Academic Score) ----------
         // Lấy tất cả điểm bài kiểm tra
         const { data: examSubs } = await adminSupabase
             .from("exam_submissions")
-            .select("score, exams(total_points)")
+            .select("score, exams!inner(total_points, school_id)")
+            .in("grading_status", ["published", "locked"])
+            .eq("exams.school_id", actor.schoolId)
             .eq("student_id", studentId)
             .not("score", "is", null);
 
         // Lấy tất cả điểm bài tập
         const { data: hwSubs } = await adminSupabase
             .from("homework_submissions")
-            .select("score, homework(total_points)")
+            .select("score, homework!inner(total_points, school_id)")
+            .in("grading_status", ["published", "locked"])
+            .eq("homework.school_id", actor.schoolId)
             .eq("student_id", studentId)
             .not("score", "is", null);
 

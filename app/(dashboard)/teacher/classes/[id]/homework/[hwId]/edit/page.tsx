@@ -1,9 +1,13 @@
 import { fetchHomeworkDetail } from "@/lib/actions/homework";
 import HomeworkEditorClient from "../../HomeworkEditorClient";
 import Link from "next/link";
+import { requireResourceAccess } from "@/lib/auth/authorize";
+import { notFound } from "next/navigation";
 
 export default async function EditHomeworkPage({ params }: { params: Promise<{ id: string; hwId: string }> }) {
     const { id: classId, hwId } = await params;
+    const access = await requireResourceAccess("homework", hwId, "teach");
+    if (access.resource.class_id !== classId) notFound();
 
     const { data: homework, error } = await fetchHomeworkDetail(hwId);
 

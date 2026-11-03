@@ -36,7 +36,7 @@ export default function ClassBehaviorTab({ classId }: { classId: string }) {
             <div className="mb-6 border-b border-slate-100 pb-4">
                 <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
                     <ShieldCheck className="w-6 h-6 text-violet-600" />
-                    Hành vi học tập học viên
+                    Hành vi học tập học sinh
                 </h2>
                 <p className="text-sm text-slate-500 flex items-center gap-1 mt-1">
                     <Info className="w-4 h-4" /> Các cảnh báo AI về gian lận, mất tập trung trong các bài kiểm tra được tổng hợp tại đây.

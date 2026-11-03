@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+**/node_modules/
 /.pnp
 .pnp.*
 .yarn/*
@@ -12,6 +13,9 @@
 
 # testing
 /coverage
+/.local/
+**/__pycache__/
+**/.venv/
 
 # next.js
 /.next/
@@ -32,6 +36,7 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -41,6 +46,10 @@ yarn-error.log*
 next-env.d.ts
 
 # temp and debug files
+/tmp/
+/docs/backup/
+/supabase/.temp/
+desktop.ini
 /*.log
 /temp_*
 /tsc_*
@@ -51,3 +60,8 @@ next-env.d.ts
 /output_schedules.txt
 /ts_error*
 /ts_errors*
+/tmp/docx_render/
+/tmp/pdfs/
+docs/Tham gia cuộc thi/
+/playwright-report/
+/test-results/

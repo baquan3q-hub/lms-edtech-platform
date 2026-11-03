@@ -129,10 +129,10 @@ export default function ClassActions({
                             </div>
 
                             <div className="grid gap-2">
-                                <Label htmlFor="edit-course">Khóa học thuộc về <span className="text-red-500">*</span></Label>
+                                <Label htmlFor="edit-course">Môn học thuộc về <span className="text-red-500">*</span></Label>
                                 <Select name="course_id" required defaultValue={cls.course_id}>
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Chọn Khóa học" />
+                                        <SelectValue placeholder="Chọn Môn học" />
                                     </SelectTrigger>
                                     <SelectContent>
                                         {courses.map(course => (

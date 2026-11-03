@@ -13,27 +13,27 @@ import Sidebar from "./Sidebar"; // Assuming Sidebar is also shared, replace if 
 
 // Helper to get title from pathname
 const getPageTitle = (pathname: string) => {
-    if (pathname.includes("/admin/users")) return "Quản lý Users";
+    if (pathname.includes("/admin/users")) return "Quản lý Người dùng";
     if (pathname.includes("/admin/classes")) return "Quản lý Lớp học";
     if (pathname.includes("/admin/reports")) return "Báo cáo";
-    if (pathname.includes("/admin")) return "Admin Dashboard";
+    if (pathname.includes("/admin")) return "Tổng quan Quản trị";
 
     if (pathname.includes("/teacher/attendance")) return "Điểm danh";
-    if (pathname.includes("/teacher/students")) return "Học viên";
+    if (pathname.includes("/teacher/students")) return "Học sinh";
     if (pathname.includes("/teacher/schedule")) return "Lịch dạy";
-    if (pathname.includes("/teacher")) return "Teacher Dashboard";
+    if (pathname.includes("/teacher")) return "Tổng quan Giáo viên";
 
     if (pathname.includes("/parent/schedule")) return "Lịch học của con";
     if (pathname.includes("/parent/progress")) return "Điểm số";
     if (pathname.includes("/parent/absence-request")) return "Xin nghỉ";
-    if (pathname.includes("/parent")) return "Parent Dashboard";
+    if (pathname.includes("/parent")) return "Tổng quan Phụ huynh";
 
     if (pathname.includes("/student/classes")) return "Lớp học của tôi";
     if (pathname.includes("/student/achievements")) return "Thành tích";
     if (pathname.includes("/student/profile")) return "Hồ sơ";
-    if (pathname.includes("/student")) return "Student Dashboard";
+    if (pathname.includes("/student")) return "Tổng quan Học sinh";
 
-    return "ELearn";
+    return "EduSchool";
 };
 
 export function MobileHeader() {

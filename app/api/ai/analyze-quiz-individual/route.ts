@@ -1,3 +1,4 @@
+import { requireActor } from "@/lib/auth/authorize";
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getRotatingGeminiModel } from "@/lib/gemini";
@@ -232,6 +233,8 @@ async function analyzeOneStudent(adminSupabase: any, submission: any, exam: any)
 // ============================================================
 export async function POST(req: NextRequest) {
     try {
+        await requireActor(["teacher", "admin"]);
+
         const body = await req.json();
         const { examId, submissionId } = body;
         const adminSupabase = createAdminClient();
@@ -289,7 +292,7 @@ export async function POST(req: NextRequest) {
         const pendingSubmissions = submissions.filter((s: any) => !alreadyDone.has(s.id));
         let success = alreadyDone.size;
         let failed = 0;
-        let skipped = alreadyDone.size;
+        const skipped = alreadyDone.size;
         const errors: string[] = [];
 
         console.log(`[Batch] Total: ${submissions.length}, Skip: ${skipped}, Pending: ${pendingSubmissions.length}`);

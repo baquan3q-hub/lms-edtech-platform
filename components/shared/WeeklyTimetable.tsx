@@ -122,7 +122,7 @@ export default function WeeklyTimetable({ schedules, emptyMessage = "Chưa có l
                                         className={`p-4 rounded-xl border border-l-4 shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group ${colorClass}`}
                                     >
                                         <div className="font-bold text-base mb-1.5 line-clamp-2">
-                                            {courseData?.name || "Khóa học"}
+                                            {courseData?.name || "Môn học"}
                                         </div>
                                         <div className="text-sm font-semibold opacity-80 mb-3 truncate">
                                             Lớp: {classData?.name || "Khuyết danh"}
@@ -199,7 +199,7 @@ export default function WeeklyTimetable({ schedules, emptyMessage = "Chưa có l
                                             </div>
 
                                             <div className="flex-1">
-                                                <h5 className="font-bold text-base mb-1">{courseData?.name || "Khóa học"}</h5>
+                                                <h5 className="font-bold text-base mb-1">{courseData?.name || "Môn học"}</h5>
                                                 <p className="text-sm font-semibold opacity-80 mb-3">Lớp: {classData?.name || "Khuyết danh"}</p>
 
                                                 {teacherData?.full_name && (

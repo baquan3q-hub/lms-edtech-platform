@@ -22,7 +22,7 @@ export default async function TeacherBehaviorPage() {
                 <div>
                     <h1 className="text-3xl font-extrabold text-slate-900 flex items-center gap-3 tracking-tight">
                         <Activity className="w-8 h-8 text-violet-600" />
-                        Hành vi học tập học viên
+                        Hành vi học tập học sinh
                     </h1>
                     <p className="text-slate-500 mt-2 font-medium">Lọc và giám sát rủi ro gian lận, thao tác bất thường trong lúc kiểm tra theo từng lớp.</p>
                 </div>

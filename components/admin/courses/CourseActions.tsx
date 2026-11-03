@@ -28,7 +28,7 @@ export default function CourseActions({ course }: { course: any }) {
     const [isEditOpen, setIsEditOpen] = useState(false);
 
     async function handleDelete() {
-        if (!confirm(`Bạn có chắc chắn muốn xóa khóa học "${course.name}"? Hành động này sẽ xóa tất cả lớp học và dữ liệu liên quan.`)) return;
+        if (!confirm(`Bạn có chắc chắn muốn xóa môn học "${course.name}"? Hành động này sẽ xóa tất cả lớp học và dữ liệu liên quan.`)) return;
 
         setLoading(true);
         try {
@@ -37,7 +37,7 @@ export default function CourseActions({ course }: { course: any }) {
                 toast.error(result.error);
                 return;
             }
-            toast.success("Đã xóa khóa học");
+            toast.success("Đã xóa môn học");
         } catch (error) {
             toast.error("Đã xảy ra lỗi khi xóa");
         } finally {
@@ -53,7 +53,7 @@ export default function CourseActions({ course }: { course: any }) {
                 toast.error(result.error);
                 return;
             }
-            toast.success("Đã cập nhật khóa học");
+            toast.success("Đã cập nhật môn học");
             setIsEditOpen(false);
         } catch (error) {
             toast.error("Đã xảy ra lỗi khi cập nhật");
@@ -78,7 +78,7 @@ export default function CourseActions({ course }: { course: any }) {
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={handleDelete} className="cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50">
                         <Trash className="w-4 h-4 mr-2" />
-                        Xóa khóa học
+                        Xóa môn học
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
@@ -86,15 +86,15 @@ export default function CourseActions({ course }: { course: any }) {
             <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
                 <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
-                        <DialogTitle>Chỉnh sửa Khóa học</DialogTitle>
+                        <DialogTitle>Chỉnh sửa Môn học / Chương trình</DialogTitle>
                         <DialogDescription>
-                            Chỉnh sửa thông tin tên và mô tả khóa học.
+                            Chỉnh sửa thông tin tên và mô tả môn học.
                         </DialogDescription>
                     </DialogHeader>
                     <form action={handleEditSubmit}>
                         <div className="grid gap-4 py-4">
                             <div className="grid gap-2">
-                                <Label htmlFor="edit-name">Tên khóa học <span className="text-red-500">*</span></Label>
+                                <Label htmlFor="edit-name">Tên môn học <span className="text-red-500">*</span></Label>
                                 <Input
                                     id="edit-name"
                                     name="name"
@@ -103,7 +103,7 @@ export default function CourseActions({ course }: { course: any }) {
                                 />
                             </div>
                             <div className="grid gap-2">
-                                <Label htmlFor="edit-description">Mô tả khóa học</Label>
+                                <Label htmlFor="edit-description">Mô tả môn học</Label>
                                 <Textarea
                                     id="edit-description"
                                     name="description"

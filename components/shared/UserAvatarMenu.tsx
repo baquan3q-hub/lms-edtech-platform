@@ -1,5 +1,6 @@
 "use client";
 
+import { endLearningSession } from "@/lib/learning/tracker-client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { LogOut, UserCircle, ChevronDown, MessageSquarePlus } from "lucide-react";
@@ -51,6 +52,10 @@ export default function UserAvatarMenu({
         .slice(0, 2) || "?";
 
     const handleLogout = async () => {
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("app:navigation-start"));
+        }
+        await endLearningSession();
         await supabase.auth.signOut();
         router.push("/login");
         router.refresh();

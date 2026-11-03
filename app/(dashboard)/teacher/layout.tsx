@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { requirePortalProfile } from "@/lib/auth/portal";
 import { redirect } from "next/navigation";
 import TeacherSidebar from "@/components/teacher/TeacherSidebar";
 import TeacherNavbar from "@/components/teacher/TeacherNavbar";
@@ -8,31 +8,13 @@ export default async function TeacherLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const supabase = await createClient();
+    const userData = await requirePortalProfile("teacher");
 
-    // Check authentication
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
+    if (!userData) {
         redirect("/login");
     }
 
-    // Retrieve user data to ensure they are a teacher
-    const { createAdminClient } = await import("@/lib/supabase/admin");
-    const adminSupabase = createAdminClient();
 
-    const { data: userData } = await adminSupabase
-        .from("users")
-        .select("full_name, email, role")
-        .eq("id", user.id)
-        .single();
-
-    // Check teacher role
-    if (userData?.role !== "teacher") {
-        redirect(`/${userData?.role || "login"}`);
-    }
 
     return (
         <div className="flex h-screen bg-slate-50 overflow-hidden">

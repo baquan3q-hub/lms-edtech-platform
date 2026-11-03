@@ -1,4 +1,5 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { requireActor } from "@/lib/auth/authorize";
+import { genAI } from "@/lib/gemini";
 import { NextRequest, NextResponse } from "next/server";
 import { getNextApiKey } from "@/lib/gemini";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -50,7 +51,7 @@ function buildPrompt(attendanceData: unknown, gradesData: unknown, submissionDat
     const safeSubmission = Array.isArray(submissionData) ? submissionData : [];
 
     return `Bạn là Chuyên gia Tư vấn Quản trị Hệ thống LMS (Edtech platform).
-Dưới đây là các dữ liệu thống kê mới nhất về hoạt động của trung tâm giáo dục. Hãy phân tích và viết 1 đoạn văn súc tích (3-5 câu), ngôn ngữ chuyên nghiệp và dễ hiểu.
+Dưới đây là các dữ liệu thống kê mới nhất về hoạt động của nhà trường. Hãy phân tích và viết 1 đoạn văn súc tích (3-5 câu), ngôn ngữ chuyên nghiệp và dễ hiểu.
 Bạn cần chỉ ra: điểm tích cực, điểm cần lưu ý, và một lời khuyên hành động cụ thể.
 
 Dữ liệu:
@@ -73,8 +74,6 @@ async function generateInsight(prompt: string): Promise<InsightResult> {
                     error: "Chưa cấu hình GEMINI_API_KEY trong biến môi trường (.env.local).",
                 };
             }
-
-            const genAI = new GoogleGenerativeAI(apiKey);
             const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
             const result = await model.generateContent(prompt);
             const text = result.response.text().trim();
@@ -109,6 +108,8 @@ async function generateInsight(prompt: string): Promise<InsightResult> {
 
 export async function POST(req: NextRequest) {
     try {
+        await requireActor(["admin"]);
+
         const supabase = await createClient();
         const {
             data: { user },

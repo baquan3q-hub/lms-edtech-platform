@@ -112,7 +112,7 @@ export default function SubmissionsTableClient({ submissions, exam, strengths, w
                         <thead className="sticky top-0 bg-slate-50/90 backdrop-blur z-10 border-b border-slate-200">
                             <tr>
                                 <th className="text-left py-3 px-4 font-bold text-slate-700">#</th>
-                                <th className="text-left py-3 px-4 font-bold text-slate-700">Học viên</th>
+                                <th className="text-left py-3 px-4 font-bold text-slate-700">Học sinh</th>
                                 <th className="text-center py-3 px-4 font-bold text-slate-700">Điểm</th>
                                 <th className="text-center py-3 px-4 font-bold text-slate-700">Thời gian</th>
                                 <th className="text-center py-3 px-4 font-bold text-slate-700">Kết quả</th>
@@ -174,7 +174,7 @@ export default function SubmissionsTableClient({ submissions, exam, strengths, w
                         </tbody>
                     </table>
                 ) : (
-                    <div className="p-8 text-center text-slate-400 h-full flex items-center justify-center">Chưa có học viên nào nộp bài.</div>
+                    <div className="p-8 text-center text-slate-400 h-full flex items-center justify-center">Chưa có học sinh nào nộp bài.</div>
                 )}
             </div>
 

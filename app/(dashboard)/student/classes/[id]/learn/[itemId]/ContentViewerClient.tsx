@@ -1,5 +1,6 @@
 "use client";
 
+import TrackedVideo from "@/components/student/TrackedVideo";
 import { useEffect, useState } from "react";
 import { FileText, Music, ClipboardList, MessageSquare, VideoIcon, Youtube, Download, CheckCircle, Clock, CheckSquare } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -111,57 +112,7 @@ export default function ContentViewerClient({
     };
 
     // Helper render video (YouTube/Vimeo embed hoặc HTML5 video)
-    const renderVideo = (url: string) => {
-        if (!url) return <div className="flex items-center justify-center w-full h-full text-slate-500">Chưa có Link Video.</div>;
-
-        const ytId = getYouTubeId(url);
-        if (ytId) {
-            return (
-                <iframe
-                    className="w-full h-full"
-                    src={`https://www.youtube.com/embed/${ytId}`}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    title="Video bài giảng"
-                />
-            );
-        }
-
-        // Vimeo support
-        const vimeoMatch = url.match(/vimeo\.com\/(\d+)/);
-        if (vimeoMatch) {
-            return (
-                <iframe
-                    className="w-full h-full"
-                    src={`https://player.vimeo.com/video/${vimeoMatch[1]}`}
-                    allow="autoplay; fullscreen; picture-in-picture"
-                    allowFullScreen
-                    title="Video bài giảng"
-                />
-            );
-        }
-
-        // HTML5 video for uploaded files or direct links
-        return (
-            <video
-                controls
-                className="w-full h-full object-contain"
-                src={url}
-                onEnded={async () => {
-                    // Auto-mark as completed when video finishes
-                    if (!isCompleted) {
-                        await markItemCompleted(classId, item.id);
-                        router.refresh();
-                    }
-                }}
-                onError={() => {
-                    console.error('Video load error:', url);
-                }}
-            >
-                Trình duyệt của bạn không hỗ trợ phát video.
-            </video>
-        );
-    };
+    const renderVideo = (url: string) => <TrackedVideo itemId={item.id} url={url} />;
 
     const renderContentByType = () => {
         switch (item.type) {
@@ -241,7 +192,7 @@ export default function ContentViewerClient({
                         <div className="bg-slate-50 p-6 rounded-xl flex flex-col items-center justify-center text-center">
                             <CheckCircle className="w-12 h-12 text-slate-300 mb-3" />
                             <h4 className="font-semibold text-slate-700">Khu vực Nộp bài</h4>
-                            <p className="text-sm text-slate-500 mb-4 max-w-sm">Chức năng upload file nộp bài cho học viên đang được phát triển.</p>
+                            <p className="text-sm text-slate-500 mb-4 max-w-sm">Chức năng upload file nộp bài cho học sinh đang được phát triển.</p>
                             <Button disabled className="bg-slate-800 text-white">
                                 Nộp bài (Coming Soon)
                             </Button>
@@ -317,7 +268,7 @@ export default function ContentViewerClient({
                 </Button>
 
                 <div className="flex gap-3">
-                    {item.type !== 'quiz' && (
+                    {item.type !== 'quiz' && item.type !== 'video' && (
                         <Button
                             className={`${isCompleted ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-emerald-600 hover:bg-emerald-700'} text-white font-semibold`}
                             disabled={isSubmitting}
@@ -338,11 +289,11 @@ export default function ContentViewerClient({
                                 }
                             }}
                         >
-                            {isSubmitting ? "Đang xử lý..." : isCompleted ? (nextItemId ? "Bài tiếp theo" : "Đã hoàn thành khóa học") : "Đánh dấu đã học & Đi tiếp"}
+                            {isSubmitting ? "Đang xử lý..." : isCompleted ? (nextItemId ? "Bài tiếp theo" : "Đã hoàn thành bài học") : "Đánh dấu đã học & Đi tiếp"}
                         </Button>
                     )}
 
-                    {item.type === 'quiz' && nextItemId && (
+                    {(item.type === 'quiz' || item.type === 'video') && nextItemId && (
                         <Button
                             variant="secondary"
                             onClick={() => router.push(`/student/classes/${classId}/learn/${nextItemId}`)}
@@ -350,7 +301,7 @@ export default function ContentViewerClient({
                             Bỏ qua & Bài tiếp theo
                         </Button>
                     )}
-                    {item.type === 'quiz' && !nextItemId && (
+                    {(item.type === 'quiz' || item.type === 'video') && !nextItemId && (
                         <Button
                             variant="secondary"
                             onClick={() => router.push(`/student/classes/${classId}`)}
@@ -385,7 +336,7 @@ function DiscussionWrapper({ itemId, classId }: { itemId: string; classId: strin
                     // Fallback
                     setUser({
                         id: session.user.id,
-                        full_name: session.user.email?.split('@')[0] || "Học viên",
+                        full_name: session.user.email?.split('@')[0] || "Học sinh",
                         role: 'student'
                     });
                 }

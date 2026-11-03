@@ -1,7 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, startTransition } from "react";
-import { submitExamAnswers } from "@/lib/actions/exam";
+import { useState, useEffect, useLayoutEffect, useCallback, useRef, startTransition } from "react";
+import { submitExamAnswers, beginExamAttempt } from "@/lib/actions/exam";
+import { saveExamDraftWithVersioning } from "@/lib/actions/submission-draft";
+import { saveLocalDraft, readLocalDraft, deleteLocalDraft } from "@/lib/learning/draft-store";
+import { answersSchema } from "@/lib/learning/grading";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
@@ -13,16 +16,24 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Play } from "lucide-react";
 import { useActivityTracker } from "@/hooks/useActivityTracker";
+import { isGradePublished, type StudentExam, type StudentSubmission } from "@/lib/modules/assessment/dto";
 
 export default function ExamTakingClient({
-    exam, classId, alreadySubmitted
+    exam, classId, alreadySubmitted, draftOwner
 }: {
-    exam: any;
+    exam: StudentExam;
     classId: string;
-    alreadySubmitted: any | null;
+    alreadySubmitted: StudentSubmission | null;
+    draftOwner: string;
 }) {
     const router = useRouter();
-    const questions = exam.questions || [];
+    const [questions, setQuestions] = useState(exam.questions || []);
+    const [attemptId, setAttemptId] = useState<string>();
+    const [expiresAt, setExpiresAt] = useState<string>();
+    const [draftMessage, setDraftMessage] = useState("");
+    const [draftConflict, setDraftConflict] = useState(false);
+    const draftVersion = useRef(0);
+    const savingDraft = useRef(false);
     const [answers, setAnswers] = useState<any[]>(
         alreadySubmitted?.answers || questions.map(() => ({ selectedOptionId: null, textAnswer: "" }))
     );
@@ -40,17 +51,20 @@ export default function ExamTakingClient({
     
     // Refs để tránh capture state trong các event listeners (fix lỗi tự động nộp bài bị 0đ)
     const answersRef = useRef(answers);
-    answersRef.current = answers;
     const timeLeftRef = useRef(timeLeft);
-    timeLeftRef.current = timeLeft;
     const startedAtRef = useRef(startedAt);
-    startedAtRef.current = startedAt;
+    useLayoutEffect(() => {
+        answersRef.current = answers;
+        timeLeftRef.current = timeLeft;
+        startedAtRef.current = startedAt;
+    }, [answers,timeLeft,startedAt]);
     const warningsRef = useRef(0);
 
     // === Activity Tracker: Theo dõi hành vi học sinh ===
     const tracker = useActivityTracker({
         contextType: "exam",
         contextId: exam.id,
+        attemptId,
         classId,
         enabled: hasStarted && !showResult,
     });
@@ -65,7 +79,7 @@ export default function ExamTakingClient({
         try {
             const elapsed = exam.duration_minutes * 60 - timeLeftRef.current;
             console.log("[ExamTakingClient] Submitting answers:", answersRef.current, "elapsed time:", elapsed);
-            const res = await submitExamAnswers(exam.id, classId, answersRef.current, startedAtRef.current, elapsed);
+            const res = await submitExamAnswers(exam.id, classId, answersRef.current, startedAtRef.current, elapsed, attemptId);
             if (res.error) {
                 toast.error(res.error);
                 setIsSubmitting(false);
@@ -75,9 +89,11 @@ export default function ExamTakingClient({
             }
             startTransition(() => {
                 setResult(res.data);
+                if(res.data?.questions) setQuestions(res.data.questions);
                 setShowResult(true);
             });
             toast.success("Nộp bài thành công!");
+            if (attemptId) await deleteLocalDraft(draftOwner, attemptId).catch(() => {});
 
             // Thoát fullscreen SAU khi submit thành công
             if (document.fullscreenElement) {
@@ -90,7 +106,7 @@ export default function ExamTakingClient({
                 fetch("/api/ai/behavior-analysis", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ classId, contextType: "exam", contextId: exam.id }),
+                    body: JSON.stringify({ classId, contextType: "exam", contextId: exam.id, attemptId }),
                 });
             } catch (e) { /* fire-and-forget */ }
         } catch (err: any) {
@@ -100,11 +116,11 @@ export default function ExamTakingClient({
             isSubmittingRef.current = false;
             bypassDetectionRef.current = false;
         }
-    }, [exam.id, classId, exam.duration_minutes, tracker]);
+    }, [exam.id, classId, exam.duration_minutes, tracker, attemptId, draftOwner]);
 
     // Ref để lưu trữ callback handleSubmit mới nhất, tránh capture stale closure trong event listeners
     const handleSubmitRef = useRef(handleSubmit);
-    handleSubmitRef.current = handleSubmit;
+    useLayoutEffect(() => { handleSubmitRef.current = handleSubmit; }, [handleSubmit]);
 
     // Strict Mode & Fullscreen: Detect tab switch / blur / exit fullscreen
     useEffect(() => {
@@ -138,7 +154,7 @@ export default function ExamTakingClient({
             // Cập nhật state để hiển thị trên UI cảnh báo
             setWarnings(newCount);
             
-            if (exam.strict_mode_limit !== null && newCount > exam.strict_mode_limit) {
+            if (exam.strict_mode_limit != null && newCount > exam.strict_mode_limit) {
                 // Auto submit - gọi bên ngoài state updater để tránh lỗi React render cycle
                 toast.error("Vượt quá số lần cảnh báo (" + newCount + "/" + exam.strict_mode_limit + "). Tự động nộp bài.");
                 handleSubmitRef.current(undefined, true);
@@ -171,14 +187,42 @@ export default function ExamTakingClient({
             return;
         }
         const interval = setInterval(() => {
-            setTimeLeft(prev => {
-                if (prev <= 1) { clearInterval(interval); return 0; }
-                return prev - 1;
-            });
+            setTimeLeft(Math.max(0, Math.ceil((Date.parse(expiresAt!) - Date.now()) / 1000)));
         }, 1000);
         return () => clearInterval(interval);
-    }, [timeLeft, showResult, hasStarted, startedAt]);
+    }, [timeLeft, showResult, hasStarted, startedAt, expiresAt]);
 
+    useEffect(() => {
+        if(!attemptId || showResult || draftConflict) return;
+        const timer = setInterval(async () => {
+            if(savingDraft.current || isSubmittingRef.current) return;
+            savingDraft.current=true;
+            try {
+                const response=await saveExamDraftWithVersioning({attemptId,answers:answersRef.current,clientVersion:draftVersion.current});
+                if(response.success && response.version !== undefined) {
+                    draftVersion.current=response.version;
+                    await saveLocalDraft({ owner:draftOwner, attemptId, baseVersion:response.version, answers:answersRef.current, savedAt:Date.now() }).catch(() => {});
+                }
+                if(response.code === "VERSION_CONFLICT") setDraftConflict(true);
+                setDraftMessage(response.error || "Đã lưu trên máy chủ");
+            } catch { setDraftMessage("Mất kết nối. Bản nháp trên thiết bị được giữ lại."); }
+            finally { savingDraft.current=false; }
+        },5000);
+        return ()=>clearInterval(timer);
+    },[attemptId,showResult,draftConflict,draftOwner]);
+    useEffect(() => {
+        if (!attemptId || showResult || draftConflict) return;
+        void saveLocalDraft({ owner:draftOwner, attemptId, baseVersion:draftVersion.current, answers, savedAt:Date.now() })
+            .catch(() => setDraftMessage("Chưa lưu được trên thiết bị. Giữ trang mở và kiểm tra kết nối."));
+    }, [answers, attemptId, showResult, draftOwner, draftConflict]);
+    const resolveConflict = async (keepLocal: boolean) => {
+        const response = await beginExamAttempt(exam.id);
+        if (!response.data || response.data.id !== attemptId) { toast.error(response.error || "Lượt làm bài đã thay đổi."); return; }
+        draftVersion.current = response.data.draft_version;
+        if (!keepLocal) setAnswers(response.data.draft_answers);
+        setDraftConflict(false);
+        setDraftMessage(keepLocal ? "Đã chọn bản trên thiết bị; đang chờ đồng bộ." : "Đã tải bản mới nhất trên máy chủ.");
+    };
     const selectOption = (qIdx: number, optionId: string) => {
         if (showResult) return;
         // Track câu trả lời cho behavior analysis
@@ -206,6 +250,7 @@ export default function ExamTakingClient({
 
     // === RESULT VIEW ===
     if (showResult && result) {
+        const pendingGrade = !isGradePublished(result.grading_status || result.submission?.grading_status);
         const score = result.score ?? result.submission?.score ?? 0;
         const total = result.totalPoints ?? result.total_points ?? exam.total_points ?? 0;
         const percent = total > 0 ? Math.round((score / total) * 100) : 0;
@@ -218,8 +263,8 @@ export default function ExamTakingClient({
                         <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4">
                             {passed ? <Trophy className="w-8 h-8" /> : <AlertTriangle className="w-8 h-8" />}
                         </div>
-                        <h1 className="text-3xl font-extrabold mb-1">{score}/{total}</h1>
-                        <p className="text-lg font-semibold opacity-90">{percent}% — {passed ? 'Đạt' : 'Chưa đạt'}</p>
+                        <h1 className="text-3xl font-extrabold mb-1">{pendingGrade ? "Chờ giáo viên duyệt" : `${score}/${total}`}</h1>
+                        <p className="text-lg font-semibold opacity-90">{pendingGrade ? "Đã nhận bài. Điểm tự luận chưa được công bố." : `${percent}% — ${passed ? "Đạt" : "Chưa đạt"}`}</p>
                         <p className="text-sm opacity-75 mt-2">{exam.title}</p>
                     </div>
 
@@ -232,6 +277,7 @@ export default function ExamTakingClient({
                     </div>
                 </div>
 
+                {draftMessage && <p role="status">{draftMessage}</p>}
                 {/* REVIEW QUESTIONS */}
                 <div className="space-y-4">
                     <h2 className="text-xl font-bold text-slate-800 mb-4 px-2 tracking-tight">Chi tiết bài làm</h2>
@@ -246,7 +292,7 @@ export default function ExamTakingClient({
                         }
 
                         // Determine borders/colors based on show_answers
-                        const highlightCorrectness = exam.show_answers !== false && q.type !== 'ESSAY';
+                        const highlightCorrectness = !pendingGrade && exam.show_answers !== false && q.type !== 'ESSAY';
                         const containerBorder = highlightCorrectness ? (isCorrectAns ? 'border-emerald-200' : 'border-rose-200') : 'border-slate-200';
                         const headerBg = highlightCorrectness ? (isCorrectAns ? 'bg-emerald-50 border-emerald-100/50' : 'bg-rose-50 border-rose-100/50') : 'bg-slate-50 border-slate-200';
 
@@ -365,7 +411,7 @@ export default function ExamTakingClient({
                         </h3>
                         <ul className="list-disc pl-5 text-sm text-blue-800 space-y-1.5 opacity-90">
                             <li>Bài kiểm tra sẽ mở trong <strong>chế độ Toàn màn hình (Fullscreen)</strong>.</li>
-                            <li>Nếu bạn thoát chế độ toàn màn hình, chuyển tab hoặc qua cửa sổ khác, hệ thống sẽ <strong>cảnh báo gian lận</strong>.</li>
+                            <li>Nếu bạn thoát chế độ toàn màn hình, chuyển tab hoặc qua cửa sổ khác, hệ thống sẽ <strong>ghi nhận chuyển khỏi bài làm</strong>.</li>
                             {exam.is_strict_mode && exam.strict_mode_limit && (
                                 <li>Quá <strong>{exam.strict_mode_limit}</strong> lần cảnh báo, bài sẽ tự động nộp.</li>
                             )}
@@ -376,8 +422,25 @@ export default function ExamTakingClient({
                     <Button 
                         onClick={async () => {
                             try {
-                                await document.documentElement.requestFullscreen();
-                                setStartedAt(new Date().toISOString());
+                                if (exam.is_strict_mode) await document.documentElement.requestFullscreen().catch(() => {});
+                                const response = await beginExamAttempt(exam.id);
+                                if (!response.data) { toast.error(response.error); return; }
+                                setAttemptId(response.data.id); setExpiresAt(response.data.expires_at);
+                                draftVersion.current = response.data.draft_version;
+                                setQuestions(response.data.questions);
+                                if (response.data.draft_answers.length) setAnswers(response.data.draft_answers);
+                                const local = await readLocalDraft(draftOwner, response.data.id).catch(() => null);
+                                if (local) {
+                                    const checked = answersSchema.safeParse(local.answers);
+                                    if (checked.success && checked.data.length <= response.data.questions.length) {
+                                        setAnswers(checked.data);
+                                        const conflict = local.baseVersion !== response.data.draft_version && JSON.stringify(checked.data) !== JSON.stringify(response.data.draft_answers);
+                                        setDraftConflict(conflict);
+                                        setDraftMessage(conflict ? "Bản trên thiết bị khác bản máy chủ. Hãy chọn bản cần tiếp tục." : "Đã khôi phục bản nháp trên thiết bị.");
+                                    }
+                                }
+                                setStartedAt(response.data.started_at);
+                                setTimeLeft(Math.max(0, Math.ceil((Date.parse(response.data.expires_at) - Date.now()) / 1000)));
                                 setHasStarted(true);
                                 // Track bắt đầu câu hỏi đầu tiên
                                 tracker.trackQuestionStart(0);
@@ -417,6 +480,14 @@ export default function ExamTakingClient({
             </div>
 
             {/* Questions */}
+                {draftMessage && <p role="status" className="mb-4 text-sm text-slate-600">{draftMessage}</p>}
+                {draftConflict && <div role="alert" className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm">
+                    <p className="mb-3 font-medium">Bản nháp đã thay đổi ở nơi khác. Tự động lưu đang tạm dừng.</p>
+                    <div className="flex flex-wrap gap-2">
+                        <Button variant="outline" onClick={() => void resolveConflict(false)}>Dùng bản máy chủ</Button>
+                        <Button variant="outline" onClick={() => void resolveConflict(true)}>Giữ bản trên thiết bị</Button>
+                    </div>
+                </div>}
             <div className="space-y-4">
                 {questions.map((q: any, qIdx: number) => (
                     <div key={q.id || qIdx} className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden hover:border-indigo-200 transition-colors">

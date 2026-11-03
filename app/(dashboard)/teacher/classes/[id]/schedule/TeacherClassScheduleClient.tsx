@@ -173,11 +173,11 @@ export default function TeacherClassScheduleClient({ classId, initialSessions }:
                                                             {session.description || "Chưa có mô tả nội dung."}
                                                         </div>
                                                         <div className="flex flex-wrap gap-2">
-                                                            <Button size="sm" variant="outline" onClick={() => handleEditSession(session)}>
+                                                            <Button size="sm" variant="outline" className="border-slate-200 text-slate-700 hover:bg-slate-50" onClick={() => handleEditSession(session)}>
                                                                 <Edit className="w-4 h-4 mr-1.5" /> Sửa nội dung
                                                             </Button>
                                                             <Link href={`/teacher/classes/${classId}/attendance?date=${session.session_date}`}>
-                                                                <Button size="sm" variant="secondary" className="bg-blue-50 text-blue-600 hover:bg-blue-100">
+                                                                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm">
                                                                     <List className="w-4 h-4 mr-1.5" /> Điểm danh
                                                                 </Button>
                                                             </Link>
@@ -204,7 +204,7 @@ export default function TeacherClassScheduleClient({ classId, initialSessions }:
                                         <div className="flex flex-col md:flex-row justify-between gap-4">
                                             <div className="flex-1">
                                                 <div className="flex items-center gap-3 mb-2">
-                                                    <span className="font-semibold text-indigo-600 text-sm bg-indigo-50 px-2 py-0.5 rounded">
+                                                    <span className="font-semibold text-emerald-700 text-sm bg-emerald-50 border border-emerald-200/60 px-2 py-0.5 rounded">
                                                         Buổi {session.session_number}
                                                     </span>
                                                     <span className="text-sm text-slate-500 flex items-center font-medium">
@@ -238,11 +238,11 @@ export default function TeacherClassScheduleClient({ classId, initialSessions }:
                                                     {status.icon} {status.label}
                                                 </Badge>
                                                 <div className="flex flex-col gap-2 w-full">
-                                                    <Button size="sm" variant="outline" className="w-full justify-start" onClick={() => handleEditSession(session)}>
+                                                    <Button size="sm" variant="outline" className="w-full justify-start border-slate-200 text-slate-700 hover:bg-slate-50" onClick={() => handleEditSession(session)}>
                                                         <Edit className="w-4 h-4 mr-2" /> Sửa nội dung
                                                     </Button>
                                                     <Link href={`/teacher/classes/${classId}/attendance?date=${session.session_date}`} className="w-full">
-                                                        <Button size="sm" variant="secondary" className="w-full justify-start bg-blue-50 text-blue-600 hover:bg-blue-100">
+                                                        <Button size="sm" className="w-full justify-start bg-emerald-600 hover:bg-emerald-700 text-white font-medium shadow-sm">
                                                             <List className="w-4 h-4 mr-2" /> Điểm danh
                                                         </Button>
                                                     </Link>

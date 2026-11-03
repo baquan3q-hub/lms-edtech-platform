@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import ContentViewerClient from "./ContentViewerClient";
 import RealtimeDiscussion from "@/components/shared/RealtimeDiscussion";
+import { requireResourceAccess } from "@/lib/auth/authorize";
+import { notFound } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +13,8 @@ export default async function StudentContentViewerPage({
 }) {
     const resolvedParams = await params;
     const { id: classId, itemId } = resolvedParams;
+    const access = await requireResourceAccess("course_items", itemId, "learn");
+    if (access.resource.class_id !== classId) notFound();
 
     const supabase = createAdminClient();
 
@@ -93,8 +97,8 @@ export default async function StudentContentViewerPage({
     return (
         <div className="h-full bg-white relative overflow-y-auto">
             <ContentViewerClient
-                item={item}
-                contentData={itemContent}
+                item={{ id:item.id,title:item.title,type:item.type,class_id:item.class_id }}
+                contentData={itemContent ? { content:itemContent.content,video_url:itemContent.video_url,file_url:itemContent.file_url,zoom_link:itemContent.zoom_link,deadline:itemContent.deadline,max_attempts:itemContent.max_attempts,min_score:itemContent.min_score,score_method:itemContent.score_method } : null}
                 classId={classId}
                 progress={currentProgress}
                 nextItemId={nextItemId}

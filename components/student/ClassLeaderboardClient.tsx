@@ -77,7 +77,7 @@ export default function ClassLeaderboardClient({ enrolledClasses, currentUserId 
                         // index 0 -> Rank 2
                         // index 1 -> Rank 1
                         // index 2 -> Rank 3
-                        let rank = index === 0 ? 2 : index === 1 ? 1 : 3;
+                        const rank = index === 0 ? 2 : index === 1 ? 1 : 3;
                         const isCurrentUsers = item.student_id === currentUserId;
                         
                         const heights = { 1: "h-32", 2: "h-24", 3: "h-20" };

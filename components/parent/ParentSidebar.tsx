@@ -9,11 +9,11 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const mainNavItems = [
-    { href: "/parent", label: "Dashboard", icon: LayoutDashboard },
+    { href: "/parent", label: "Tổng quan", icon: LayoutDashboard },
     { href: "/parent/schedule", label: "Lịch học", icon: CalendarDays },
     { href: "/parent/progress", label: "Điểm số & Tiến độ", icon: TrendingUp },
     { href: "/parent/notifications", label: "Thông báo", icon: Bell },
-    { href: "/parent/payments", label: "Thanh toán", icon: CreditCard },
+    // { href: "/parent/payments", label: "Thanh toán", icon: CreditCard }, // Ngoài scope pilot K12
     { href: "/parent/feedback", label: "Phản hồi", icon: MessageSquarePlus },
 ];
 
@@ -57,8 +57,8 @@ export default function ParentSidebar({ userName, userEmail, userId }: ParentSid
                     </div>
                     {!isCollapsed && (
                         <div className="overflow-hidden transition-all duration-300">
-                            <h2 className="text-sm font-bold text-slate-900 whitespace-nowrap">E-Learning</h2>
-                            <p className="text-[10px] text-slate-400 font-medium whitespace-nowrap">Parent Portal</p>
+                            <h2 className="text-sm font-bold text-slate-900 whitespace-nowrap">EduSchool</h2>
+                            <p className="text-[10px] text-slate-400 font-medium whitespace-nowrap">Cổng Phụ Huynh</p>
                         </div>
                     )}
                 </div>

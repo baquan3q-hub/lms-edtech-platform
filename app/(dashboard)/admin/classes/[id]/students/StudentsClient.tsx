@@ -111,7 +111,7 @@ export default function StudentsClient({ classId, enrollments, availableStudents
                     <div className="flex-1">
                         <Select value={selectedStudentId} onValueChange={setSelectedStudentId} disabled={loading || availableStudents.length === 0}>
                             <SelectTrigger className="w-full">
-                                <SelectValue placeholder={availableStudents.length === 0 ? "Tất cả học viên đã được thêm vào lớp" : "Chọn học viên..."}>
+                                <SelectValue placeholder={availableStudents.length === 0 ? "Tất cả học sinh đã được thêm vào lớp" : "Chọn học sinh..."}>
                                     {selectedStudentId ? availableStudents.find((s) => s.id === selectedStudentId)?.full_name : ""}
                                 </SelectValue>
                             </SelectTrigger>
@@ -167,14 +167,14 @@ export default function StudentsClient({ classId, enrollments, availableStudents
                     <div className="p-12 text-center text-slate-500">
                         <UserX className="w-12 h-12 mx-auto mb-3 text-slate-300" />
                         <p>Chưa có học sinh nào trong lớp này.</p>
-                        <p className="text-sm mt-1">Sử dụng công cụ phía trên để thêm học viên.</p>
+                        <p className="text-sm mt-1">Sử dụng công cụ phía trên để thêm học sinh.</p>
                     </div>
                 ) : (
                     <Table>
                         <TableHeader className="bg-slate-50">
                             <TableRow>
                                 <TableHead className="w-12 text-center">STT</TableHead>
-                                <TableHead>Học viên</TableHead>
+                                <TableHead>Học sinh</TableHead>
                                 <TableHead>Ngày tham gia</TableHead>
                                 <TableHead>Trạng thái</TableHead>
                                 <TableHead className="text-right">Thao tác</TableHead>

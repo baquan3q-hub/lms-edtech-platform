@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, BrainCircuit, Loader2, Play, RotateCcw } from "lucide-react";
+import { TrendingUp, FileText, Loader2, Play, RotateCcw } from "lucide-react";
 
 type ChartDatum = Record<string, string | number | boolean | null | undefined>;
 
@@ -31,11 +31,11 @@ export function AdminAiInsights({ attendanceData, gradesData, submissionData }: 
             const result = await response.json().catch(() => null);
 
             if (!response.ok || result?.error) {
-                setError(result?.error || "Không thể tạo phân tích AI. Vui lòng thử lại.");
+                setError(result?.error || "Không thể tạo phân tích số liệu. Vui lòng thử lại.");
                 return;
             }
 
-            setInsight(result?.data || "AI không trả về nội dung phân tích.");
+            setInsight(result?.data || "Hệ thống chưa có đủ dữ liệu để tổng hợp nhận định.");
         } catch (e: unknown) {
             setError(e instanceof Error ? e.message : "Lỗi không xác định.");
         } finally {
@@ -44,39 +44,34 @@ export function AdminAiInsights({ attendanceData, gradesData, submissionData }: 
     };
 
     return (
-        <div className="bg-white rounded-3xl p-6 relative overflow-hidden shadow-[0_2px_20px_rgb(0,0,0,0.02)] border border-indigo-50 mt-6 group">
-            {/* Vibe effects */}
-            <div className="absolute top-0 right-0 p-8 opacity-[0.03] group-hover:opacity-5 transition-opacity duration-500 pointer-events-none">
-                <BrainCircuit className="w-48 h-48 text-indigo-600" />
-            </div>
-            
+        <div className="bg-white rounded-3xl p-6 relative overflow-hidden shadow-sm border border-slate-200 mt-6">
             <div className="relative z-10 flex flex-col md:flex-row md:items-start md:justify-between gap-6">
                 <div className="max-w-xl">
                     <div className="flex items-center gap-2 mb-2">
-                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl border border-indigo-100">
-                            <Sparkles className="w-5 h-5" />
+                        <div className="p-2 bg-blue-50 text-blue-700 rounded-xl border border-blue-100">
+                            <TrendingUp className="w-5 h-5" />
                         </div>
-                        <h3 className="text-xl font-bold text-slate-900 tracking-tight">AI Advisor Insight</h3>
+                        <h3 className="text-xl font-bold text-slate-900 tracking-tight">Tổng Hợp & Đánh Giá Vận Hành</h3>
                     </div>
                     <p className="text-sm font-medium text-slate-500 mb-4">
-                        Assistant sẽ phân loại và phân tích số liệu từ Biểu đồ để đưa ra các lời khuyên Vận hành Hệ thống tối ưu nhất. Sử dụng Gemini 2.5 Flash.
+                        Phân tích tổng hợp số liệu từ chuyên cần, phổ điểm và tiến độ học tập để đưa ra các khuyến nghị điều hành trường học kịp thời.
                     </p>
                     
-                    {/* Nút chính - Luôn hiện khi không đang loading */}
+                    {/* Nút chính */}
                     {!loading && (
                         <button 
                             onClick={handleGenerate}
-                            className="inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-semibold relative overflow-hidden bg-indigo-600 text-white rounded-xl shadow-[0_4px_14px_0_rgb(79,70,229,0.39)] hover:shadow-[0_6px_20px_rgba(79,70,229,0.23)] hover:bg-indigo-700 transition-all duration-200"
+                            className="inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-semibold bg-blue-600 text-white rounded-xl shadow-sm hover:bg-blue-700 transition-colors"
                         >
                             {insight || error ? (
                                 <>
                                     <RotateCcw className="w-4 h-4" />
-                                    Phân tích lại
+                                    Cập nhật đánh giá
                                 </>
                             ) : (
                                 <>
-                                    <Play className="w-4 h-4 fill-current" />
-                                    Phân tích Dữ liệu ngay
+                                    <FileText className="w-4 h-4" />
+                                    Tổng hợp nhận định ngay
                                 </>
                             )}
                         </button>
@@ -85,15 +80,15 @@ export function AdminAiInsights({ attendanceData, gradesData, submissionData }: 
 
                 <div className="flex-1 w-full relative">
                     {(loading || insight || error) && (
-                        <div className="bg-slate-50 border border-slate-100 rounded-2xl p-5 min-h-[120px] w-full flex items-center relative z-20 shadow-inner">
+                        <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-5 min-h-[120px] w-full flex items-center relative z-20">
                             {loading ? (
-                                <div className="flex items-center gap-3 text-indigo-600 w-full justify-center">
+                                <div className="flex items-center gap-3 text-blue-700 w-full justify-center">
                                     <Loader2 className="w-5 h-5 animate-spin" />
-                                    <span className="text-sm font-semibold animate-pulse">SmartLife AI đang đọc Dữ liệu... Điều này mất vài giây.</span>
+                                    <span className="text-sm font-semibold">Hệ thống đang phân tích số liệu học vụ...</span>
                                 </div>
                             ) : error ? (
-                                <div className="text-rose-500 text-sm font-medium">
-                                    <span className="font-bold">Oops!</span> Lỗi AI: {error}
+                                <div className="text-rose-600 text-sm font-medium">
+                                    <span className="font-bold">Lỗi:</span> {error}
                                 </div>
                             ) : (
                                 <p className="text-slate-700 text-sm md:text-base leading-relaxed whitespace-pre-wrap font-medium">

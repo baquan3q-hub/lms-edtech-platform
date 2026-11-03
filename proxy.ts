@@ -47,33 +47,29 @@ export async function proxy(request: NextRequest) {
 
     // --- LOGIC 2: User đã đăng nhập ---
 
-    // Đọc role trực tiếp từ user_metadata để tối ưu hóa hiệu năng, loại bỏ hoàn toàn các truy vấn cơ sở dữ liệu đồng bộ
-    const role = user.user_metadata?.role || "student";
+    // BẢO MẬT: user_metadata do client tự ghi được qua supabase.auth.updateUser(),
+    // nên không được dùng để cấp quyền. Ở đây chỉ dùng để chọn hướng điều hướng
+    // cho trải nghiệm (tránh thêm 1 query DB vào mọi request). Quyền truy cập
+    // thực sự luôn được chốt lại ở layout/server action bằng vai trò trong
+    // bảng public.users — xem lib/auth/actor-context.ts và lib/auth/authorize.ts.
+    const routingHintRole = user.user_metadata?.role || "student";
 
-    // Nếu user đã login mà vào trang login/register → redirect về dashboard
+    // Nếu user đã login mà vào trang login/register → đưa về dashboard tương ứng
     if (PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
-        const dashboardPath = ROLE_ROUTES[role] || "/student";
+        const dashboardPath = ROLE_ROUTES[routingHintRole] || "/student";
         const url = request.nextUrl.clone();
         url.pathname = dashboardPath;
+        url.search = "";
         return NextResponse.redirect(url);
     }
 
-    // Kiểm tra phân quyền route theo role
-    const isDashboardRoute = Object.values(ROLE_ROUTES).some((route) =>
-        pathname.startsWith(route)
-    );
-
-    if (isDashboardRoute) {
-        const allowedPrefix = ROLE_ROUTES[role];
-
-        // Nếu user cố truy cập route không thuộc role mình → redirect về dashboard đúng
-        if (allowedPrefix && !pathname.startsWith(allowedPrefix)) {
-            const url = request.nextUrl.clone();
-            url.pathname = allowedPrefix;
-            return NextResponse.redirect(url);
-        }
-    }
-
+    // Việc chặn truy cập dashboard sai vai trò được xử lý tại layout của từng
+    // khu vực (app/(dashboard)/{admin,teacher,student,parent}/layout.tsx) vì
+    // chỉ ở đó mới đọc được vai trò thật từ bảng public.users.
+    //
+    // Middleware KHÔNG tự điều hướng chéo giữa các dashboard: nếu dựa vào
+    // routingHintRole (lấy từ user_metadata) thì một metadata bị sửa lệch so
+    // với vai trò thật sẽ tạo vòng lặp redirect vô hạn giữa middleware và layout.
     return supabaseResponse;
 }
 

@@ -4,6 +4,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import HomeworkSubmitClient from "./HomeworkSubmitClient";
+import { requireResourceAccess } from "@/lib/auth/authorize";
+import { toStudentHomeworkSubmission } from "@/lib/modules/assessment/homework-dto";
+import { notFound } from "next/navigation";
 
 export default async function StudentHomeworkPage({ params }: { params: Promise<{ id: string; hwId: string }> }) {
     const { id: classId, hwId } = await params;
@@ -11,6 +14,8 @@ export default async function StudentHomeworkPage({ params }: { params: Promise<
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) redirect("/login");
+    const access = await requireResourceAccess("homework", hwId, "read");
+    if (access.resource.class_id !== classId || access.role !== "student") notFound();
 
     const { data: homework, error } = await fetchHomeworkDetail(hwId);
 
@@ -34,5 +39,5 @@ export default async function StudentHomeworkPage({ params }: { params: Promise<
         .eq("student_id", user.id)
         .maybeSingle();
 
-    return <HomeworkSubmitClient homework={homework} existingSubmission={submission} classId={classId} />;
+    return <HomeworkSubmitClient homework={homework} existingSubmission={submission ? toStudentHomeworkSubmission(submission) : null} classId={classId} draftOwner={`${access.schoolId}:${user.id}`} />;
 }

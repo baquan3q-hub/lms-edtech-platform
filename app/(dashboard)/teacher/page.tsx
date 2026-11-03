@@ -1,20 +1,15 @@
 import {
-    LayoutDashboard,
     BookOpen,
     Users,
     TrendingUp,
-    ArrowRight,
-    Calendar,
     MessageSquare,
     ClipboardList,
     Clock,
     AlertCircle,
     Bell,
-    ShieldAlert,
-    ShieldCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { fetchTeacherClasses, fetchTeacherStats, fetchTeacherNotifications } from "./actions";
 import { fetchTasksStatus } from "./progress-actions";
 import { Badge } from "@/components/ui/badge";
@@ -26,28 +21,52 @@ import { fetchTeacherFeedback } from "@/lib/actions/feedback";
 import { fetchTeacherGeneralAnnouncements } from "@/lib/actions/announcement";
 import ExpandableContentClient from "@/components/shared/ExpandableContentClient";
 
-export default async function TeacherDashboardPage() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+import { Suspense } from "react";
 
+export default async function TeacherDashboardPage() {
+    const user = await getCurrentUser();
     if (!user) return null;
 
-    const [
-        { data: statsData },
-        { data: classesData },
-        { data: notifications },
-        tasksObj,
-        { data: feedbackData },
-        { data: sentAnnouncements }
-    ] = await Promise.all([
-        fetchTeacherStats(user.id),
-        fetchTeacherClasses(user.id),
-        fetchTeacherNotifications(user.id),
-        fetchTasksStatus(user.id),
-        fetchTeacherFeedback({ status: "pending" }),
-        fetchTeacherGeneralAnnouncements()
-    ]);
+    return (
+        <div className="space-y-8 pb-12 max-w-7xl mx-auto">
+            <Suspense fallback={<SectionPlaceholder label="Thống kê lớp học" />}>
+                <TeacherStats teacherId={user.id} />
+            </Suspense>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div className="lg:col-span-2 space-y-6">
+                    <Suspense fallback={<SectionPlaceholder label="Lịch dạy hôm nay" />}>
+                        <TeacherSchedule teacherId={user.id} />
+                    </Suspense>
+                    <Suspense fallback={<SectionPlaceholder label="Thông báo" />}>
+                        <TeacherNotices teacherId={user.id} />
+                    </Suspense>
+                    <Suspense fallback={<SectionPlaceholder label="Phản hồi chờ xử lý" />}>
+                        <TeacherFeedback />
+                    </Suspense>
+                </div>
+                <div className="space-y-6">
+                    <Suspense fallback={<SectionPlaceholder label="Tiến độ bài tập" />}>
+                        <TeacherProgress teacherId={user.id} />
+                    </Suspense>
+                </div>
+            </div>
+        </div>
+    );
+}
 
+function SectionPlaceholder({ label }: { label: string }) {
+    return (
+        <div role="status" aria-label={`Đang tải ${label.toLowerCase()}`} className="rounded-3xl border border-slate-100 bg-white p-6 space-y-4">
+            <h3 className="text-base font-semibold text-slate-700">{label}</h3>
+            <div className="h-5 w-2/3 rounded bg-slate-100 animate-pulse" />
+            <div className="h-5 w-1/2 rounded bg-slate-100 animate-pulse" />
+        </div>
+    );
+}
+
+async function TeacherStats({ teacherId }: { teacherId: string }) {
+    const { data: statsData, error } = await fetchTeacherStats(teacherId);
+    if (error) return <SectionUnavailable label="thống kê lớp học" />;
     const stats = [
         {
             title: "Lớp phụ trách",
@@ -83,6 +102,37 @@ export default async function TeacherDashboardPage() {
         },
     ];
 
+
+    return (
+        <>
+            {/* Stats Grid - Minimalist Bento */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {stats.map((stat) => (
+                    <div
+                        key={stat.title}
+                        className={`relative overflow-hidden rounded-3xl border ${stat.border} bg-white p-6 shadow-[0_2px_20px_rgb(0,0,0,0.02)] hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group`}
+                    >
+                        <div className="flex flex-col gap-4">
+                            <div className={`w-12 h-12 rounded-2xl ${stat.bg} ${stat.color} flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
+                                <stat.icon className="w-6 h-6" strokeWidth={2.5} />
+                            </div>
+                            <div>
+                                <p className="text-4xl font-black text-slate-900 tracking-tight mb-1">{stat.value}</p>
+                                <p className="text-sm font-semibold text-slate-500">{stat.title}</p>
+                            </div>
+                        </div>
+                        {/* Decorative background element */}
+                        <div className={`absolute -right-6 -bottom-6 w-24 h-24 rounded-full ${stat.bg} opacity-50 blur-2xl group-hover:blur-3xl transition-all duration-500`}></div>
+                    </div>
+                ))}
+            </div>
+
+        </>
+    );
+}
+
+async function TeacherSchedule({ teacherId }: { teacherId: string }) {
+    const { data: classesData } = await fetchTeacherClasses(teacherId);
     // Map JS `getDay()` (0=Sun, 1=Mon) to our DB schema (1=Mon, ..., 7=Sun)
     const jsDay = new Date().getDay();
     const todayDb = jsDay === 0 ? 7 : jsDay;
@@ -114,230 +164,221 @@ export default async function TeacherDashboardPage() {
         return "—";
     };
 
+
     return (
-        <div className="space-y-8 pb-12 animate-in fade-in zoom-in-95 duration-500 max-w-7xl mx-auto">
-
-
-            {/* Stats Grid - Minimalist Bento */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {stats.map((stat) => (
-                    <div
-                        key={stat.title}
-                        className={`relative overflow-hidden rounded-3xl border ${stat.border} bg-white p-6 shadow-[0_2px_20px_rgb(0,0,0,0.02)] hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group`}
-                    >
-                        <div className="flex flex-col gap-4">
-                            <div className={`w-12 h-12 rounded-2xl ${stat.bg} ${stat.color} flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
-                                <stat.icon className="w-6 h-6" strokeWidth={2.5} />
-                            </div>
-                            <div>
-                                <p className="text-4xl font-black text-slate-900 tracking-tight mb-1">{stat.value}</p>
-                                <p className="text-sm font-semibold text-slate-500">{stat.title}</p>
-                            </div>
-                        </div>
-                        {/* Decorative background element */}
-                        <div className={`absolute -right-6 -bottom-6 w-24 h-24 rounded-full ${stat.bg} opacity-50 blur-2xl group-hover:blur-3xl transition-all duration-500`}></div>
-                    </div>
-                ))}
+        <>
+            {/* KHỐI 1: Lịch dạy */}
+            <div className="flex items-center justify-between">
+                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <Clock className="w-5 h-5 text-slate-400" />
+                    Lịch dạy Hôm nay
+                </h3>
+                <Link href="/teacher/classes" className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors">
+                    Tất cả lớp học
+                </Link>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Cột chính (Rộng 2/3) */}
-                <div className="lg:col-span-2 space-y-6">
-                    {/* KHỐI 1: Lịch dạy */}
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                            <Clock className="w-5 h-5 text-slate-400" />
-                            Lịch dạy Hôm nay
-                        </h3>
-                        <Link href="/teacher/classes" className="text-sm font-medium text-blue-600 hover:text-blue-700 transition-colors">
-                            Tất cả lớp học
-                        </Link>
+            <div className="bg-white rounded-3xl border border-slate-100 shadow-[0_2px_20px_rgb(0,0,0,0.02)] overflow-hidden mb-8">
+                {!todayClasses || todayClasses.length === 0 ? (
+                    <div className="p-12 text-center flex flex-col items-center justify-center">
+                        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                            <BookOpen className="w-8 h-8 text-slate-300" />
+                        </div>
+                        <p className="text-slate-600 font-semibold text-lg">Hôm nay không có lịch dạy.</p>
+                        <p className="text-slate-400 mt-1 max-w-sm">Dành thời gian này để chuẩn bị bài giảng hoặc chấm dứt các bài tập còn tồn đọng bạn nhé!</p>
                     </div>
+                ) : (
+                    <div className="flex flex-col">
+                        {todayClasses.map((cls: any, index: number) => {
+                            const roomName = getRoomName(cls.schedules);
+                            const timeStr = formatSchedule(cls.schedules);
+                            const enrolledCount = cls.enrollments?.[0]?.count || 0;
 
-                    <div className="bg-white rounded-3xl border border-slate-100 shadow-[0_2px_20px_rgb(0,0,0,0.02)] overflow-hidden mb-8">
-                        {!todayClasses || todayClasses.length === 0 ? (
-                            <div className="p-12 text-center flex flex-col items-center justify-center">
-                                <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mb-4">
-                                    <BookOpen className="w-8 h-8 text-slate-300" />
-                                </div>
-                                <p className="text-slate-600 font-semibold text-lg">Hôm nay không có lịch dạy.</p>
-                                <p className="text-slate-400 mt-1 max-w-sm">Dành thời gian này để chuẩn bị bài giảng hoặc chấm dứt các bài tập còn tồn đọng bạn nhé!</p>
-                            </div>
-                        ) : (
-                            <div className="flex flex-col">
-                                {todayClasses.map((cls: any, index: number) => {
-                                    const roomName = getRoomName(cls.schedules);
-                                    const timeStr = formatSchedule(cls.schedules);
-                                    const enrolledCount = cls.enrollments?.[0]?.count || 0;
-
-                                    return (
-                                        <div key={cls.id} className={`p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-6 transition-colors hover:bg-slate-50/80 ${index !== todayClasses.length - 1 ? 'border-b border-slate-100' : ''}`}>
-                                            <div className="flex items-center gap-5">
-                                                <div className="hidden sm:flex flex-col items-center justify-center w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl font-bold border border-blue-100 flex-shrink-0">
-                                                    <span className="text-xs uppercase opacity-70 tracking-widest">Phòng</span>
-                                                    <span className="text-lg leading-tight text-center">{roomName.replace("Phòng ","")}</span>
+                            return (
+                                <div key={cls.id} className={`p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-6 transition-colors hover:bg-slate-50/80 ${index !== todayClasses.length - 1 ? 'border-b border-slate-100' : ''}`}>
+                                    <div className="flex items-center gap-5">
+                                        <div className="hidden sm:flex flex-col items-center justify-center w-16 h-16 bg-blue-50 text-blue-600 rounded-2xl font-bold border border-blue-100 flex-shrink-0">
+                                            <span className="text-xs uppercase opacity-70 tracking-widest">Phòng</span>
+                                            <span className="text-lg leading-tight text-center">{roomName.replace("Phòng ","")}</span>
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-3 mb-1">
+                                                <h4 className="font-bold text-slate-900 text-lg group-hover:text-blue-600 transition-colors line-clamp-1">
+                                                    {cls.name ? `${cls.name} - ` : ""}{cls.course?.name || "Lớp học"}
+                                                </h4>
+                                                <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-none font-semibold whitespace-nowrap">
+                                                    {timeStr}
+                                                </Badge>
+                                            </div>
+                                            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-500 font-medium mt-2">
+                                                <div className="flex items-center gap-1.5">
+                                                    <Users className="w-4 h-4 text-slate-400" />
+                                                    <span>Sĩ số: {enrolledCount} học sinh</span>
                                                 </div>
-                                                <div>
-                                                    <div className="flex items-center gap-3 mb-1">
-                                                        <h4 className="font-bold text-slate-900 text-lg group-hover:text-blue-600 transition-colors line-clamp-1">
-                                                            {cls.name ? `${cls.name} - ` : ""}{cls.course?.name || "Lớp học"}
-                                                        </h4>
-                                                        <Badge variant="secondary" className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border-none font-semibold whitespace-nowrap">
-                                                            {timeStr}
-                                                        </Badge>
-                                                    </div>
-                                                    <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-slate-500 font-medium mt-2">
-                                                        <div className="flex items-center gap-1.5">
-                                                            <Users className="w-4 h-4 text-slate-400" />
-                                                            <span>Sĩ số: {enrolledCount} học sinh</span>
-                                                        </div>
-                                                        <div className="sm:hidden flex items-center gap-1.5">
-                                                            <BookOpen className="w-4 h-4 text-slate-400" />
-                                                            <span>Phòng: {roomName}</span>
-                                                        </div>
-                                                    </div>
+                                                <div className="sm:hidden flex items-center gap-1.5">
+                                                    <BookOpen className="w-4 h-4 text-slate-400" />
+                                                    <span>Phòng: {roomName}</span>
                                                 </div>
                                             </div>
-                                            <div className="flex gap-2 w-full sm:w-auto shrink-0">
-                                                <Button variant="outline" className="w-full sm:w-auto rounded-xl border-slate-200 text-slate-600 hover:text-slate-900 font-semibold" asChild>
-                                                    <Link href={`/teacher/classes/${cls.id}`}>
-                                                        Chi tiết
-                                                    </Link>
-                                                </Button>
-                                                <Button className="w-full sm:w-auto rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold" asChild>
-                                                    <Link href={`/teacher/classes/${cls.id}?tab=attendance`}>
-                                                        Điểm danh
-                                                    </Link>
-                                                </Button>
-                                            </div>
                                         </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-
-                    {/* KHỐI 2: Thông báo Dời vào đây */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8">
-                        {/* Cột Hệ thống */}
-                        <div>
-                            <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2 mb-4">
-                                <AlertCircle className="w-5 h-5 text-slate-400" />
-                                Thông báo hệ thống
-                            </h3>
-
-                            <div className="bg-white rounded-3xl border border-slate-100 shadow-[0_2px_20px_rgb(0,0,0,0.02)] p-2 h-[350px] overflow-y-auto">
-                                <div className="flex flex-col">
-                                    {(!notifications || notifications.length === 0) ? (
-                                        <div className="p-8 text-center flex flex-col items-center">
-                                            <Bell className="w-8 h-8 text-slate-200 mb-2" />
-                                            <p className="text-sm font-medium text-slate-400">Bạn chưa có thông báo nào</p>
-                                        </div>
-                                    ) : (
-                                        notifications.map((noti: any) => (
-                                            <ExpandableContentClient
-                                                key={noti.id}
-                                                icon={<Bell className="w-5 h-5" />}
-                                                title={noti.title}
-                                                content={noti.content || noti.message}
-                                                isUnread={!noti.read}
-                                                detailUrl={noti.link}
-                                                timestamp={formatDistanceToNow(new Date(noti.created_at), { addSuffix: true, locale: vi })}
-                                            />
-                                        ))
-                                    )}
+                                    </div>
+                                    <div className="flex gap-2 w-full sm:w-auto shrink-0">
+                                        <Button variant="outline" className="w-full sm:w-auto rounded-xl border-slate-200 text-slate-600 hover:text-slate-900 font-semibold" asChild>
+                                            <Link href={`/teacher/classes/${cls.id}`}>
+                                                Chi tiết
+                                            </Link>
+                                        </Button>
+                                        <Button className="w-full sm:w-auto rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-semibold" asChild>
+                                            <Link href={`/teacher/classes/${cls.id}?tab=attendance`}>
+                                                Điểm danh
+                                            </Link>
+                                        </Button>
+                                    </div>
                                 </div>
-                            </div>
-                        </div>
-
-                        {/* Cột Thông báo chung */}
-                        <div>
-                            <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2 mb-4">
-                                <Bell className="w-5 h-5 text-amber-500" />
-                                Thông báo chung
-                            </h3>
-
-                            <div className="bg-white rounded-3xl border border-slate-100 shadow-[0_2px_20px_rgb(0,0,0,0.02)] p-4 h-[350px] overflow-y-auto">
-                                <div className="flex flex-col gap-3">
-                                    {(!sentAnnouncements || sentAnnouncements.length === 0) ? (
-                                        <div className="p-8 text-center flex flex-col items-center">
-                                            <Bell className="w-8 h-8 text-slate-200 mb-2" />
-                                            <p className="text-sm font-medium text-slate-400">Chưa có thông báo chung nào</p>
-                                        </div>
-                                    ) : (
-                                        sentAnnouncements.map((ann: any) => (
-                                            <ExpandableContentClient
-                                                key={ann.id}
-                                                className="border border-amber-100 bg-amber-50/30"
-                                                icon={<Bell className="w-5 h-5 text-amber-600" />}
-                                                title={ann.title}
-                                                content={ann.content}
-                                                detailUrl="/teacher/notifications"
-                                                headerAction={
-                                                    <Badge variant="outline" className="text-[10px] bg-white border-amber-200 text-amber-600 px-1 py-0 shadow-sm">
-                                                        {ann.teacher?.full_name || "Hệ thống"}
-                                                    </Badge>
-                                                }
-                                                timestamp={formatDistanceToNow(new Date(ann.created_at), { addSuffix: true, locale: vi })}
-                                            />
-                                        ))
-                                    )}
-                                </div>
-                            </div>
-                        </div>
+                            );
+                        })}
                     </div>
+                )}
+            </div>
 
-                    {/* KHỐI 3: Ý kiến & Phản hồi (Mới thêm) */}
-                    <div className="flex items-center justify-between mt-8">
-                        <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                            <MessageSquare className="w-5 h-5 text-violet-400" />
-                            Phản hồi chờ xử lý
-                        </h3>
-                        <Link href="/teacher/feedback" className="text-sm font-medium text-violet-600 hover:text-violet-700 transition-colors">
-                            Xem tất cả
-                        </Link>
-                    </div>
+        </>
+    );
+}
 
-                    <div className="bg-white rounded-3xl border border-slate-100 shadow-[0_2px_20px_rgb(0,0,0,0.02)] p-2">
+async function TeacherNotices({ teacherId }: { teacherId: string }) {
+    const [{ data: notifications }, { data: sentAnnouncements }] = await Promise.all([
+        fetchTeacherNotifications(teacherId), fetchTeacherGeneralAnnouncements(),
+    ]);
+    return (
+        <>
+            {/* KHỐI 2: Thông báo Dời vào đây */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-8">
+                {/* Cột Hệ thống */}
+                <div>
+                    <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2 mb-4">
+                        <AlertCircle className="w-5 h-5 text-slate-400" />
+                        Thông báo hệ thống
+                    </h3>
+
+                    <div className="bg-white rounded-3xl border border-slate-100 shadow-[0_2px_20px_rgb(0,0,0,0.02)] p-2 h-[350px] overflow-y-auto">
                         <div className="flex flex-col">
-                            {(!feedbackData?.items || feedbackData.items.length === 0) ? (
+                            {(!notifications || notifications.length === 0) ? (
                                 <div className="p-8 text-center flex flex-col items-center">
-                                    <MessageSquare className="w-8 h-8 text-slate-200 mb-2" />
-                                    <p className="text-sm font-medium text-slate-400">Không có phản hồi nào đang chờ xử lý</p>
+                                    <Bell className="w-8 h-8 text-slate-200 mb-2" />
+                                    <p className="text-sm font-medium text-slate-400">Bạn chưa có thông báo nào</p>
                                 </div>
                             ) : (
-                                feedbackData.items.slice(0, 3).map((fb: any) => {
-                                    const userInfo = Array.isArray(fb.user) ? fb.user[0] : fb.user;
-                                    return (
-                                        <div key={fb.id} className="p-4 hover:bg-slate-50 rounded-2xl transition-colors flex gap-4 cursor-pointer">
-                                            <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-amber-50 text-amber-500">
-                                                <MessageSquare className="w-5 h-5" />
-                                            </div>
-                                            <div>
-                                                <h4 className="text-sm font-bold text-slate-900">{fb.title}</h4>
-                                                <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{fb.content}</p>
-                                                <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-400">
-                                                    <span>👤 {userInfo?.full_name || "Ẩn danh"}</span>
-                                                    <span>📅 {formatDistanceToNow(new Date(fb.created_at), { addSuffix: true, locale: vi })}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    );
-                                })
+                                notifications.map((noti: any) => (
+                                    <ExpandableContentClient
+                                        key={noti.id}
+                                        icon={<Bell className="w-5 h-5" />}
+                                        title={noti.title}
+                                        content={noti.content || noti.message}
+                                        isUnread={!noti.read}
+                                        detailUrl={noti.link}
+                                        timestamp={formatDistanceToNow(new Date(noti.created_at), { addSuffix: true, locale: vi })}
+                                    />
+                                ))
                             )}
                         </div>
                     </div>
                 </div>
 
-                {/* Cột Phụ (Rộng 1/3) */}
-                <div className="space-y-6">
-                    {/* Tiến độ lớp học Alerts + Pie Chart */}
-                    <StudentProgressAlerts 
-                        tasks={tasksObj.tasks || []} 
-                    />
+                {/* Cột Thông báo chung */}
+                <div>
+                    <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2 mb-4">
+                        <Bell className="w-5 h-5 text-amber-500" />
+                        Thông báo chung
+                    </h3>
+
+                    <div className="bg-white rounded-3xl border border-slate-100 shadow-[0_2px_20px_rgb(0,0,0,0.02)] p-4 h-[350px] overflow-y-auto">
+                        <div className="flex flex-col gap-3">
+                            {(!sentAnnouncements || sentAnnouncements.length === 0) ? (
+                                <div className="p-8 text-center flex flex-col items-center">
+                                    <Bell className="w-8 h-8 text-slate-200 mb-2" />
+                                    <p className="text-sm font-medium text-slate-400">Chưa có thông báo chung nào</p>
+                                </div>
+                            ) : (
+                                sentAnnouncements.map((ann: any) => (
+                                    <ExpandableContentClient
+                                        key={ann.id}
+                                        className="border border-amber-100 bg-amber-50/30"
+                                        icon={<Bell className="w-5 h-5 text-amber-600" />}
+                                        title={ann.title}
+                                        content={ann.content}
+                                        detailUrl="/teacher/notifications"
+                                        headerAction={
+                                            <Badge variant="outline" className="text-[10px] bg-white border-amber-200 text-amber-600 px-1 py-0 shadow-sm">
+                                                {ann.teacher?.full_name || "Hệ thống"}
+                                            </Badge>
+                                        }
+                                        timestamp={formatDistanceToNow(new Date(ann.created_at), { addSuffix: true, locale: vi })}
+                                    />
+                                ))
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
-        </div>
+
+        </>
     );
 }
 
+async function TeacherFeedback() {
+    const { data: feedbackData } = await fetchTeacherFeedback({ status: "pending" });
+    return (
+        <>
+            {/* KHỐI 3: Ý kiến & Phản hồi (Mới thêm) */}
+            <div className="flex items-center justify-between mt-8">
+                <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-violet-400" />
+                    Phản hồi chờ xử lý
+                </h3>
+                <Link href="/teacher/feedback" className="text-sm font-medium text-violet-600 hover:text-violet-700 transition-colors">
+                    Xem tất cả
+                </Link>
+            </div>
+
+            <div className="bg-white rounded-3xl border border-slate-100 shadow-[0_2px_20px_rgb(0,0,0,0.02)] p-2">
+                <div className="flex flex-col">
+                    {(!feedbackData?.items || feedbackData.items.length === 0) ? (
+                        <div className="p-8 text-center flex flex-col items-center">
+                            <MessageSquare className="w-8 h-8 text-slate-200 mb-2" />
+                            <p className="text-sm font-medium text-slate-400">Không có phản hồi nào đang chờ xử lý</p>
+                        </div>
+                    ) : (
+                        feedbackData.items.slice(0, 3).map((fb: any) => {
+                            const userInfo = Array.isArray(fb.user) ? fb.user[0] : fb.user;
+                            return (
+                                <div key={fb.id} className="p-4 hover:bg-slate-50 rounded-2xl transition-colors flex gap-4 cursor-pointer">
+                                    <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-amber-50 text-amber-500">
+                                        <MessageSquare className="w-5 h-5" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-bold text-slate-900">{fb.title}</h4>
+                                        <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{fb.content}</p>
+                                        <div className="flex items-center gap-3 mt-1.5 text-[10px] text-slate-400">
+                                            <span>👤 {userInfo?.full_name || "Ẩn danh"}</span>
+                                            <span>📅 {formatDistanceToNow(new Date(fb.created_at), { addSuffix: true, locale: vi })}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            </div>
+        </>
+    );
+}
+
+async function TeacherProgress({ teacherId }: { teacherId: string }) {
+    const tasksObj = await fetchTasksStatus(teacherId);
+    if (tasksObj.error) return <SectionUnavailable label="tiến độ bài tập" />;
+    return <StudentProgressAlerts tasks={tasksObj.tasks || []} />;
+}
+
+function SectionUnavailable({ label }: { label: string }) {
+    return <p role="alert" className="rounded-3xl border border-amber-100 bg-amber-50 p-6 text-sm text-amber-800">Chưa tải được {label}. Vui lòng tải lại trang.</p>;
+}

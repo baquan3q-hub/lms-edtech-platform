@@ -71,7 +71,7 @@ export default function ManualGradingModal({
                         Chấm bài Tự luận
                     </DialogTitle>
                     <DialogDescription className="text-indigo-100 font-medium opacity-90">
-                        Học viên: {studentName || "Ẩn danh"}
+                        Học sinh: {studentName || "Ẩn danh"}
                     </DialogDescription>
                 </DialogHeader>
 

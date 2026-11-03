@@ -17,10 +17,6 @@ import { vi } from "date-fns/locale";
 import { Progress } from "@/components/ui/progress";
 import { createClient } from "@/lib/supabase/client";
 import { formatKnowledgeGap } from "@/lib/utils";
-import ReactMarkdown from "react-markdown";
-import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
-import "katex/dist/katex.min.css";
 import ExpandableContentClient from "@/components/shared/ExpandableContentClient";
 import ParentMobileDashboard from "@/components/parent/ParentMobileDashboard";
 import { InstallBanner } from "@/components/shared/InstallBanner";
@@ -247,9 +243,9 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                         <TrendingUp className="w-5 h-5 mr-2 text-emerald-500 group-hover:scale-110 transition-transform" /> Điểm số
                     </Button>
                 </Link>
-                <Link href="/parent/payments">
+                <Link href="/parent/notifications">
                     <Button variant="outline" className="w-full h-14 rounded-2xl bg-white border-slate-200 hover:border-blue-300 hover:bg-blue-50 text-slate-700 font-bold shadow-sm group">
-                        <CreditCard className="w-5 h-5 mr-2 text-blue-500 group-hover:scale-110 transition-transform" /> Học phí
+                        <Bell className="w-5 h-5 mr-2 text-blue-500 group-hover:scale-110 transition-transform" /> Thông báo
                     </Button>
                 </Link>
                 <Link href="/parent/schedule">
@@ -432,7 +428,7 @@ export default function ParentDashboardClient({ students }: { students: StudentI
                             </div>
                         )}
 
-                        {/* Thông báo trung tâm/lớp — Xem chi tiết ngay trên trang */}
+                        {/* Thông báo nhà trường/lớp — Xem chi tiết ngay trên trang */}
                         <div className="bg-white rounded-2xl border border-blue-200 shadow-sm overflow-hidden flex-1">
                             <div className="p-4 border-b border-blue-100 flex items-center justify-between">
                                 <h3 className="font-bold text-blue-800 flex items-center gap-2 text-base">

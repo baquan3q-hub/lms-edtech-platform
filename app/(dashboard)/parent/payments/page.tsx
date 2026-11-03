@@ -27,7 +27,7 @@ interface Invoice {
   users: { full_name: string } | null
 }
 
-// Thông tin chuyển khoản QR — CẤU HÌNH THEO TRUNG TÂM
+// Thông tin chuyển khoản QR — CẤU HÌNH THEO NHÀ TRƯỜNG
 const BANK_INFO = {
   bankId: 'VCB',           // Vietcombank
   accountNo: '1042378908', // Số tài khoản nhận tiền

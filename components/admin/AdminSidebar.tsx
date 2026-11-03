@@ -18,7 +18,10 @@ import {
     BarChart3,
     Bell,
     ClipboardList,
-    Activity
+    Activity,
+    Building2,
+    ShieldCheck,
+    Crown,
 } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -27,62 +30,70 @@ import { Separator } from "@/components/ui/separator";
 
 export const sidebarGroups = [
     {
-        name: "Hệ Thống",
+        name: "Quản Trị Chung",
         items: [
-            { title: "Tổng quan", href: "/admin", icon: LayoutDashboard },
-            { title: "Quản lý Người dùng", href: "/admin/users", icon: Users },
+            { title: "Bảng điều khiển", href: "/admin", icon: LayoutDashboard },
+            { title: "Hồ sơ & Danh bạ", href: "/admin/users", icon: Users },
+            { title: "Thu & Đóng học phí", href: "/admin/finance", icon: DollarSign },
         ]
     },
     {
-        name: "Học Thuật & Vận Hành",
+        name: "Super Admin Platform",
         items: [
-            { title: "Quản lý Khóa học", href: "/admin/courses", icon: BookOpen },
-            { title: "Quản lý Lớp học", href: "/admin/classes", icon: School },
+            { title: "Bảng Quản Trị Nền Tảng", href: "/super-admin", icon: Crown },
+            { title: "Dữ Liệu Trường & API", href: "/super-admin/schools", icon: Building2 },
+        ]
+    },
+    {
+        name: "Học Vụ & Vận Hành",
+        items: [
+            { title: "Quản lý Khối & Lớp", href: "/admin/classes", icon: School },
             { title: "Quản lý Phòng học", href: "/admin/rooms", icon: MapPin },
-            { title: "Quản lý Điểm danh", href: "/admin/attendance", icon: ClipboardCheck },
-            { title: "Quản lý Điểm số", href: "/admin/grades", icon: BarChart3 },
-            { title: "Hành vi Học tập", href: "/admin/behavior", icon: Activity },
+            { title: "Chuyên cần & Nghỉ phép", href: "/admin/attendance", icon: ClipboardCheck },
+            { title: "Sổ điểm & Học lực", href: "/admin/grades", icon: BarChart3 },
+            { title: "Nề nếp & Rèn luyện", href: "/admin/behavior", icon: Activity },
         ]
     },
     {
-        name: "Giao Tiếp & Hành Chính",
+        name: "Cầu Nối Gia Đình & Hành Chính",
         items: [
-            { title: "Thông báo", href: "/admin/announcements", icon: Bell },
-            { title: "Khảo sát", href: "/admin/surveys", icon: ClipboardList },
-            { title: "Phản hồi & Hỗ trợ", href: "/admin/feedback", icon: MessageSquare },
+            { title: "Thông báo trường", href: "/admin/announcements", icon: Bell },
+            { title: "Khảo sát ý kiến", href: "/admin/surveys", icon: ClipboardList },
+            { title: "Hộp thư Phụ huynh", href: "/admin/feedback", icon: MessageSquare },
         ]
     },
-    {
-        name: "Tài Chính",
-        items: [
-            { title: "Học phí", href: "/admin/finance", icon: DollarSign },
-        ]
-    }
 ];
 
-export default function AdminSidebar() {
+export default function AdminSidebar({ isSuperAdmin = false }: { isSuperAdmin?: boolean }) {
     const pathname = usePathname();
     const [collapsed, setCollapsed] = useState(false);
 
     return (
         <aside
             className={cn(
-                "h-screen sticky top-0 bg-white border-r border-gray-200 transition-all duration-300 ease-in-out hidden md:flex flex-col z-40",
+                "h-screen sticky top-0 bg-white border-r border-slate-200 transition-all duration-300 ease-in-out hidden md:flex flex-col z-40",
                 collapsed ? "w-[68px]" : "w-[260px]"
             )}
         >
             {/* Logo */}
             <div className="flex items-center gap-3 px-4 h-16 shrink-0">
-                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 shrink-0">
+                <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-600 shadow-sm shrink-0">
                     <GraduationCap className="w-5 h-5 text-white" />
                 </div>
                 {!collapsed && (
                     <div className="overflow-hidden">
-                        <h2 className="text-sm font-bold text-gray-900 truncate">
-                            E-Learning
-                        </h2>
-                        <p className="text-[10px] text-gray-400 truncate">
-                            Admin Portal
+                        <div className="flex items-center gap-1.5">
+                            <h2 className="text-sm font-bold text-slate-900 truncate">
+                                EduSchool LMS
+                            </h2>
+                            {isSuperAdmin && (
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-300 leading-none">
+                                    SUPER
+                                </span>
+                            )}
+                        </div>
+                        <p className="text-[10px] text-slate-500 font-medium truncate">
+                            {isSuperAdmin ? "Quản trị Nền tảng (Platform)" : "Quản trị Nhà trường"}
                         </p>
                     </div>
                 )}
@@ -92,7 +103,9 @@ export default function AdminSidebar() {
 
             {/* Navigation */}
             <nav className="flex-1 p-3 space-y-5 overflow-y-auto">
-                {sidebarGroups.map((group, idx) => (
+                {sidebarGroups
+                    .filter((group) => group.name !== "Super Admin Platform" || isSuperAdmin)
+                    .map((group, idx) => (
                     <div key={idx} className="space-y-1">
                         {!collapsed && (
                             <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-2">

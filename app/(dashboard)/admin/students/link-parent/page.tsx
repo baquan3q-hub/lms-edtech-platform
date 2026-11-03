@@ -34,7 +34,7 @@ export default async function AdminLinkParentPage() {
 
     // Fetch enrollments for classes info
     const studentIds = (students || []).map(s => s.id);
-    let enrollmentMap: Record<string, string[]> = {};
+    const enrollmentMap: Record<string, string[]> = {};
     if (studentIds.length > 0) {
         const { data: enrollments } = await adminSupabase
             .from("enrollments")

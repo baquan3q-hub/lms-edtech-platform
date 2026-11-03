@@ -181,38 +181,31 @@ export async function getClassAttendanceSessions(classId: string, month: number,
 
         if (error) throw error;
 
-        const attendedDates = new Set((sessions || []).map((s: any) => s.session_date));
-
-        // 2. Lấy class_sessions (lịch dạy) — bao gồm buổi chưa điểm danh
-        const { data: scheduledSessions } = await adminSupabase
-            .from("class_sessions")
-            .select(`
-                id, session_date, start_time, end_time, status,
-                class:classes!class_id(teacher_id, teacher:users!teacher_id(full_name))
-            `)
-            .eq("class_id", classId)
-            .gte("session_date", startDate)
-            .lt("session_date", endDate)
-            .order("session_date", { ascending: false });
-
-        // 3. Lấy records cho sessions đã điểm danh
+        // 2. Lấy records cho sessions đã điểm danh
         const sessionIds = (sessions || []).map((s: any) => s.id);
         let allRecords: any[] = [];
         if (sessionIds.length > 0) {
-            const { data: records } = await adminSupabase
+            const { data: records, error: recordsError } = await adminSupabase
                 .from("attendance_records")
                 .select("session_id, status, student_id, student:users!student_id(full_name)")
                 .in("session_id", sessionIds);
+            if (recordsError) throw recordsError;
             allRecords = records || [];
         }
 
         // Keep only sessions that have records (actually marked)
-        const validSessionIds = new Set(allRecords.map(r => r.session_id));
+        const recordsBySession = new Map<string, any[]>();
+        for (const record of allRecords) {
+            const group = recordsBySession.get(record.session_id) || [];
+            group.push(record);
+            recordsBySession.set(record.session_id, group);
+        }
+        const validSessionIds = new Set(recordsBySession.keys());
         const validSessions = (sessions || []).filter((s: any) => validSessionIds.has(s.id));
 
-        // 4. Xây dựng danh sách sessions (kết hợp attended + scheduled)
+        // 3. Xây dựng danh sách sessions đã điểm danh
         const enrichedAttended = validSessions.map((sess: any) => {
-            const sessRecords = allRecords.filter((r: any) => r.session_id === sess.id);
+            const sessRecords = recordsBySession.get(sess.id) || [];
             const teacherObj = Array.isArray(sess.teacher) ? sess.teacher[0] : sess.teacher;
             return {
                 ...sess,
@@ -233,31 +226,6 @@ export async function getClassAttendanceSessions(classId: string, month: number,
                 }),
             };
         });
-
-        // Buổi scheduled nhưng chưa điểm danh
-        const unattendedScheduled = (scheduledSessions || [])
-            .filter((s: any) => !attendedDates.has(s.session_date) && s.status !== "cancelled")
-            .map((s: any) => {
-                const classObj = Array.isArray(s.class) ? s.class[0] : s.class;
-                const teacherObj = classObj?.teacher 
-                    ? (Array.isArray(classObj.teacher) ? classObj.teacher[0] : classObj.teacher) 
-                    : null;
-                return {
-                    id: s.id,
-                    session_date: s.session_date,
-                    start_time: s.start_time,
-                    end_time: s.end_time,
-                    status: "pending",
-                    source: "scheduled" as const,
-                    teacherName: teacherObj?.full_name || "—",
-                    totalStudents: 0,
-                    presentCount: 0,
-                    absentCount: 0,
-                    lateCount: 0,
-                    excusedCount: 0,
-                    students: null,
-                };
-            });
 
         // Only return attended sessions as requested
         const allSessions = [...enrichedAttended]

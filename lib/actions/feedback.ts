@@ -1,5 +1,6 @@
 "use server";
 
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
@@ -184,8 +185,7 @@ export async function fetchTeacherFeedback(options: {
     type?: string;
 } = {}) {
     try {
-        const supabase = await createClient();
-        const { data: { user } } = await supabase.auth.getUser();
+        const user = await getCurrentUser();
         if (!user) return { data: null, error: "Chưa đăng nhập" };
 
         const adminSupabase = createAdminClient();

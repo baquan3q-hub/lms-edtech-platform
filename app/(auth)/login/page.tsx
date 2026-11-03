@@ -31,17 +31,25 @@ export default function LoginPage() {
 
     async function handleSubmit(formData: FormData) {
         setIsLoading(true);
+        // Kích hoạt ngay thanh tiến trình và emotion spinner trên đỉnh màn hình (0ms)
+        if (typeof window !== "undefined") {
+            window.dispatchEvent(new CustomEvent("app:navigation-start"));
+        }
+
         try {
             const result = await loginAction(formData);
             if (result?.error) {
                 toast.error("Đăng nhập thất bại", {
                     description: result.error,
                 });
+                setIsLoading(false);
+                if (typeof window !== "undefined") {
+                    window.dispatchEvent(new CustomEvent("app:navigation-end"));
+                }
             }
         } catch {
             // redirect() từ server action throw NEXT_REDIRECT — bình thường
-        } finally {
-            setIsLoading(false);
+            // Giữ nguyên isLoading = true để giao diện tiếp tục xoay mượt mà cho đến khi vào Dashboard
         }
     }
 
@@ -60,10 +68,10 @@ export default function LoginPage() {
                         <GraduationCap className="w-8 h-8 text-white" />
                     </div>
                     <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
-                        E-Learning Platform
+                        EduSchool LMS
                     </h1>
                     <p className="text-gray-500 mt-1 text-sm">
-                        Nền tảng học trực tuyến thông minh
+                        Hệ thống quản lý học tập nhà trường
                     </p>
                 </div>
 
@@ -82,15 +90,17 @@ export default function LoginPage() {
                             {/* Email */}
                             <div className="space-y-2">
                                 <Label htmlFor="email" className="text-gray-700 text-sm font-medium">
-                                    Email
+                                    Tài khoản
                                 </Label>
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                                     <Input
                                         id="email"
                                         name="email"
-                                        type="email"
-                                        placeholder="you@example.com"
+                                        type="text"
+                                        autoComplete="username"
+                                        maxLength={200}
+                                        placeholder="MÃ-TRƯỜNG:HS001 hoặc email"
                                         required
                                         disabled={isLoading}
                                         className="pl-10 bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 focus:ring-blue-500/20"
@@ -144,8 +154,8 @@ export default function LoginPage() {
                             >
                                 {isLoading ? (
                                     <>
-                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                        Đang xử lý...
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin text-white" />
+                                        Đang xác thực & vào hệ thống...
                                     </>
                                 ) : (
                                     "Đăng nhập"
@@ -163,7 +173,7 @@ export default function LoginPage() {
                 </Card>
 
                 <p className="text-center text-xs text-gray-400 mt-6">
-                    © 2026 E-Learning Platform. All rights reserved.
+                    © 2026 EduSchool LMS. All rights reserved.
                 </p>
             </div>
         </div>

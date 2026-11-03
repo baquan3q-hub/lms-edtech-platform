@@ -31,7 +31,7 @@ export default function AddCourseDialog() {
                 return;
             }
 
-            toast.success("Tạo khóa học thành công");
+            toast.success("Tạo môn học thành công");
             setOpen(false);
         } catch (error) {
             toast.error("Đã xảy ra lỗi không xác định");
@@ -45,33 +45,33 @@ export default function AddCourseDialog() {
             <DialogTrigger asChild>
                 <Button className="bg-blue-600 hover:bg-blue-700">
                     <Plus className="w-4 h-4 mr-2" />
-                    Thêm Khóa học
+                    Thêm Môn học
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
-                    <DialogTitle>Tạo Khóa học mới</DialogTitle>
+                    <DialogTitle>Tạo Môn học / Chương trình mới</DialogTitle>
                     <DialogDescription>
-                        Điền thông tin cơ bản về khóa học. Các lớp học cụ thể (Classes) sẽ được tạo và gán với khóa học này sau.
+                        Điền thông tin cơ bản về môn học / chương trình. Các lớp học cụ thể (Classes) sẽ được tạo và gán với môn học này sau.
                     </DialogDescription>
                 </DialogHeader>
                 <form action={onSubmit}>
                     <div className="grid gap-4 py-4">
                         <div className="grid gap-2">
-                            <Label htmlFor="name">Tên khóa học <span className="text-red-500">*</span></Label>
+                            <Label htmlFor="name">Tên môn học <span className="text-red-500">*</span></Label>
                             <Input
                                 id="name"
                                 name="name"
-                                placeholder="VD: Lập trình Web Cơ bản"
+                                placeholder="VD: Toán học 6, Ngữ văn 7..."
                                 required
                             />
                         </div>
                         <div className="grid gap-2">
-                            <Label htmlFor="description">Mô tả khóa học</Label>
+                            <Label htmlFor="description">Mô tả môn học</Label>
                             <Textarea
                                 id="description"
                                 name="description"
-                                placeholder="Mô tả ngắn gọn về khóa học..."
+                                placeholder="Mô tả ngắn gọn về môn học / chương trình..."
                                 rows={3}
                             />
                         </div>
@@ -98,7 +98,7 @@ export default function AddCourseDialog() {
                             Hủy
                         </Button>
                         <Button type="submit" disabled={loading} className="bg-blue-600 hover:bg-blue-700">
-                            {loading ? "Đang tạo..." : "Tạo khóa học"}
+                            {loading ? "Đang tạo..." : "Tạo môn học"}
                         </Button>
                     </DialogFooter>
                 </form>

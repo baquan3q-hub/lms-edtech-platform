@@ -136,7 +136,6 @@ export default function AdminLinkParentClient({
             setShowAddParent(false);
             setParentSearchResults([]);
             setParentSearchQuery("");
-            router.refresh();
         }
         setLinking(false);
     };
@@ -150,7 +149,6 @@ export default function AdminLinkParentClient({
         } else {
             toast.success("Đã xóa liên kết.");
             setLinkedParents(prev => prev.filter(p => p.id !== linkId));
-            router.refresh();
         }
     };
 
@@ -168,7 +166,6 @@ export default function AdminLinkParentClient({
                 invite_code: res.code,
                 invite_code_expires_at: res.expiresAt,
             });
-            router.refresh();
         }
         setGeneratingCode(false);
     };
@@ -197,14 +194,14 @@ export default function AdminLinkParentClient({
                 {/* Course Filter */}
                 <div className="min-w-[180px]">
                     <label className="text-[10px] font-semibold text-slate-500 mb-1 block flex items-center gap-1">
-                        <Filter className="w-3 h-3" /> Khóa học
+                        <Filter className="w-3 h-3" /> Môn học
                     </label>
                     <select
                         value={filterCourse}
                         onChange={e => { setFilterCourse(e.target.value); setFilterClass(""); }}
                         className="w-full h-9 px-3 rounded-lg border border-slate-200 text-sm bg-white text-slate-700 focus:ring-2 focus:ring-indigo-200 focus:border-indigo-400"
                     >
-                        <option value="">Tất cả khóa học</option>
+                        <option value="">Tất cả môn học</option>
                         {courses.map(c => (
                             <option key={c.id} value={c.id}>{c.name}</option>
                         ))}

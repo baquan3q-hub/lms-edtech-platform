@@ -14,8 +14,8 @@ export default async function CoursesPage() {
                         <BookOpen className="w-5 h-5 text-indigo-600" />
                     </div>
                     <div>
-                        <h2 className="text-xl font-bold text-gray-900">Quản lý Khóa học</h2>
-                        <p className="text-sm text-gray-500">Danh sách các môn học nền tảng trên hệ thống</p>
+                        <h2 className="text-xl font-bold text-gray-900">Quản lý Môn học & Chương trình</h2>
+                        <p className="text-sm text-gray-500">Danh mục môn học và khung chương trình đào tạo của nhà trường</p>
                     </div>
                 </div>
                 <AddCourseDialog />
@@ -27,8 +27,8 @@ export default async function CoursesPage() {
                 ) : !courses || courses.length === 0 ? (
                     <div className="p-12 text-center">
                         <Search className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                        <p className="text-gray-500 font-medium">Chưa có khóa học nào</p>
-                        <p className="text-sm text-gray-400 mt-1">Bấm &quot;Thêm Khóa học&quot; để tạo môn học đầu tiên.</p>
+                        <p className="text-gray-500 font-medium">Chưa có môn học nào</p>
+                        <p className="text-sm text-gray-400 mt-1">Bấm &quot;Thêm môn học&quot; để tạo môn học đầu tiên.</p>
                     </div>
                 ) : (
                     <CoursesTableClient courses={courses} />

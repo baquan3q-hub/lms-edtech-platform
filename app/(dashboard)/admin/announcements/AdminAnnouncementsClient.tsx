@@ -39,7 +39,7 @@ type ScopeType = "system" | "course" | "class";
 
 const SCOPE_LABELS: Record<ScopeType, { label: string; icon: any; color: string; desc: string }> = {
     system: { label: "Toàn hệ thống", icon: Globe, color: "bg-rose-500", desc: "Gửi đến tất cả người dùng" },
-    course: { label: "Khóa học", icon: GraduationCap, color: "bg-purple-500", desc: "Gửi đến tất cả lớp trong khóa" },
+    course: { label: "Môn học", icon: GraduationCap, color: "bg-purple-500", desc: "Gửi đến tất cả lớp trong môn" },
     class: { label: "Lớp cụ thể", icon: BookOpen, color: "bg-blue-500", desc: "Gửi đến 1 lớp" },
 };
 
@@ -138,7 +138,7 @@ export default function AdminAnnouncementsClient() {
 
     const handleSend = async () => {
         if (!title.trim()) { toast.error("Vui lòng nhập tiêu đề"); return; }
-        if (scope === "course" && !selectedCourseId) { toast.error("Vui lòng chọn khóa học"); return; }
+        if (scope === "course" && !selectedCourseId) { toast.error("Vui lòng chọn môn học"); return; }
         if (scope === "class" && !selectedClassId) { toast.error("Vui lòng chọn lớp"); return; }
 
         setSending(true);
@@ -208,7 +208,7 @@ export default function AdminAnnouncementsClient() {
                         </div>
                         Quản lý Thông báo
                     </h1>
-                    <p className="text-sm text-slate-500 mt-1">Gửi thông báo toàn hệ thống, theo khóa học hoặc lớp cụ thể</p>
+                    <p className="text-sm text-slate-500 mt-1">Gửi thông báo toàn hệ thống, theo môn học hoặc lớp cụ thể</p>
                 </div>
             </div>
 
@@ -254,14 +254,14 @@ export default function AdminAnnouncementsClient() {
                     {/* Course / Class Selectors */}
                     {scope === "course" && (
                         <div>
-                            <label className="text-sm font-semibold text-slate-700 mb-1.5 block">Chọn khóa học *</label>
+                            <label className="text-sm font-semibold text-slate-700 mb-1.5 block">Chọn môn học *</label>
                             <div className="relative">
                                 <select
                                     className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 pr-8 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
                                     value={selectedCourseId}
                                     onChange={(e) => setSelectedCourseId(e.target.value)}
                                 >
-                                    <option value="">— Chọn khóa học —</option>
+                                    <option value="">— Chọn môn học —</option>
                                     {courses.map((c: any) => (
                                         <option key={c.id} value={c.id}>{c.name}</option>
                                     ))}
@@ -274,14 +274,14 @@ export default function AdminAnnouncementsClient() {
                     {scope === "class" && (
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="text-sm font-semibold text-slate-700 mb-1.5 block">Khóa học (lọc)</label>
+                                <label className="text-sm font-semibold text-slate-700 mb-1.5 block">Môn học (lọc)</label>
                                 <div className="relative">
                                     <select
                                         className="w-full appearance-none bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 pr-8 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-400"
                                         value={selectedCourseId}
                                         onChange={(e) => { setSelectedCourseId(e.target.value); setSelectedClassId(""); }}
                                     >
-                                        <option value="">— Tất cả khóa —</option>
+                                        <option value="">— Tất cả môn —</option>
                                         {courses.map((c: any) => (
                                             <option key={c.id} value={c.id}>{c.name}</option>
                                         ))}

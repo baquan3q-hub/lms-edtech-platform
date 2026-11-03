@@ -1,0 +1,26 @@
+services:
+  web:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?required}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?required}
+    environment:
+      NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?required}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?required}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?required}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?required}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    ports: ["127.0.0.1:3000:3000"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+  analytics:
+    build: ./workers/analytics
+    environment:
+      ANALYTICS_DATABASE_URL: ${ANALYTICS_DATABASE_URL:?restricted-worker-role-required}
+    restart: unless-stopped
+    stop_grace_period: 45s

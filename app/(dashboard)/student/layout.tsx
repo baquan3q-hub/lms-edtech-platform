@@ -1,23 +1,18 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
+import { requirePortalProfile } from "@/lib/auth/portal";
 import { PageTracker } from "./PageTracker";
 import StudentSidebar from "@/components/student/StudentSidebar";
 import StudentNavbar from "@/components/student/StudentNavbar";
 
 export default async function StudentLayout({ children }: { children: React.ReactNode }) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) redirect("/login");
-    const { createAdminClient } = await import("@/lib/supabase/admin");
-    const adminSupabase = createAdminClient();
-    const { data: userData } = await adminSupabase.from("users").select("full_name, email, role").eq("id", user.id).single();
-    if (userData?.role !== "student") redirect(`/${userData?.role || "login"}`);
+    const userData = await requirePortalProfile("student");
+    if (!userData) redirect("/login");
 
     return (
         <div className="flex h-screen bg-slate-50 overflow-hidden font-sans">
             <PageTracker />
             {/* Sidebar */}
-            <StudentSidebar userName={userData?.full_name || "Học sinh"} userEmail={userData?.email || ""} userId={user.id} />
+            <StudentSidebar userName={userData?.full_name || "Học sinh"} userEmail={userData?.email || ""} userId={userData.id} />
 
             {/* Main content area */}
             <div className="flex-1 flex flex-col overflow-hidden relative">

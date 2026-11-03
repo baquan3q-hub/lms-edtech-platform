@@ -1,4 +1,4 @@
-import { fetchCourseItems } from "@/lib/actions/courseBuilder";
+import { requireClassAccess } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
@@ -14,6 +14,7 @@ export default async function StudentLearnLayout({
 }) {
     const resolvedParams = await params;
     const { id: classId } = resolvedParams;
+    const actor = await requireClassAccess(classId, "learn");
 
     const supabase = createAdminClient();
 
@@ -28,31 +29,25 @@ export default async function StudentLearnLayout({
 
     if (!classInfo) redirect("/student/classes");
 
-    // 2. Lấy toàn bộ cây học liệu (chỉ lấy các item được publish, hoặc lấy hết và filter trên client)
-    // Tạm thời lấy hết (có is_published = true)
-    // Lấy items đã publish + LUÔN LUÔN lấy folder (dù chưa publish) để giữ cấu trúc cây
+    // Only published navigation metadata crosses the client boundary.
     const { data: items, error } = await supabase
         .from("course_items")
-        .select("*")
+        .select("id,class_id,parent_id,title,type,order_index,is_published")
         .eq("class_id", classId)
-        .or("is_published.eq.true,type.eq.folder")
+        .eq("is_published", true)
         .order("order_index", { ascending: true });
 
     // 3. Lấy tiến trình học (Student Progress) của user hiện tại
-    const { createClient } = await import("@/lib/supabase/server");
-    const supabaseClient = await createClient();
-    const { data: { user } } = await supabaseClient.auth.getUser();
-
-    let progressMap: Record<string, any> = {};
-    if (user && items && items.length > 0) {
+    const progressMap: Record<string, any> = {};
+    if (items && items.length > 0) {
         const itemIds = items.map((i: any) => i.id);
 
         // Cắt chunk itemIds nếu quá dài (tối đa ~100) để không lỗi URL quá dài
         // Tuy nhiên Supabase PostgREST hỗ trợ body cho queries dài nếu cần
         const { data: progressList } = await supabase
             .from('student_progress')
-            .select('*')
-            .eq('student_id', user.id)
+            .select('item_id,status')
+            .eq('student_id', actor.id)
             .in('item_id', itemIds);
 
         if (progressList) {

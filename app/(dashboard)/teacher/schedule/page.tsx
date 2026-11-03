@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { redirect } from "next/navigation";
 import { fetchTeacherAllSessions } from "@/lib/actions/schedule";
 import TeacherScheduleOverviewClient from "./TeacherScheduleOverviewClient";
@@ -6,10 +6,7 @@ import TeacherScheduleOverviewClient from "./TeacherScheduleOverviewClient";
 export const dynamic = "force-dynamic";
 
 export default async function TeacherSchedulePage() {
-    const supabase = await createClient();
-    const {
-        data: { user },
-    } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
 
     if (!user) {
         redirect("/login");

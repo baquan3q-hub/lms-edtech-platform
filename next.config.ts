@@ -2,6 +2,10 @@ import type { NextConfig } from "next";
 import withPWA from "next-pwa";
 
 const nextConfig: NextConfig = {
+  output: "standalone",
+  typescript: {
+    tsconfigPath: process.env.NODE_ENV === "production" ? "tsconfig.build.json" : "tsconfig.json",
+  },
   // Turbopack is incompatible with next-pwa currently
   // Fallback to Webpack
   webpack: (config, { isServer }) => {
@@ -33,11 +37,11 @@ const config = withPWA({
   dest: "public",
   register: true,
   skipWaiting: true,
-  disable: process.env.NODE_ENV === "development",
+  disable: process.env.NODE_ENV === "development" || process.env.DISABLE_PWA === "1",
   runtimeCaching: [
     {
       urlPattern: /^https:\/\/.*\.supabase\.co\/.*/i,
-      handler: "NetworkFirst",
+      handler: "NetworkOnly",
       options: {
         cacheName: "supabase-cache",
         expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 },

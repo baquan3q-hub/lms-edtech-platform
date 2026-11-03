@@ -148,12 +148,12 @@ const ReportCardPDF = ({
       <Page size="A4" style={styles.page}>
         <View style={styles.header}>
           <Text style={styles.title}>BÁO CÁO KẾT QUẢ HỌC TẬP</Text>
-          <Text style={styles.subtitle}>Hệ thống Đào tạo Trực tuyến LMS E-Learning</Text>
+          <Text style={styles.subtitle}>Hệ thống Quản lý Học tập EduSchool LMS</Text>
         </View>
 
         <View style={styles.section}>
           <View style={styles.row}>
-            <Text style={styles.label}>Họ và tên học viên:</Text>
+            <Text style={styles.label}>Họ và tên học sinh:</Text>
             <Text style={styles.value}>{studentName}</Text>
           </View>
           <View style={styles.row}>
@@ -201,7 +201,7 @@ const ReportCardPDF = ({
 
         <View style={styles.footer}>
           <Text>Chữ ký Xác nhận của Giáo viên / Hệ thống</Text>
-          <Text style={{ marginTop: 5, color: '#cbd5e1' }}>Generated automatically by LMS Platform</Text>
+          <Text style={{ marginTop: 5, color: '#cbd5e1' }}>Tạo tự động bởi EduSchool LMS</Text>
         </View>
       </Page>
     </Document>

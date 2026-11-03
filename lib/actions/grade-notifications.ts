@@ -108,7 +108,7 @@ export async function sendGradeReport(classId: string, studentId: string | "all"
             if (parentEmail && process.env.RESEND_API_KEY) {
                 try {
                     await resend.emails.send({
-                        from: 'LMS Platform <onboarding@resend.dev>', // Mock domain from Resend
+                        from: 'EduSchool LMS <onboarding@resend.dev>', // Mock domain from Resend
                         to: [parentEmail],
                         subject: `[${classData.name}] Báo cáo học tập - ${periodLabel}`,
                         html: `

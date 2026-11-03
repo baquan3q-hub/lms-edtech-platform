@@ -61,7 +61,7 @@ export async function createClass(formData: FormData) {
         const max_students = parseInt(formData.get("max_students")?.toString() || "30");
 
         if (!course_id || !teacher_id) {
-            return { error: "Vui lòng chọn Khóa học và Giáo viên" };
+            return { error: "Vui lòng chọn Môn học và Giáo viên" };
         }
 
         const supabase = createAdminClient();
@@ -118,7 +118,7 @@ export async function updateClass(id: string, formData: FormData) {
         const status = formData.get("status")?.toString() || "active";
 
         if (!course_id || !teacher_id) {
-            return { error: "Vui lòng chọn Khóa học và Giáo viên" };
+            return { error: "Vui lòng chọn Môn học và Giáo viên" };
         }
 
         const supabase = createAdminClient();
@@ -141,6 +141,34 @@ export async function updateClass(id: string, formData: FormData) {
         return { success: true, error: null };
     } catch (error: any) {
         console.error("Error updating class:", error);
+        return { success: false, error: error.message };
+    }
+}
+
+export async function createGrade(formData: FormData) {
+    try {
+        const name = formData.get("name")?.toString();
+        const description = formData.get("description")?.toString() || "";
+        const mode = formData.get("mode")?.toString() || "offline";
+
+        if (!name) {
+            return { error: "Vui lòng nhập tên Khối hoặc Chương trình học" };
+        }
+
+        const supabase = createAdminClient();
+        const { data, error } = await supabase
+            .from("courses")
+            .insert([{ name, description, mode }])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        revalidatePath("/admin/classes");
+        revalidatePath("/admin/courses");
+        return { success: true, data, error: null };
+    } catch (error: any) {
+        console.error("Error creating grade:", error);
         return { success: false, error: error.message };
     }
 }

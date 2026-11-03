@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
     .eq('id', user.id)
     .single()
 
-  if (userData?.role !== 'admin') {
+  if (userData?.role !== 'admin' && userData?.role !== 'super_admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

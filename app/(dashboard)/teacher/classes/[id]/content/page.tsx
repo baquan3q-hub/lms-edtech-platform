@@ -53,7 +53,7 @@ export default async function TeacherCourseContentPage({ params }: { params: Pro
                         Xây dựng lộ trình bài giảng
                     </h1>
                     <p className="text-indigo-200 text-sm md:text-base max-w-2xl font-medium">
-                        Kéo thả để sắp xếp các Chương (Thư mục) và Bài học. Cấu trúc học liệu này sẽ được hiển thị đồng bộ bên tài khoản của học viên. Lớp: <span className="text-white font-bold">{classData?.name}</span>
+                        Kéo thả để sắp xếp các Chương (Thư mục) và Bài học. Cấu trúc học liệu này sẽ được hiển thị đồng bộ bên tài khoản của học sinh. Lớp: <span className="text-white font-bold">{classData?.name}</span>
                     </p>
                 </div>
 

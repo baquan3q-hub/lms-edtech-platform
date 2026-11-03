@@ -190,7 +190,7 @@ export default function FeedbackModal({ open, onOpenChange, userId }: FeedbackMo
                                 }`}
                             >
                                 <Users className="w-4 h-4 shrink-0" />
-                                <span className="text-xs font-semibold">Trung tâm (Admin)</span>
+                                <span className="text-xs font-semibold">Nhà trường (Admin)</span>
                             </button>
                             <button
                                 type="button"

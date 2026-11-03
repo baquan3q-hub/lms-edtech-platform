@@ -156,6 +156,11 @@ export async function upsertClassSchedule(scheduleData: {
             await reindexClassSessions(scheduleData.class_id);
         }
 
+        revalidatePath(`/teacher/classes/${scheduleData.class_id}`);
+        revalidatePath(`/teacher/classes/${scheduleData.class_id}/schedule`);
+        revalidatePath(`/admin/classes/${scheduleData.class_id}`);
+        revalidatePath("/teacher/schedule");
+
         return { data, error: null };
     } catch (error: any) {
         console.error("Lỗi lưu lịch học:", error);
@@ -198,6 +203,11 @@ export async function deleteClassSchedule(scheduleId: string, classId: string) {
             .from("classes")
             .update({ schedule: fullScheduleText || "Chưa có lịch" })
             .eq("id", classId);
+
+        revalidatePath(`/teacher/classes/${classId}`);
+        revalidatePath(`/teacher/classes/${classId}/schedule`);
+        revalidatePath(`/admin/classes/${classId}`);
+        revalidatePath("/teacher/schedule");
 
         return { success: true, error: null };
     } catch (error: any) {
@@ -348,6 +358,9 @@ export async function resetClassSessions(classId: string) {
         await reindexClassSessions(classId);
 
         revalidatePath(`/admin/classes/${classId}`);
+        revalidatePath(`/teacher/classes/${classId}`);
+        revalidatePath(`/teacher/classes/${classId}/schedule`);
+        revalidatePath("/teacher/schedule");
 
         return {
             deleted: idsToDelete.length,
@@ -727,8 +740,7 @@ export async function updateSessionContent(
 
         if (error) throw error;
         
-        // Cập nhật lại cache (nếu cần đổi path)
-        // revalidatePath(`/teacher/classes/`); // Dựa vào param gọi vào
+        revalidatePath("/teacher/schedule");
         return { data: updatedSession, error: null };
     } catch (error: any) {
         console.error("Lỗi updateSessionContent:", error);
@@ -866,62 +878,64 @@ export async function fetchTeacherAllSessions(teacherId: string) {
 
         if (classError) throw classError;
         if (!classes || classes.length === 0) {
-            return { data: [], classes: [], error: null };
+            return { data: [], classes: [], schedules: [], error: null };
         }
 
-        const classIds = classes.map(c => c.id);
+        const classIds = classes.map((c: any) => c.id);
 
-        // 2. Lấy tất cả sessions của các lớp này
-        const { data: sessions, error: sessionsError } = await adminSupabase
-            .from("class_sessions")
-            .select("*")
-            .in("class_id", classIds)
-            .order("session_date", { ascending: true })
-            .order("start_time", { ascending: true });
-
-        if (sessionsError) throw sessionsError;
-
-        // 3. Lấy class_schedules để biết phòng học
-        const { data: schedules } = await adminSupabase
-            .from("class_schedules")
-            .select("class_id, day_of_week, start_time, end_time, room:rooms(name)")
-            .in("class_id", classIds);
-
-        // 4. Lấy leave requests của GV (defensive — bảng có thể chưa tồn tại)
-        let leaveRequests: any[] = [];
-        try {
-            const { data: lr } = await adminSupabase
-                .from("teacher_leave_requests")
-                .select("session_id, leave_date, class_id, status")
-                .eq("teacher_id", teacherId)
+        // 2. Chạy song song các truy vấn độc lập: sessions, schedules, leave requests
+        const [sessionsResult, schedulesResult, leaveResult] = await Promise.all([
+            adminSupabase
+                .from("class_sessions")
+                .select("id, class_id, session_date, start_time, end_time, session_number, status, teaching_status, lesson_title, lesson_content, attachments")
                 .in("class_id", classIds)
-                .neq("status", "rejected");
-            leaveRequests = lr || [];
-        } catch {
-            // Bảng chưa tồn tại — bỏ qua
-        }
+                .order("session_date", { ascending: true })
+                .order("start_time", { ascending: true }),
+            adminSupabase
+                .from("class_schedules")
+                .select("class_id, day_of_week, start_time, end_time, room:rooms(name)")
+                .in("class_id", classIds),
+            (async () => {
+                try {
+                    return await adminSupabase
+                        .from("teacher_leave_requests")
+                        .select("session_id, leave_date, class_id, status")
+                        .eq("teacher_id", teacherId)
+                        .in("class_id", classIds)
+                        .neq("status", "rejected");
+                } catch {
+                    return { data: [] };
+                }
+            })()
+        ]);
 
-        // 5. Map thông tin lớp + phòng vào sessions
-        const classMap = new Map(classes.map(c => {
+        if (sessionsResult.error) throw sessionsResult.error;
+
+        const sessions: any[] = sessionsResult.data || [];
+        const schedules: any[] = schedulesResult.data || [];
+        const leaveRequests: any[] = (leaveResult as any)?.data || [];
+
+        // 3. Map thông tin lớp + phòng vào sessions
+        const classMap = new Map(classes.map((c: any) => {
             const course = Array.isArray(c.courses) ? c.courses[0] : c.courses;
             return [c.id, { className: c.name, courseName: (course as any)?.name || "" }];
         }));
 
-        const mappedSessions = (sessions || []).map(session => {
+        const mappedSessions = (sessions || []).map((session: any) => {
             const classInfo = classMap.get(session.class_id);
 
             // Tìm phòng từ class_schedules dựa trên day_of_week
             const sessionDate = new Date(session.session_date + "T12:00:00");
             const dayOfWeek = sessionDate.getDay(); // 0=CN, 1=T2...
             const matchingSchedule = (schedules || []).find(
-                s => s.class_id === session.class_id && s.day_of_week === dayOfWeek
+                (s: any) => s.class_id === session.class_id && s.day_of_week === dayOfWeek
             );
             const roomName = matchingSchedule ? (matchingSchedule.room as any)?.name : null;
 
             // Check xin nghỉ
             const leaveReq = (leaveRequests || []).find(
-                lr => lr.session_id === session.id || 
-                      (lr.class_id === session.class_id && lr.leave_date === session.session_date)
+                (lr: any) => lr.session_id === session.id || 
+                       (lr.class_id === session.class_id && lr.leave_date === session.session_date)
             );
 
             return {
@@ -933,8 +947,8 @@ export async function fetchTeacherAllSessions(teacherId: string) {
             };
         });
 
-        // 6. Enrich schedules với tên lớp để UI hiển thị lịch cố định
-        const enrichedSchedules = (schedules || []).map(sch => {
+        // 4. Enrich schedules với tên lớp để UI hiển thị lịch cố định
+        const enrichedSchedules = (schedules || []).map((sch: any) => {
             const classInfo = classMap.get(sch.class_id);
             return {
                 ...sch,

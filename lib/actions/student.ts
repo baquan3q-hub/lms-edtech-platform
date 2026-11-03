@@ -1,11 +1,15 @@
 "use server";
+import { unstable_rethrow } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { requireSchoolActor, requireClassAccess } from "@/lib/auth/authorize";
+import { isGradePublished } from "@/lib/modules/assessment/dto";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-// Lấy danh sách Lớp học mà học sinh đang ghi danh
+// Lấy danh sách Lớp học mà học sinh đang theo học
 export async function fetchStudentEnrolledClasses() {
     try {
+        const scope=await requireSchoolActor(["student"]);
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -17,13 +21,14 @@ export async function fetchStudentEnrolledClasses() {
             .from("enrollments")
             .select(`
                 id, class_id, status, enrolled_at,
-                class:classes (
+                class:classes!inner (
                     id, name,
                     course:courses (name, description),
                     teacher:users!classes_teacher_id_fkey (full_name),
                     class_schedules (id, day_of_week, start_time, end_time, room:rooms(name))
                 )
             `)
+            .eq("class.school_id",scope.schoolId)
             .eq("student_id", user.id)
             .eq("status", "active")
             .order("enrolled_at", { ascending: false });
@@ -31,6 +36,7 @@ export async function fetchStudentEnrolledClasses() {
         if (error) throw error;
         return { data, error: null };
     } catch (error: any) {
+        unstable_rethrow(error);
         console.error("Lỗi lấy danh sách lớp của học sinh:", error);
         return { data: null, error: error.message };
     }
@@ -39,6 +45,8 @@ export async function fetchStudentEnrolledClasses() {
 // Lấy danh sách Bài giảng (Modules) trong một Lớp học
 export async function fetchStudentLessons(classId: string) {
     try {
+        const scope=await requireSchoolActor(["student"]);
+        await requireClassAccess(classId,"learn");
         const supabase = await createClient();
 
         const { data, error } = await supabase
@@ -51,6 +59,7 @@ export async function fetchStudentLessons(classId: string) {
         if (error) throw error;
         return { data, error: null };
     } catch (error: any) {
+        unstable_rethrow(error);
         console.error("Lỗi lấy danh sách bài giảng cho học sinh:", error);
         return { data: null, error: error.message };
     }
@@ -59,6 +68,7 @@ export async function fetchStudentLessons(classId: string) {
 // Lấy chi tiết MỘT Bài giảng (E-learning Module) kèm Bài tập (Assignments)
 export async function fetchStudentLessonDetails(lessonId: string) {
     try {
+        const scope=await requireSchoolActor(["student"]);
         const supabase = await createClient();
 
         // Lấy chi tiết bài giảng
@@ -82,6 +92,7 @@ export async function fetchStudentLessonDetails(lessonId: string) {
 
         return { data: { lesson, assignments }, error: null };
     } catch (error: any) {
+        unstable_rethrow(error);
         console.error("Lỗi lấy chi tiết bài giảng:", error);
         return { data: null, error: error.message };
     }
@@ -90,6 +101,7 @@ export async function fetchStudentLessonDetails(lessonId: string) {
 // Lấy thống kê tổng quan cho Dashboard học sinh
 export async function fetchStudentDashboardStats() {
     try {
+        const scope=await requireSchoolActor(["student"]);
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -185,6 +197,7 @@ export async function fetchStudentDashboardStats() {
             error: null
         };
     } catch (error: any) {
+        unstable_rethrow(error);
         console.error("Lỗi lấy thống kê học tập:", error);
         return { data: null, error: error.message };
     }
@@ -193,6 +206,7 @@ export async function fetchStudentDashboardStats() {
 // Lấy danh sách tất cả các bài tập/bài kiểm tra của học sinh trong các lớp đang học
 export async function fetchStudentAssignments() {
     try {
+        const scope=await requireSchoolActor(["student"]);
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -216,10 +230,13 @@ export async function fetchStudentAssignments() {
 
         // 2. Lấy TẤT CẢ submissions của student (không cần filter theo ID)
         const [examSubsRes, hwSubsRes, quizAttemptsRes] = await Promise.all([
-            adminSupabase.from("exam_submissions").select("exam_id, score, total_points, created_at").eq("student_id", user.id),
-            adminSupabase.from("homework_submissions").select("homework_id, score, status, submitted_at, attempts").eq("student_id", user.id),
+            adminSupabase.from("exam_submissions").select("exam_id, score, total_points, created_at, grading_status").eq("student_id", user.id),
+            adminSupabase.from("homework_submissions").select("homework_id, score, status, submitted_at, attempts, grading_status").eq("student_id", user.id),
             adminSupabase.from("quiz_attempts").select("item_id, score, submitted_at").eq("student_id", user.id),
         ]);
+        for(const row of examSubsRes.data||[]) if(!isGradePublished(row.grading_status)) row.score=null;
+        for(const row of hwSubsRes.data||[]) if(!isGradePublished(row.grading_status)) { row.score=null; row.status="submitted"; }
+
 
         // Build submission Maps
         const examSubMap = new Map<string, any>();
@@ -341,6 +358,7 @@ export async function fetchStudentAssignments() {
 
         return { data: result, error: null };
     } catch (error: any) {
+        unstable_rethrow(error);
         console.error("Lỗi lấy danh sách bài tập:", error);
         return { data: null, error: error.message };
     }
@@ -349,6 +367,7 @@ export async function fetchStudentAssignments() {
 // Lấy danh sách điểm số và lịch sử bài làm của học sinh
 export async function fetchStudentGrades() {
     try {
+        const scope=await requireSchoolActor(["student"]);
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -404,7 +423,7 @@ export async function fetchStudentGrades() {
                         title, class_id,
                         class:classes(name, course:courses(name))
                     )
-                `)
+                `).in("grading_status",["published","locked"])
                 .eq("student_id", user.id)
                 .order("created_at", { ascending: false });
 
@@ -446,7 +465,7 @@ export async function fetchStudentGrades() {
                         title, class_id, total_points,
                         class:classes(name, course:courses(name))
                     )
-                `)
+                `).in("grading_status",["published","locked"])
                 .eq("student_id", user.id)
                 .order("submitted_at", { ascending: false });
 
@@ -485,6 +504,7 @@ export async function fetchStudentGrades() {
 
         return { data: formattedGrades, error: null };
     } catch (error: any) {
+        unstable_rethrow(error);
         console.error("Lỗi lấy danh sách điểm số:", error);
         return { data: null, error: error.message };
     }
@@ -493,6 +513,7 @@ export async function fetchStudentGrades() {
 // Lấy bài học gợi ý tiếp theo (chưa hoàn thành) cho mỗi lớp đang học
 export async function fetchSuggestedLessons() {
     try {
+        const scope=await requireSchoolActor(["student"]);
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
 
@@ -644,16 +665,18 @@ export async function fetchSuggestedLessons() {
 
         return { data: suggestions, error: null };
     } catch (error: any) {
+        unstable_rethrow(error);
         console.error("Lỗi lấy bài học gợi ý:", error);
         return { data: [], error: error.message };
     }
 }
 
 /**
- * Lấy thông báo gần đây từ tất cả lớp học sinh đang ghi danh
+ * Lấy thông báo gần đây từ tất cả lớp học sinh đang theo học
  */
 export async function fetchStudentAnnouncements() {
     try {
+        const scope=await requireSchoolActor(["student"]);
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { data: [], error: "Unauthorized" };
@@ -687,6 +710,7 @@ export async function fetchStudentAnnouncements() {
         if (error) throw error;
         return { data: data || [], error: null };
     } catch (error: any) {
+        unstable_rethrow(error);
         console.error("fetchStudentAnnouncements error:", error);
         return { data: [], error: error.message };
     }
@@ -697,6 +721,7 @@ export async function fetchStudentAnnouncements() {
  */
 export async function getClassScoreLeaderboard(classId: string) {
     try {
+        await requireClassAccess(classId,"read");
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return { data: [], error: "Unauthorized" };
@@ -726,8 +751,8 @@ export async function getClassScoreLeaderboard(classId: string) {
 
         // 3. Fetch submissions for these students and items
         const { data: quizAttempts } = await adminSupabase.from("quiz_attempts").select("student_id, item_id, score").in("student_id", studentIds).in("item_id", quizIds).not('score', 'is', null);
-        const { data: examSubmissions } = await adminSupabase.from("exam_submissions").select("student_id, exam_id, score").in("student_id", studentIds).in("exam_id", examIds).not('score', 'is', null);
-        const { data: hwSubmissions } = await adminSupabase.from("homework_submissions").select("student_id, homework_id, score").in("student_id", studentIds).in("homework_id", hwIds).not('score', 'is', null);
+        const { data: examSubmissions } = await adminSupabase.from("exam_submissions").select("student_id, exam_id, score").in("grading_status",["published","locked"]).in("student_id", studentIds).in("exam_id", examIds).not('score', 'is', null);
+        const { data: hwSubmissions } = await adminSupabase.from("homework_submissions").select("student_id, homework_id, score").in("grading_status",["published","locked"]).in("student_id", studentIds).in("homework_id", hwIds).not('score', 'is', null);
 
         // 4. Aggregate scores per student (using average)
         const studentScoresMap: Record<string, { total: number, count: number }> = {};
@@ -791,6 +816,7 @@ export async function getClassScoreLeaderboard(classId: string) {
 
         return { data: leaderboard, error: null };
     } catch (error: any) {
+        unstable_rethrow(error);
         console.error("Error fetching class score leaderboard:", error);
         return { data: [], error: error.message };
     }

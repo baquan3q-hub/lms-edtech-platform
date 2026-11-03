@@ -40,27 +40,20 @@ export default function AdminBehaviorDashboard({ data }: AdminBehaviorDashboardP
     const [sending, setSending] = useState(false);
     const [glossaryOpen, setGlossaryOpen] = useState(false);
 
-    if (!data) {
-        return (
-            <div className="text-center py-20">
-                <Activity className="w-16 h-16 text-slate-200 mx-auto mb-4" />
-                <h3 className="text-lg font-bold text-slate-700">Không tải được dữ liệu</h3>
-                <p className="text-sm text-slate-500">Vui lòng thử lại sau.</p>
-            </div>
-        );
-    }
-
-    const { overviewCards, riskDistribution, alertTrend, classComparison, studentDetails, courses, classes } = data;
+    const classes = data?.classes;
+    const studentDetails = data?.studentDetails;
 
     // Filter classes by course
     const filteredClassOptions = useMemo(() => {
-        if (selectedCourse === "all") return classes || [];
-        return (classes || []).filter((c: any) => c.courseId === selectedCourse);
+        if (!classes) return [];
+        if (selectedCourse === "all") return classes;
+        return classes.filter((c: any) => c.courseId === selectedCourse);
     }, [selectedCourse, classes]);
 
     // Filter + sort students
     const filteredStudents = useMemo(() => {
-        let students = studentDetails || [];
+        if (!studentDetails) return [];
+        let students = studentDetails;
         if (selectedCourse !== "all") {
             students = students.filter((s: any) => {
                 const cls = (classes || []).find((c: any) => c.id === s.classId);
@@ -96,6 +89,18 @@ export default function AdminBehaviorDashboard({ data }: AdminBehaviorDashboardP
         });
         return students;
     }, [studentDetails, classes, selectedCourse, selectedClass, searchQuery, sortBy, sortDir]);
+
+    if (!data) {
+        return (
+            <div className="text-center py-20">
+                <Activity className="w-16 h-16 text-slate-200 mx-auto mb-4" />
+                <h3 className="text-lg font-bold text-slate-700">Không tải được dữ liệu</h3>
+                <p className="text-sm text-slate-500">Vui lòng thử lại sau.</p>
+            </div>
+        );
+    }
+
+    const { overviewCards, riskDistribution, alertTrend, classComparison, courses } = data;
 
     const toggleSort = (field: "risk" | "gaming" | "name") => {
         if (sortBy === field) {
@@ -342,7 +347,7 @@ export default function AdminBehaviorDashboard({ data }: AdminBehaviorDashboardP
                         value={selectedCourse}
                         onChange={e => { setSelectedCourse(e.target.value); setSelectedClass("all"); }}
                     >
-                        <option value="all">Tất cả khóa học</option>
+                        <option value="all">Tất cả môn học</option>
                         {(courses || []).map((c: any) => (
                             <option key={c.id} value={c.id}>{c.name}</option>
                         ))}

@@ -12,13 +12,27 @@ import { useNotificationStore } from "@/stores/notificationStore";
  *
  * Nhúng vào app/(dashboard)/layout.tsx
  */
-export function useRealtimeSync(userId: string, role: string) {
+export function useRealtimeSync(userId: string, role: string, schoolId: string) {
     const queryClient = useQueryClient();
     const supabase = createClient();
     const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
     useEffect(() => {
-        if (!userId) return;
+        if (!userId || !schoolId) return;
+
+        // Một lần lưu điểm danh có thể phát hàng chục sự kiện Realtime.
+        // Gộp các invalidation trong cùng đợt để tránh tải lại query liên tục.
+        const pendingKeys = new Set<string>();
+        let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+        const scheduleRefresh = (...keys: string[]) => {
+            keys.forEach(key => pendingKeys.add(key));
+            if (refreshTimer) return;
+            refreshTimer = setTimeout(() => {
+                refreshTimer = null;
+                for (const key of pendingKeys) queryClient.invalidateQueries({ queryKey: [key] });
+                pendingKeys.clear();
+            }, 250);
+        };
 
         // Tránh tạo channel trùng
         if (channelRef.current) {
@@ -36,45 +50,19 @@ export function useRealtimeSync(userId: string, role: string) {
                     event: "*",
                     schema: "public",
                     table: "attendance_records",
+                    filter: `school_id=eq.${schoolId}`,
                 },
                 () => {
-                    queryClient.invalidateQueries({ queryKey: ["attendance"] });
-                    queryClient.invalidateQueries({ queryKey: ["student-stats"] });
-                    queryClient.invalidateQueries({ queryKey: ["admin-attendance-today"] });
-                    queryClient.invalidateQueries({ queryKey: ["child-attendance"] });
-                    queryClient.invalidateQueries({ queryKey: ["child-stats"] });
-                    queryClient.invalidateQueries({ queryKey: ["attendance-points"] });
+                    scheduleRefresh("attendance", "student-stats", "admin-attendance-today",
+                        "child-attendance", "child-stats", "attendance-points");
                 }
             )
 
             // ── 2. attendance_sessions ────────────────────────────
             // Khi mở phiên điểm danh mới
-            .on(
-                "postgres_changes",
-                {
-                    event: "INSERT",
-                    schema: "public",
-                    table: "attendance_sessions",
-                },
-                () => {
-                    queryClient.invalidateQueries({ queryKey: ["attendance"] });
-                    queryClient.invalidateQueries({ queryKey: ["admin-attendance-today"] });
-                }
-            )
 
             // ── 3. absence_requests ───────────────────────────────
             // Phụ huynh gửi đơn xin nghỉ → GV nhận biết
-            .on(
-                "postgres_changes",
-                {
-                    event: "*",
-                    schema: "public",
-                    table: "absence_requests",
-                },
-                () => {
-                    queryClient.invalidateQueries({ queryKey: ["absence-requests"] });
-                }
-            )
 
             // ── 4. notifications ──────────────────────────────────
             // Thông báo mới cho user hiện tại → cập nhật chuông
@@ -93,34 +81,9 @@ export function useRealtimeSync(userId: string, role: string) {
 
             // ── 5. student_class_stats ────────────────────────────
             // Thống kê cập nhật → refresh bảng xếp hạng
-            .on(
-                "postgres_changes",
-                {
-                    event: "*",
-                    schema: "public",
-                    table: "student_class_stats",
-                },
-                () => {
-                    queryClient.invalidateQueries({ queryKey: ["student-stats"] });
-                    queryClient.invalidateQueries({ queryKey: ["child-stats"] });
-                    queryClient.invalidateQueries({ queryKey: ["class-students"] });
-                }
-            )
 
             // ── 6. attendance_points ──────────────────────────────
             // Điểm chuyên cần thay đổi → gamification UI cập nhật
-            .on(
-                "postgres_changes",
-                {
-                    event: "*",
-                    schema: "public",
-                    table: "attendance_points",
-                },
-                () => {
-                    queryClient.invalidateQueries({ queryKey: ["attendance-points"] });
-                    queryClient.invalidateQueries({ queryKey: ["leaderboard"] });
-                }
-            )
 
             // ── 7. announcements ─────────────────────────────────
             // Thông báo mới từ lớp → Parent notifications page cập nhật
@@ -130,10 +93,10 @@ export function useRealtimeSync(userId: string, role: string) {
                     event: "INSERT",
                     schema: "public",
                     table: "announcements",
+                    filter: `school_id=eq.${schoolId}`,
                 },
                 () => {
-                    queryClient.invalidateQueries({ queryKey: ["parent-notifications"] });
-                    queryClient.invalidateQueries({ queryKey: ["class-announcements"] });
+                    scheduleRefresh("parent-notifications", "class-announcements");
                 }
             )
 
@@ -157,10 +120,11 @@ export function useRealtimeSync(userId: string, role: string) {
         fetchInitialNotifications();
 
         return () => {
+            if (refreshTimer) clearTimeout(refreshTimer);
             if (channelRef.current) {
                 supabase.removeChannel(channelRef.current);
                 channelRef.current = null;
             }
         };
-    }, [userId, role]);
+    }, [userId, role, schoolId, queryClient, supabase]);
 }

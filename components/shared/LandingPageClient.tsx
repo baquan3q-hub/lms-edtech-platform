@@ -111,10 +111,10 @@ export default function LandingPageClient() {
                         </div>
                         <div>
                             <span className="text-lg font-bold tracking-tight bg-gradient-to-r from-blue-700 to-indigo-800 bg-clip-text text-transparent">
-                                E-Learning Platform
+                                EduSchool LMS
                             </span>
                             <span className="block text-[10px] font-medium text-slate-500 tracking-wider uppercase">
-                                B2B School Solution
+                                K12 School Platform
                             </span>
                         </div>
                     </div>
@@ -178,7 +178,7 @@ export default function LandingPageClient() {
                                 </span>
                             </h1>
                             <p className="mx-auto lg:mx-0 max-w-2xl text-base sm:text-lg md:text-xl text-slate-500 leading-relaxed font-normal">
-                                Nền tảng LMS chuyên biệt dành cho các trường học và trung tâm giáo dục hiện đại. Quản lý điểm danh, chấm bài tự động với sự hỗ trợ của AI và kết nối phụ huynh tức thời trên một hệ thống bảo mật.
+                                Nền tảng LMS chuyên biệt dành cho các trường phổ thông hiện đại. Quản lý điểm danh, chấm bài tự động với sự hỗ trợ của AI và kết nối phụ huynh tức thời trên một hệ thống bảo mật.
                             </p>
                             <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-4">
                                 <button
@@ -517,7 +517,7 @@ export default function LandingPageClient() {
                                                 "Nhận tin nhắn điểm danh vào lớp/ra về tức thời của con",
                                                 "Theo dõi sát sao tiến độ làm bài tập, học lực định kỳ của con",
                                                 "Trao đổi trực tiếp, nhận nhận xét của giáo viên chủ nhiệm",
-                                                "Thanh toán học phí trực tuyến an toàn qua Stripe hoặc cổng VNPAY"
+                                                "Nắm bắt kịp thời thông báo, kế hoạch học tập và hoạt động nhà trường"
                                             ].map((item, idx) => (
                                                 <li key={idx} className="flex items-start gap-2.5 text-sm text-slate-600">
                                                     <CheckCircle2 className="h-4.5 w-4.5 text-emerald-500 shrink-0 mt-0.5" />
@@ -535,27 +535,27 @@ export default function LandingPageClient() {
                                     {activeTab === "admin" && (
                                         <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200/50 space-y-4">
                                             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                                                <span className="text-xs font-bold text-slate-700">Dòng Tiền Học Phí</span>
-                                                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Tháng 6</span>
+                                                <span className="text-xs font-bold text-slate-700">Chuyên Cần Toàn Trường</span>
+                                                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">Hôm nay</span>
                                             </div>
                                             <div className="space-y-2.5">
                                                 <div>
                                                     <div className="flex justify-between text-[11px] font-medium text-slate-500 mb-1">
-                                                        <span>Đã thu học phí</span>
-                                                        <span className="font-bold text-slate-700">340,500,000đ / 380,000,000đ</span>
+                                                        <span>Tỷ lệ có mặt</span>
+                                                        <span className="font-bold text-slate-700">97.8% (1,248 / 1,276)</span>
                                                     </div>
                                                     <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                                        <div className="bg-blue-600 h-2 rounded-full" style={{ width: '89.6%' }} />
+                                                        <div className="bg-emerald-500 h-2 rounded-full" style={{ width: '97.8%' }} />
                                                     </div>
                                                 </div>
                                                 <div className="grid grid-cols-2 gap-3 pt-2">
                                                     <div className="p-2 border border-slate-100 rounded-lg bg-slate-50/50">
-                                                        <span className="block text-[9px] font-bold text-slate-400">ĐÃ ĐÓNG (HỌC SINH)</span>
-                                                        <span className="text-sm font-extrabold text-emerald-600">312</span>
+                                                        <span className="block text-[9px] font-bold text-slate-400">NGHỈ CÓ PHÉP</span>
+                                                        <span className="text-sm font-extrabold text-amber-600">22</span>
                                                     </div>
                                                     <div className="p-2 border border-slate-100 rounded-lg bg-slate-50/50">
-                                                        <span className="block text-[9px] font-bold text-slate-400">CHƯA ĐÓNG (HỌC SINH)</span>
-                                                        <span className="text-sm font-extrabold text-rose-500">36</span>
+                                                        <span className="block text-[9px] font-bold text-slate-400">CẦN XÁC MINH</span>
+                                                        <span className="text-sm font-extrabold text-rose-500">6</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -644,7 +644,7 @@ export default function LandingPageClient() {
                     <div className="mx-auto max-w-3xl text-center space-y-4 mb-16">
                         <span className="text-xs font-bold tracking-widest text-blue-600 uppercase">Giá trị cốt lõi</span>
                         <h2 className="text-3xl font-extrabold text-slate-900 sm:text-4xl tracking-tight">
-                            Tại sao chọn E-Learning Platform?
+                            Tại sao chọn EduSchool LMS?
                         </h2>
                         <div className="h-1 w-12 bg-blue-600 mx-auto rounded" />
                     </div>
@@ -673,9 +673,9 @@ export default function LandingPageClient() {
                             <div className="h-10 w-10 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center font-bold">
                                 03
                             </div>
-                            <h3 className="text-lg font-bold text-slate-950">Thanh toán & Báo cáo minh bạch</h3>
+                            <h3 className="text-lg font-bold text-slate-950">Phối hợp Nhà trường & Gia đình</h3>
                             <p className="text-slate-500 text-sm leading-relaxed">
-                                Tích hợp thanh toán Stripe và VNPAY, gửi biên lai hóa đơn tức thì cho phụ huynh. Ban giám hiệu cập nhật doanh thu và biến động trực quan.
+                                Cầu nối thông tin hai chiều giữa giáo viên và phụ huynh. Tự động thông báo nề nếp, điểm danh, kết quả học tập định kỳ đến từng gia đình.
                             </p>
                         </div>
                     </div>
@@ -727,7 +727,7 @@ export default function LandingPageClient() {
                                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                         <div className="space-y-1.5">
                                             <label htmlFor="schoolName" className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                                                Tên trường / Trung tâm <span className="text-red-500">*</span>
+                                                Tên trường học <span className="text-red-500">*</span>
                                             </label>
                                             <input
                                                 type="text"
@@ -865,10 +865,10 @@ export default function LandingPageClient() {
                             </div>
                             <div>
                                 <span className="text-lg font-bold tracking-tight text-white">
-                                    E-Learning Platform
+                                    EduSchool LMS
                                 </span>
                                 <span className="block text-[10px] font-medium text-slate-400 tracking-wider uppercase">
-                                    B2B School Solution
+                                    K12 School Platform
                                 </span>
                             </div>
                         </div>
@@ -891,7 +891,7 @@ export default function LandingPageClient() {
                     </div>
 
                     <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
-                        <p>© 2026 E-Learning Platform. All rights reserved. Phát triển bởi Google DeepMind Partner.</p>
+                        <p>© 2026 EduSchool LMS. All rights reserved.</p>
                         <div className="flex gap-4">
                             <a href="#" className="hover:underline">Điều khoản dịch vụ</a>
                             <a href="#" className="hover:underline">Chính sách bảo mật</a>

@@ -31,7 +31,7 @@ export async function createCourse(formData: FormData) {
         const mode = formData.get("mode")?.toString() || "offline";
 
         if (!name) {
-            return { error: "Tên khóa học không được để trống" };
+            return { error: "Tên môn học không được để trống" };
         }
 
         const supabase = createAdminClient();
@@ -85,7 +85,7 @@ export async function updateCourse(id: string, formData: FormData) {
         const mode = formData.get("mode")?.toString() || "offline";
 
         if (!name) {
-            return { error: "Tên khóa học không được để trống" };
+            return { error: "Tên môn học không được để trống" };
         }
 
         const supabase = createAdminClient();
