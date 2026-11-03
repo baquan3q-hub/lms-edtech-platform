@@ -8,6 +8,8 @@ import { getCurrentUser } from "@/lib/supabase/auth";
 import { checkAccountActivationStatus } from "@/lib/auth/activation";
 import { redirect } from "next/navigation";
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardLayout({
     children,
 }: {

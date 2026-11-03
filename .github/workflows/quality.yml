@@ -18,7 +18,10 @@ jobs:
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
-      - run: npm run build
+      - name: Build without privileged database credentials
+        run: npm run build
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ""
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"

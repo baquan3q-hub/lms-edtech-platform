@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import SuperAdminSidebar from "@/components/super-admin/SuperAdminSidebar";
 import SuperAdminNavbar from "@/components/super-admin/SuperAdminNavbar";
 
+export const dynamic = "force-dynamic";
+
 export default async function SuperAdminLayout({
     children,
 }: {
