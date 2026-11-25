@@ -1,5 +1,6 @@
 "use server";
 
+import { requireActor, requireRowClassAccess } from "@/lib/auth/authorize";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { sendNotificationToClass, sendNotificationToUser } from "@/lib/notifications/send-notification";
@@ -236,6 +237,7 @@ export async function fetchAdminAnnouncements(filters?: {
     limit?: number;
 }) {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
 
         let query = adminSupabase
@@ -298,6 +300,7 @@ export async function fetchAdminAnnouncements(filters?: {
 // ============================================================
 export async function getAnnouncementReadDetails(announcementId: string) {
     try {
+        await requireRowClassAccess("announcements", announcementId, "teach");
         const adminSupabase = createAdminClient();
 
         const { data: reads, error } = await adminSupabase
@@ -372,6 +375,7 @@ export async function recordAnnouncementRead(announcementId: string) {
 // ============================================================
 export async function fetchCoursesAndClasses() {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
 
         const { data: courses } = await adminSupabase

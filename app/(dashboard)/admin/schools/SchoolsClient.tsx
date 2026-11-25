@@ -21,7 +21,6 @@ import {
     Activity,
     Settings2,
     Copy,
-    Check,
     Loader2,
     RefreshCw,
     ExternalLink,
@@ -33,6 +32,7 @@ import {
     Terminal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { SchoolApiKeyManager } from "@/components/super-admin/SchoolApiKeyManager";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -69,7 +69,6 @@ export default function SchoolsClient({ initialSchools }: SchoolsClientProps) {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
     const [testResult, setTestResult] = useState<any>(null);
-    const [copiedKey, setCopiedKey] = useState(false);
 
     // Add Form state
     const [addForm, setAddForm] = useState({
@@ -256,15 +255,12 @@ export default function SchoolsClient({ initialSchools }: SchoolsClientProps) {
     // Open API Key Dialog
     function openApiKeyModal(school: SchoolWithQuota) {
         setSelectedSchool(school);
-        setCopiedKey(false);
         setIsApiKeyOpen(true);
     }
 
     function copyToClipboard(text: string) {
         navigator.clipboard.writeText(text);
-        setCopiedKey(true);
         toast.success("Đã sao chép vào bộ nhớ tạm!");
-        setTimeout(() => setCopiedKey(false), 2500);
     }
 
     return (
@@ -891,26 +887,17 @@ export default function SchoolsClient({ initialSchools }: SchoolsClientProps) {
 
                     {selectedSchool && (
                         <div className="space-y-4 pt-2">
-                            {/* API Key Box */}
-                            <div className="space-y-1.5">
-                                <Label className="text-xs font-semibold text-gray-700">Khóa bí mật API Key:</Label>
-                                <div className="flex items-center gap-2">
-                                    <Input
-                                        readOnly
-                                        value={selectedSchool.apiKey}
-                                        className="font-mono text-xs bg-slate-50 select-all"
-                                    />
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => copyToClipboard(selectedSchool.apiKey)}
-                                        className="shrink-0 gap-1 text-xs"
-                                    >
-                                        {copiedKey ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-                                        {copiedKey ? "Đã chép" : "Sao chép"}
-                                    </Button>
-                                </div>
-                            </div>
+                            {/* API Key: server chỉ lưu bản băm, key gốc hiện một lần lúc tạo */}
+                            <SchoolApiKeyManager
+                                key={selectedSchool.id}
+                                schoolId={selectedSchool.id}
+                                schoolCode={selectedSchool.code}
+                                initialInfo={selectedSchool.apiKey}
+                                onChange={(info) => {
+                                    setSchools((prev) => prev.map((s) => (s.id === selectedSchool.id ? { ...s, apiKey: info } : s)));
+                                    setSelectedSchool((prev) => (prev ? { ...prev, apiKey: info } : prev));
+                                }}
+                            />
 
                             {/* Endpoint URL Box */}
                             <div className="space-y-1.5">
@@ -941,12 +928,12 @@ export default function SchoolsClient({ initialSchools }: SchoolsClientProps) {
                                 </Label>
                                 <div className="p-3 bg-slate-900 text-slate-100 rounded-lg font-mono text-[11px] overflow-x-auto leading-relaxed">
                                     <code>{`curl -X GET "${typeof window !== "undefined" ? window.location.origin : "https://eduschool.vn"}/api/schools/${selectedSchool.id}" \\
-  -H "x-school-api-key: ${selectedSchool.apiKey}"`}</code>
+  -H "x-school-api-key: <API_KEY>"`}</code>
                                 </div>
                             </div>
 
                             <div className="p-3 bg-amber-50/70 border border-amber-200 rounded-lg text-[11px] text-amber-800">
-                                ⚠️ <strong>Bảo mật:</strong> Không chia sẻ API Key cho bên thứ ba không tin cậy. Mỗi trường học chỉ có một khóa định danh duy nhất.
+                                ⚠️ <strong>Bảo mật:</strong> Không chia sẻ API Key cho bên thứ ba không tin cậy. Mỗi trường chỉ có một key còn hiệu lực; nghi bị lộ thì bấm "Tạo key mới" để thu hồi key cũ.
                             </div>
                         </div>
                     )}

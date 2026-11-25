@@ -1,6 +1,6 @@
 import "server-only";
 import { cache } from "react";
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { cookies, headers } from "next/headers";
 import { isEffective, isVerifiedGuardian } from "./policy";
@@ -49,13 +49,14 @@ export const DEFAULT_PILOT_SCHOOL_ID = "00000000-0000-0000-0001-000000000000";
  * Request-scoped memoization bằng React cache giúp tránh lặp lại truy vấn trong cùng 1 request.
  */
 export const getActorContext = cache(async (targetSchoolId?: string): Promise<ActorContext | null> => {
-  const sessionClient = await createClient();
   const requestHeaders = await headers();
   const authorization = requestHeaders.get("authorization");
-  if (authorization && (!authorization.startsWith("Bearer ") || authorization.length > 16384)) return null;
-  const { data: { user }, error: authError } = await sessionClient.auth.getUser(authorization?.slice(7));
+  if (authorization && (!authorization.startsWith("Bearer ") || authorization.length <= 7 || authorization.length > 16384)) return null;
+  // Share the cookie-session lookup with layouts/profile/page in this render.
+  // Bearer clients keep a separate cache entry keyed by their access token.
+  const user = authorization ? await getCurrentUser(authorization.slice(7)) : await getCurrentUser();
 
-  if (authError || !user) {
+  if (!user) {
     return null;
   }
 

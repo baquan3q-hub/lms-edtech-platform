@@ -23,8 +23,6 @@ import {
     Key,
     KeyRound,
     Activity,
-    Copy,
-    Check,
     Loader2,
     ExternalLink,
     Zap,
@@ -47,6 +45,7 @@ import {
     DialogFooter,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
+import { SchoolApiKeyManager } from "@/components/super-admin/SchoolApiKeyManager";
 import { cn } from "@/lib/utils";
 
 interface SchoolDetailClientProps {
@@ -58,8 +57,8 @@ export default function SchoolDetailClient({ data: initialData }: SchoolDetailCl
     const [activeTab, setActiveTab] = useState<"members" | "classes" | "exams" | "ai" | "finance">("members");
     const [roleFilter, setRoleFilter] = useState<string>("all");
 
-    // Copy states
-    const [copiedKey, setCopiedKey] = useState(false);
+    // API key dialog
+    const [isKeyOpen, setIsKeyOpen] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
     const [testResult, setTestResult] = useState<any>(null);
     const [isTestOpen, setIsTestOpen] = useState(false);
@@ -78,13 +77,6 @@ export default function SchoolDetailClient({ data: initialData }: SchoolDetailCl
 
     // Member Status Toggle loading
     const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
-
-    function copyToClipboard(text: string) {
-        navigator.clipboard.writeText(text);
-        setCopiedKey(true);
-        toast.success("Đã sao chép API Key!");
-        setTimeout(() => setCopiedKey(false), 2500);
-    }
 
     // Toggle AI
     async function handleToggleAi() {
@@ -307,13 +299,13 @@ export default function SchoolDetailClient({ data: initialData }: SchoolDetailCl
                             <div className="flex flex-wrap items-center gap-3 mt-3">
                                 <div className="flex items-center gap-1.5 text-xs font-mono bg-white/10 px-2.5 py-1 rounded-lg border border-white/20">
                                     <Key className="w-3 h-3 text-amber-300" />
-                                    <span>API Key: {data.school.apiKey.slice(0, 16)}...</span>
+                                    <span>API Key: {data.school.apiKey ? `${data.school.apiKey.prefix}…` : "chưa tạo"}</span>
                                     <button
-                                        onClick={() => copyToClipboard(data.school.apiKey)}
-                                        className="text-white/80 hover:text-white ml-1 cursor-pointer"
-                                        title="Sao chép toàn bộ API Key"
+                                        onClick={() => setIsKeyOpen(true)}
+                                        className="text-white/80 hover:text-white ml-1 cursor-pointer underline-offset-2 hover:underline font-sans"
+                                        title="Tạo mới hoặc thu hồi API Key"
                                     >
-                                        {copiedKey ? <Check className="w-3.5 h-3.5 text-emerald-300" /> : <Copy className="w-3.5 h-3.5" />}
+                                        Quản lý
                                     </button>
                                 </div>
 
@@ -829,6 +821,26 @@ export default function SchoolDetailClient({ data: initialData }: SchoolDetailCl
             )}
 
             {/* Direct Member Password Reset Modal */}
+            <Dialog open={isKeyOpen} onOpenChange={setIsKeyOpen}>
+                <DialogContent className="max-w-lg bg-white">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2 text-lg font-bold text-gray-900">
+                            <Key className="w-5 h-5 text-amber-500" />
+                            API Key trường [{data.school.code}]
+                        </DialogTitle>
+                        <DialogDescription className="text-xs text-gray-500">
+                            Dùng cho endpoint /api/schools/{data.school.id}. Hệ thống chỉ lưu bản băm nên key gốc chỉ hiện một lần lúc tạo.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <SchoolApiKeyManager
+                        schoolId={data.school.id}
+                        schoolCode={data.school.code}
+                        initialInfo={data.school.apiKey}
+                        onChange={(info) => setData((prev) => ({ ...prev, school: { ...prev.school, apiKey: info } }))}
+                    />
+                </DialogContent>
+            </Dialog>
+
             <Dialog open={isResetPasswordOpen} onOpenChange={setIsResetPasswordOpen}>
                 <DialogContent className="max-w-md bg-white border-slate-200">
                     <DialogHeader>

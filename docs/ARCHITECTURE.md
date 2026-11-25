@@ -1,6 +1,8 @@
 # Architecture - LMS EdTech Platform
 
-Last reviewed: 2026-05-27
+Last reviewed: 2026-11-04
+
+Kiến trúc hiện hành và kế hoạch chuyển tiếp: [rà soát toàn bộ LMS 04/11](RA_SOAT_KIEN_TRUC_VA_HIEU_NANG_2026-11-04.md), [trạng thái tái thiết K12](REBUILD_K12_IMPLEMENTATION.md). Nghiệp vụ mới đặt trong `lib/modules`; Server Actions và `/api/v1` là adapter. Python worker xử lý projection qua outbox; Supabase giữ dữ liệu gốc. `getActorContext` dùng helper Auth được React cache trong render cùng layout/profile/page; bearer token có lookup riêng. Không cache actor/phiên dùng chung giữa các request. Các sơ đồ và bảng legacy bên dưới mô tả code cũ, chưa phải toàn bộ kiến trúc đích.
 
 ## 1. Tổng quan
 
@@ -70,6 +72,16 @@ Route `/api`, `/_next`, static files và manifest được bỏ qua ở proxy. �
 
 Quy tắc: nếu dùng `createAdminClient()`, code phải nằm server-only và phải kiểm quyền trước khi đọc/ghi dữ liệu người khác.
 
+### API key tích hợp của trường
+
+Hệ thống ngoài gọi `GET /api/schools/[schoolId]` bằng API key của trường (header `x-school-api-key` hoặc `Authorization: Bearer`), không dùng session.
+
+- Logic nằm ở `lib/modules/school-api-keys/service.ts`; dữ liệu ở bảng `school_api_keys` (migration `202611250001`).
+- Key có dạng `sch_live_<32 byte ngẫu nhiên base64url>`. DB chỉ lưu SHA-256 và tiền tố 16 ký tự để hiển thị; so sánh bằng `timingSafeEqual`.
+- Mỗi trường có tối đa một key còn hiệu lực. Chỉ Super Admin được tạo, xoay vòng hoặc thu hồi (`rotateSchoolApiKeyAction`, `revokeSchoolApiKeyAction` trong `lib/actions/schools.ts`, UI `components/super-admin/SchoolApiKeyManager.tsx`). Key gốc chỉ hiện một lần lúc tạo.
+- Route kiểm key trước khi tra trường, nên key sai và trường không tồn tại đều trả 401 `INVALID_API_KEY`. Body theo chuẩn `api()`: `{ ok: true, data, requestId }` hoặc `{ ok: false, error: { code, message }, requestId }`.
+- Key kiểu cũ `sha256(salt ghi cứng + school_id + code)` đã bỏ và không còn được chấp nhận.
+
 ## 5. Module nghiệp vụ
 
 | Module | UI chính | Server logic | Data chính |
@@ -82,7 +94,7 @@ Quy tắc: nếu dùng `createAdminClient()`, code phải nằm server-only và 
 | Attendance | attendance pages | `attendance.ts`, `attendance-points.ts`, `point.ts` | `attendance_sessions`, `attendance_records`, `absence_requests`, points |
 | Communication | announcements, notifications, feedback | `announcement.ts`, `admin-announcements.ts`, `notifications.ts`, `feedback.ts` | `announcements`, `notifications`, `user_feedback` |
 | Parent portal | parent pages | `parentStudent.ts`, `parent-progress.ts`, `parent-views.ts` | `parent_students`, child learning/attendance/payment data |
-| Finance | admin finance, parent payments | payment API, `stripe.ts`, `vnpay.ts` | `fee_plans`, `invoices`, `payments` |
+| Finance | admin finance, parent payments | payment API, `lib/modules/payments/service.ts`, `stripe.ts`, `vnpay.ts`; webhook xác nhận qua RPC `confirm_provider_payment` | `fee_plans`, `invoices`, `payments`, `payment_provider_events` |
 | AI/Behavior | analytics pages, AI routes | `gemini.ts`, `behavior-analysis.ts`, `gemini-analysis.ts` | `student_activity_logs`, `student_behavior_scores`, `behavior_alerts` |
 
 ## 6. Realtime và cache

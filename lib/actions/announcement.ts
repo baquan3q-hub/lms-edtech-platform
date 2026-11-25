@@ -1,5 +1,6 @@
 "use server";
 
+import { requireClassAccess } from "@/lib/auth/authorize";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -84,6 +85,7 @@ export async function createAnnouncement(
 // ============================================================
 export async function fetchClassAnnouncements(classId: string) {
     try {
+        await requireClassAccess(classId, "read");
         const adminSupabase = createAdminClient();
 
         const { data, error } = await adminSupabase

@@ -1,26 +1,40 @@
 # Test Plan - LMS EdTech Platform
 
-Last reviewed: 2026-05-27
+Last reviewed: 2026-11-04
+
+## Cập nhật hiệu năng và Auth 04/11/2026
+
+Sau yêu cầu dựng lại một trường: `npm test` đạt **146/146**. Sáu test clean-reset kiểm tra dựng rỗng, guard Storage, transaction, quy mô 200/15/1 và quyền đọc trường/lớp. Đã thử Auth/PostgREST thật theo ba vai trò; chưa thử UI production do Vercel trả DEPLOYMENT_PAUSED. Chi tiết và tài khoản lưu riêng tại [biên bản dựng lại](DUNG_LAI_DATABASE_MOT_TRUONG_2026-11-04.md).
+
+- `npm run typecheck`: đạt sau thay đổi helper Auth dùng chung.
+- `npx vitest run tests/unit/actor_resolution.test.ts tests/unit/actor_context.test.ts tests/unit/student_auth.test.ts`: 14/14 đạt. Có kiểm tra bearer token, lỗi Auth dù trả user, header sai, membership/activation và phạm vi trường.
+- `npm run db:inventory`: kết nối thật chỉ đọc, 95 resource/15 RPC; các hợp đồng mới chưa xuất hiện trên API.
+- `npm run db:performance`: GET metadata + HEAD giới hạn, không trả nội dung hàng; chỉ là đo mạng/API bằng service role, chưa phải benchmark dashboard/RLS.
+- SQL ứng viên 8 index đã chạy hai lần trên PostgreSQL cục bộ PGlite sau canonical migration chain; script catalog chạy được trong transaction chỉ đọc (12 result set gồm lệnh điều khiển). Chỉ chứng minh tính hợp lệ/tái chạy ở local, chưa chứng minh cần index hoặc tăng tốc DB thật.
+- Gate còn lại: [kế hoạch đo bốn portal, SQL/index và RLS](RA_SOAT_KIEN_TRUC_VA_HIEU_NANG_2026-11-04.md). Chưa có kết quả p95 trước/sau hoặc nghiệm thu trên Supabase staging.
 
 ## 1. Mục tiêu kiểm thử
 
 Đảm bảo các workflow lõi của LMS hoạt động đúng theo role, không rò rỉ dữ liệu giữa người dùng, và các tích hợp AI/payment có fallback rõ khi lỗi.
 
-Hiện `package.json` có `dev`, `build`, `start`, `lint`; chưa có script test tự động. Trước mắt dùng checklist thủ công + lint/build, sau đó bổ sung unit/integration/e2e.
+`package.json` hiện có typecheck, lint, Vitest, integration/database, worker và Playwright. Các checklist legacy bên dưới bổ sung tình huống; trạng thái thực thi gần nhất của lần tái thiết nằm trong `REBUILD_K12_IMPLEMENTATION.md`.
 
 ## 2. Lệnh kiểm tra hiện có
 
 ```bash
 npm run lint
+npm run typecheck
+npm test
+npm run test:db
+npm run test:e2e
 npm run build
 ```
 
-Khuyến nghị thêm sau:
+Kiểm tra kết nối chỉ đọc:
 
 ```bash
-npm run test
-npm run test:e2e
-npm run typecheck
+npm run db:inventory
+npm run db:performance
 ```
 
 ## 3. Test matrix theo role
@@ -42,6 +56,12 @@ npm run typecheck
 | Parent gọi API/Action dữ liệu student không liên kết | Forbidden hoặc không có dữ liệu |
 | Teacher mở class không thuộc mình | Forbidden hoặc not found |
 | API `/api/*` bị gọi trực tiếp | Endpoint tự kiểm quyền, không dựa vào proxy |
+| Server Action bị POST trực tiếp khi chưa login hoặc sai vai trò | Bị từ chối (401/403 hoặc `{ error }`). `tests/unit/server_action_guards.test.ts` fail nếu một action dùng `createAdminClient()`/`getGeminiModel()` mà thiếu guard |
+| Duyệt bản nháp AI với `reviewerId` của người khác hoặc job khác trường | Bị từ chối, job giữ trạng thái `draft` (`tests/integration/phase6_ai.test.ts`) |
+| `requireSelfOrRoles`, `requireRowClassAccess` | Chặn user khác trường, bản ghi không tồn tại (404), lớp không thuộc người gọi (403) (`tests/unit/authorize_helpers.test.ts`) |
+| `GET /api/schools/[schoolId]` với key thiếu, sai, đã thu hồi, của trường khác, key cũ tính từ salt, hoặc `schoolId` không tồn tại | 401 `INVALID_API_KEY`, cùng một thông báo; key đúng trả 200 `{ ok, data }` (`tests/unit/school_api_keys.test.ts`) |
+| Xoay vòng/thu hồi API key trường | Chỉ Super Admin; key cũ hết hiệu lực ngay; DB chỉ chứa bản băm; có `audit_events` (`tests/unit/school_api_keys.test.ts`) |
+| Bảng `school_api_keys` | Tối đa một key hiệu lực mỗi trường; `key_hash` phải là hex 64 ký tự; admin chỉ đọc key trường mình; giáo viên không thấy; `authenticated`/`anon` không ghi được (`tests/integration/school_api_keys.test.ts`) |
 
 ## 5. Academic flow tests
 
@@ -92,10 +112,14 @@ Kiểm tra DB: `attendance_sessions`, `attendance_records`, `absence_requests`, 
 | Case | Kỳ vọng |
 |---|---|
 | Parent xem invoice | Chỉ thấy invoice của con đã link |
-| Tạo Stripe payment | PaymentIntent tạo server-side, amount không tin từ client |
-| Stripe webhook thành công | Payment/invoice cập nhật idempotent |
-| VNPay return/IPN | Verify hash trước khi cập nhật |
-| Manual transfer | Admin duyệt trước khi invoice paid |
+| Tạo Stripe payment | PaymentIntent tạo server-side, amount không tin từ client; mã đơn = PaymentIntent id; không gửi tên học sinh (`tests/unit/payment_service.test.ts`) |
+| Tạo VNPay payment | Mỗi lần thử có `vnp_TxnRef` riêng (32 hex); `vnp_CreateDate`/`vnp_ExpireDate` theo GMT+7, hết hạn sau 15 phút; số tiền lấy từ hoá đơn (`tests/unit/payment_webhooks.test.ts`, `payment_service.test.ts`) |
+| Tạo payment/xác nhận chuyển khoản cho hoá đơn trường khác, hoặc giám hộ chưa xác minh/đã thu hồi/hết hạn | 404 với hoá đơn trường khác, 403 với giám hộ không hợp lệ; không tạo bản ghi (`payment_service.test.ts`) |
+| Stripe webhook thành công | Payment và invoice cập nhật trong một transaction; gửi lại cùng `event.id` không đổi gì; sai chữ ký 400; lỗi DB 500 để Stripe gửi lại; không khớp đơn hoặc lệch số tiền trả 200 và ghi log (`payment_webhooks.test.ts`, `tests/integration/payment_confirmation.test.ts`) |
+| Stripe `payment_failed` rồi `succeeded` cho cùng PaymentIntent | Payment chuyển `failed` rồi `succeeded`, invoice `paid` |
+| VNPay IPN | Sai chữ ký `97`; số tiền lệch `04` (payment giữ `pending`); đơn đã xử lý `02`; không thấy đơn `01`; lỗi DB `99`; trả JSON `{ RspCode, Message }` |
+| RPC `confirm_provider_payment` | Chỉ `service_role` gọi được; chỉ báo phụ huynh đã xác minh; có `audit_events` khi xác nhận hoặc lệch số tiền (`payment_confirmation.test.ts`) |
+| Manual transfer | Admin duyệt trước khi invoice paid; hai yêu cầu cùng lúc chỉ một cái đổi trạng thái (409 cho cái sau) |
 
 Không test bằng key production trong local.
 

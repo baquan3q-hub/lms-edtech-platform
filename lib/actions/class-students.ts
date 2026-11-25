@@ -1,11 +1,13 @@
 "use server";
 
+import { requireActor, requireClassAccess, requireStudentAccess } from "@/lib/auth/authorize";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getGeminiModel } from "@/lib/gemini";
 
 export async function getClassStudentsWithStats(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
         const adminSupabase = createAdminClient();
 
         // 1. Get enrolled students
@@ -66,6 +68,7 @@ export async function getClassStudentsWithStats(classId: string) {
 // =====================================================
 export async function fetchClassScoreReport(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
         const adminSupabase = createAdminClient();
 
         // 1. Enrolled students
@@ -226,6 +229,7 @@ export async function fetchClassScoreReport(classId: string) {
 // =====================================================
 export async function generateClassAIReport(className: string, reportData: any, classId?: string) {
     try {
+        await (classId ? requireClassAccess(classId, "teach") : requireActor(["admin", "teacher"]));
         const { summary, students } = reportData;
         const weakStudents = students.filter((s: any) => s.avgScore10 < 5);
 
@@ -327,6 +331,7 @@ QUAN TRỌNG: Trả về văn bản thuần (KHÔNG dùng JSON). Sử dụng **i
 // =====================================================
 export async function loadSavedAIReport(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("class_ai_reports")
@@ -347,6 +352,7 @@ export async function loadSavedAIReport(classId: string) {
 // =====================================================
 export async function generateImprovementTasks(studentName: string, weakAreas: string[], className: string) {
     try {
+        await requireActor(["admin", "teacher"]);
         const model = getGeminiModel("gemini-2.5-flash");
 
         const prompt = `
@@ -381,6 +387,7 @@ QUAN TRỌNG: Dùng **in đậm** cho tên bài tập và tiêu đề. Dùng emo
 // =====================================================
 export async function sendReminderAction(studentId: string, classId: string, className: string, itemName: string, itemType: "homework" | "exam") {
     try {
+        await requireStudentAccess(studentId, true);
         const adminSupabase = createAdminClient();
 
         // 1. Get parents

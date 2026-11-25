@@ -1,5 +1,5 @@
 // Trigger recompile to fix hydration mismatch
-import { createClient } from "@/lib/supabase/server";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { redirect } from "next/navigation";
 import ParentDashboardClient from "./ParentDashboardClient";
@@ -7,8 +7,7 @@ import ParentDashboardClient from "./ParentDashboardClient";
 export const dynamic = "force-dynamic";
 
 export default async function ParentDashboardPage() {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = await getCurrentUser();
     if (!user) redirect("/login");
 
     const adminSupabase = createAdminClient();

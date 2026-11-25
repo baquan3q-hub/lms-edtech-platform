@@ -1,10 +1,12 @@
 "use server";
 
+import { requireActor } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
 export async function fetchCourses() {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         // Fetch courses with classes
@@ -26,6 +28,7 @@ export async function fetchCourses() {
 
 export async function createCourse(formData: FormData) {
     try {
+        await requireActor(["admin"]);
         const name = formData.get("name")?.toString();
         const description = formData.get("description")?.toString();
         const mode = formData.get("mode")?.toString() || "offline";
@@ -61,6 +64,7 @@ export async function createCourse(formData: FormData) {
 
 export async function deleteCourse(id: string) {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         const { error } = await supabase
@@ -80,6 +84,7 @@ export async function deleteCourse(id: string) {
 
 export async function updateCourse(id: string, formData: FormData) {
     try {
+        await requireActor(["admin"]);
         const name = formData.get("name")?.toString();
         const description = formData.get("description")?.toString();
         const mode = formData.get("mode")?.toString() || "offline";

@@ -1,11 +1,25 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { AccessError, requireActor } from "@/lib/auth/authorize";
 import {
     questionGenerationSchema,
     rubricFeedbackSchema,
     earlyInterventionRecommendationSchema,
 } from "@/lib/ai/schemas";
+
+/** Reviewer must be the signed-in staff member, acting on a job in their own school. */
+async function guardAiReviewer(claimedUserId: string, jobSchoolId: string | null): Promise<string | null> {
+    try {
+        const actor = await requireActor(["admin", "teacher"]);
+        if (claimedUserId !== actor.id) return "Người duyệt không khớp với tài khoản đang đăng nhập.";
+        if (actor.role !== "super_admin" && jobSchoolId !== actor.schoolId) return "Tác vụ AI thuộc trường khác.";
+        return null;
+    } catch (error) {
+        if (error instanceof AccessError) return error.message;
+        throw error;
+    }
+}
 
 export interface ReviewActionResult {
     success: boolean;
@@ -37,6 +51,9 @@ export async function approveAiJobAction(params: {
     if (fetchErr || !job) {
         return { success: false, error: "Không tìm thấy tác vụ AI cần duyệt." };
     }
+
+    const denied = await guardAiReviewer(reviewerId, job.school_id);
+    if (denied) return { success: false, error: denied };
 
     if (job.review_status !== "draft") {
         return { success: false, error: `Tác vụ AI này đã được xử lý (trạng thái: ${job.review_status}).` };
@@ -125,6 +142,9 @@ export async function rejectAiJobAction(params: {
         return { success: false, error: "Không tìm thấy tác vụ AI cần bác bỏ." };
     }
 
+    const denied = await guardAiReviewer(reviewerId, job.school_id);
+    if (denied) return { success: false, error: denied };
+
     if (job.review_status !== "draft") {
         return { success: false, error: `Tác vụ AI này đã ở trạng thái ${job.review_status}.` };
     }
@@ -185,6 +205,9 @@ export async function applyApprovedInterventionAction(params: {
         return { success: false, error: "Không tìm thấy tác vụ AI." };
     }
 
+    const denied = await guardAiReviewer(teacherId, job.school_id);
+    if (denied) return { success: false, error: denied };
+
     if (job.review_status !== "approved") {
         return {
             success: false,
@@ -196,6 +219,15 @@ export async function applyApprovedInterventionAction(params: {
     const selectedAction = payload?.recommended_actions?.[actionIndex];
     if (!selectedAction) {
         return { success: false, error: "Hành động được chọn không tồn tại trong bản nháp đã duyệt." };
+    }
+
+    const { data: interventionCase } = await supabase
+        .from("intervention_cases")
+        .select("school_id")
+        .eq("id", caseId)
+        .maybeSingle();
+    if (!interventionCase || interventionCase.school_id !== job.school_id) {
+        return { success: false, error: "Ca can thiệp không thuộc cùng trường với tác vụ AI." };
     }
 
     // 2. Ghi vào bảng intervention_actions (Phase 5)

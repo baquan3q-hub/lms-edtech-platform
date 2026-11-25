@@ -1,10 +1,12 @@
 "use server";
 
+import { requireSelfOrRoles, requireStudentAccess } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
 export async function fetchTasksStatus(teacherId: string) {
     try {
+        await requireSelfOrRoles(teacherId, ["admin"]);
         const supabase = createAdminClient();
 
         // 1. Get Teacher's Classes
@@ -156,6 +158,7 @@ export async function fetchTasksStatus(teacherId: string) {
 
 export async function sendProgressReminder(studentId: string, message: string) {
     try {
+        await requireStudentAccess(studentId, true);
         const supabase = createAdminClient();
 
         // 1. Gửi cho Học sinh

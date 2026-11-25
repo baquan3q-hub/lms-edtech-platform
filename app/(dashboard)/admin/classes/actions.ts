@@ -1,10 +1,12 @@
 "use server";
 
+import { requireActor } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
 export async function fetchClasses() {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         const { data, error } = await supabase
@@ -26,6 +28,7 @@ export async function fetchClasses() {
 
 export async function fetchDropdownData() {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         // Fetch courses for dropdown
@@ -54,6 +57,7 @@ export async function fetchDropdownData() {
 
 export async function createClass(formData: FormData) {
     try {
+        await requireActor(["admin"]);
         const name = formData.get("name")?.toString() || "Lớp Mới";
         const course_id = formData.get("course_id")?.toString();
         const teacher_id = formData.get("teacher_id")?.toString();
@@ -91,6 +95,7 @@ export async function createClass(formData: FormData) {
 
 export async function deleteClass(id: string) {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         const { error } = await supabase
@@ -110,6 +115,7 @@ export async function deleteClass(id: string) {
 
 export async function updateClass(id: string, formData: FormData) {
     try {
+        await requireActor(["admin"]);
         const name = formData.get("name")?.toString() || "Lớp Mới";
         const course_id = formData.get("course_id")?.toString();
         const teacher_id = formData.get("teacher_id")?.toString();
@@ -147,6 +153,7 @@ export async function updateClass(id: string, formData: FormData) {
 
 export async function createGrade(formData: FormData) {
     try {
+        await requireActor(["admin"]);
         const name = formData.get("name")?.toString();
         const description = formData.get("description")?.toString() || "";
         const mode = formData.get("mode")?.toString() || "offline";

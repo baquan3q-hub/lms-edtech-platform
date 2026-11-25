@@ -4,9 +4,13 @@ const state=vi.hoisted(()=>({
   role:"student", memberships:[{id:"m1",school_id:"school-a",role:"student",status:"active"}],
   activation:[] as {status:string}[],cookies:{} as Record<string,string>,headers:{} as Record<string,string>,
   membershipError:false,
+  authError:false, authTokens:[] as (string|undefined)[],
 }));
 vi.mock("next/headers",()=>({cookies:async()=>({get:(name:string)=>state.cookies[name]?{value:state.cookies[name]}:undefined}),headers:async()=>({get:(name:string)=>state.headers[name]||null})}));
-vi.mock("@/lib/supabase/server",()=>({createClient:async()=>({auth:{getUser:async()=>({data:{user:state.user},error:null})}})}));
+vi.mock("@/lib/supabase/server",()=>({createClient:async()=>({auth:{getUser:async(token?:string)=>{
+  state.authTokens.push(token);
+  return {data:{user:state.user},error:state.authError?{message:"invalid session"}:null};
+}}})}));
 vi.mock("@/lib/supabase/admin",()=>({createAdminClient:()=>({from:(table:string)=>{
   let rows:Record<string,unknown>[]=table==="users"?[{id:state.user.id,role:state.role}]:table==="school_memberships"?state.memberships:table==="account_activations"?state.activation:[];
   const query={
@@ -19,6 +23,7 @@ describe("Actor resolution uses verified school membership",()=>{
   beforeEach(()=>{
     state.role="student";state.memberships=[{id:"m1",school_id:"school-a",role:"student",status:"active"}];
     state.activation=[];state.cookies={};state.headers={};state.membershipError=false;
+    state.authError=false;state.authTokens=[];
   });
   it("ignores user-editable role metadata",async()=>{
     const actor=await getActorContext();expect(actor?.roles).toEqual(["student"]);expect(actor?.currentRole).toBe("student");
@@ -41,6 +46,21 @@ describe("Actor resolution uses verified school membership",()=>{
   it("supports bearer clients while validating the requested school",async()=>{
     state.headers={authorization:"Bearer validated-by-auth-provider","x-school-id":"school-a"};
     expect((await getActorContext())?.schoolId).toBe("school-a");
+    expect(state.authTokens).toEqual(["validated-by-auth-provider"]);
     state.headers["x-school-id"]="foreign-school";expect(await getActorContext()).toBeNull();
+  });
+  it("rejects auth-provider errors even if a user object is returned",async()=>{
+    state.authError=true;
+    expect(await getActorContext()).toBeNull();
+    state.headers={authorization:"Bearer rejected-token","x-school-id":"school-a"};
+    expect(await getActorContext()).toBeNull();
+    expect(state.authTokens).toEqual([undefined,"rejected-token"]);
+  });
+  it("rejects malformed authorization before looking up a session",async()=>{
+    state.headers={authorization:"Basic invalid"};
+    expect(await getActorContext()).toBeNull();
+    state.headers={authorization:"Bearer "};
+    expect(await getActorContext()).toBeNull();
+    expect(state.authTokens).toEqual([]);
   });
 });

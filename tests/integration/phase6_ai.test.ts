@@ -2,6 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { generateQuestionsDraft, generateRubricFeedbackDraft, generateInterventionRecommendationDraft } from "@/lib/ai/ai-service";
 import { approveAiJobAction, rejectAiJobAction, applyApprovedInterventionAction } from "@/lib/actions/ai-review";
 
+// Người duyệt đang đăng nhập (requireActor được mock; xem lib/actions/ai-review.ts)
+const reviewer = vi.hoisted(() => ({ current: { id: "teacher-t1", role: "teacher", roles: ["teacher"], schoolId: "school-ai-active" } }));
+vi.mock("@/lib/auth/authorize", async (importOriginal) => ({
+    ...(await importOriginal<typeof import("@/lib/auth/authorize")>()),
+    requireActor: async () => reviewer.current,
+}));
+
 // Mock Supabase admin client for AI governance testing
 const mockJobsDb = new Map<string, any>();
 const mockSchoolsDb = new Map<string, any>([
@@ -98,6 +105,16 @@ vi.mock("@/lib/supabase/admin", () => {
                     };
                 }
 
+                if (table === "intervention_cases") {
+                    return {
+                        select: () => ({
+                            eq: (_field: string, val: string) => ({
+                                maybeSingle: async () => ({ data: { id: val, school_id: "school-ai-active" }, error: null }),
+                            }),
+                        }),
+                    };
+                }
+
                 if (table === "intervention_actions") {
                     return {
                         insert: (payload: any) => ({
@@ -126,6 +143,7 @@ vi.mock("@/lib/supabase/admin", () => {
 describe("Phase 6: AI Integration & Zero-Autonomy Boundary Tests", () => {
     beforeEach(() => {
         mockJobsDb.clear();
+        reviewer.current = { id: "teacher-t1", role: "teacher", roles: ["teacher"], schoolId: "school-ai-active" };
     });
 
     // -------------------------------------------------------------------------
@@ -293,6 +311,26 @@ describe("Phase 6: AI Integration & Zero-Autonomy Boundary Tests", () => {
             const updatedJob = mockJobsDb.get(jobId);
             expect(updatedJob.review_status).toBe("rejected");
             expect(updatedJob.review_note).toContain("Câu hỏi quá khó");
+        });
+
+        it("should refuse a review signed with another user's reviewerId", async () => {
+            const genRes = await generateQuestionsDraft({
+                schoolId: "school-ai-active", requestedBy: "teacher-t1", subject: "Toán", gradeLevel: 6, topic: "Phân số",
+            });
+            const approveRes = await approveAiJobAction({ jobId: genRes.jobId!, reviewerId: "teacher-other" });
+            expect(approveRes.success).toBe(false);
+            expect(mockJobsDb.get(genRes.jobId!).review_status).toBe("draft");
+        });
+
+        it("should refuse reviewing an AI job from another school", async () => {
+            const genRes = await generateQuestionsDraft({
+                schoolId: "school-ai-active", requestedBy: "teacher-t1", subject: "Toán", gradeLevel: 6, topic: "Số thập phân",
+            });
+            reviewer.current = { id: "teacher-x", role: "teacher", roles: ["teacher"], schoolId: "school-other" };
+            const rejectRes = await rejectAiJobAction({ jobId: genRes.jobId!, reviewerId: "teacher-x", rejectionReason: "Không phù hợp" });
+            expect(rejectRes.success).toBe(false);
+            expect(rejectRes.error).toContain("trường khác");
+            expect(mockJobsDb.get(genRes.jobId!).review_status).toBe("draft");
         });
     });
 

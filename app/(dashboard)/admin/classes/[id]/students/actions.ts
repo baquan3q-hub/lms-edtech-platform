@@ -1,10 +1,12 @@
 "use server";
 
+import { requireActor } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
 export async function fetchClassEnrollments(classId: string) {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         const { data, error } = await supabase
@@ -30,6 +32,7 @@ export async function fetchClassEnrollments(classId: string) {
 
 export async function fetchAvailableStudents(classId: string) {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         // 1. Lấy danh sách ID học sinh đã có trong lớp
@@ -99,6 +102,7 @@ export async function fetchAvailableStudents(classId: string) {
 
 export async function addStudentToClass(classId: string, studentId: string) {
     try {
+        await requireActor(["admin"]);
         if (!studentId) return { success: false, error: "Vui lòng chọn Học sinh để thêm" };
 
         const supabase = createAdminClient();
@@ -124,12 +128,14 @@ export async function addStudentToClass(classId: string, studentId: string) {
 
 export async function removeStudentFromClass(classId: string, enrollmentId: string) {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         const { error } = await supabase
             .from("enrollments")
             .delete()
-            .eq("id", enrollmentId);
+            .eq("id", enrollmentId)
+            .eq("class_id", classId);
 
         if (error) throw error;
 
@@ -143,12 +149,14 @@ export async function removeStudentFromClass(classId: string, enrollmentId: stri
 
 export async function updateEnrollmentStatus(classId: string, enrollmentId: string, status: string) {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         const { error } = await supabase
             .from("enrollments")
             .update({ status })
-            .eq("id", enrollmentId);
+            .eq("id", enrollmentId)
+            .eq("class_id", classId);
 
         if (error) throw error;
 
@@ -165,6 +173,7 @@ export async function bulkEnrollStudents(
     classId: string,
     students: { email: string; fullName?: string }[]
 ) {
+    await requireActor(["admin"]);
     const supabase = createAdminClient();
     const results: { email: string; fullName?: string; success: boolean; error?: string }[] = [];
 

@@ -1,9 +1,11 @@
 "use server";
 
+import { requireStudentAccess } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function fetchStudentDailyActivity(studentId: string, dateStr?: string) {
     try {
+        await requireStudentAccess(studentId);
         const adminSupabase = createAdminClient();
         
         // Mặc định lấy hôm nay (local time)

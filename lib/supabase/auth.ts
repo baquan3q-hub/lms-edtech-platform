@@ -4,10 +4,12 @@ import { createClient } from "./server";
 
 // React cache chỉ dùng chung kết quả trong một lần render phía server.
 // Không lưu phiên đăng nhập vào cache toàn cục giữa các request/người dùng.
-export const getCurrentUser = cache(async () => {
+export const getCurrentUser = cache(async (accessToken?: string) => {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    return user;
+    const { data: { user }, error } = accessToken
+        ? await supabase.auth.getUser(accessToken)
+        : await supabase.auth.getUser();
+    return error ? null : user;
 });
 
 export const getCurrentUserProfile = cache(async () => {

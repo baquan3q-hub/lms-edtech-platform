@@ -1,5 +1,7 @@
 # Kế hoạch kiểm tra và nâng cấp hệ thống LMS K12
 
+> Cập nhật 04/11/2026: phần hiện trạng, phạm vi THCS, nhân sự và mốc tuần dưới đây là bản lịch sử tháng 9. Phạm vi mới là THPT theo [trạng thái 03/11](REBUILD_K12_IMPLEMENTATION.md). Thực hiện theo [kế hoạch kiến trúc và hiệu năng 04/11](RA_SOAT_KIEN_TRUC_VA_HIEU_NANG_2026-11-04.md): đo baseline, đồng bộ code/schema và quyền, tối ưu bốn portal trước khi mở rộng tính năng. Không dùng các số lint/test/working tree cũ làm hiện trạng hôm nay.
+
 ## 1. Đầu ra và hiện trạng
 
 Tài liệu này là roadmap kỹ thuật chính thức cho quá trình kiểm tra và nâng cấp hệ thống thành sản phẩm LMS K12. Tài liệu chỉ xác định thứ tự triển khai, điều kiện hoàn thành và phạm vi kỹ thuật; chưa thay đổi chức năng hệ thống.

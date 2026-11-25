@@ -1,11 +1,13 @@
 "use server";
 
+import { requireActor } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
 // Lấy danh sách tất cả users
 export async function fetchUsers() {
+    await requireActor(["admin"]);
     const supabase = createAdminClient();
 
     const { data, error } = await supabase
@@ -23,6 +25,7 @@ export async function fetchUsers() {
 
 // Admin tạo user mới — dùng SERVICE_ROLE_KEY (admin API)
 export async function createUser(formData: FormData) {
+    await requireActor(["admin"]);
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
     const fullName = formData.get("fullName") as string;
@@ -49,7 +52,7 @@ export async function createUser(formData: FormData) {
         const adminSupabase = createAdminClient();
 
         // Bước 1: Tạo Auth user bằng admin API
-        console.log("[createUser] Creating auth user:", email, role);
+        console.log("[createUser] Creating auth user with role:", role);
 
         const { data: authData, error: authError } =
             await adminSupabase.auth.admin.createUser({
@@ -101,7 +104,7 @@ export async function createUser(formData: FormData) {
 
         // TODO: Gửi email thông báo tài khoản qua Resend
         if (sendEmail) {
-            console.log(`[createUser] TODO: Gửi email thông báo tài khoản đến ${email}`);
+            console.log("[createUser] TODO: Gửi email thông báo tài khoản cho người dùng mới");
             // Khi tích hợp Resend, gọi API ở đây:
             // await resend.emails.send({
             //     from: 'EduSchool LMS <noreply@yourdomain.com>',
@@ -124,6 +127,7 @@ export async function createUser(formData: FormData) {
 export async function bulkCreateUsers(
     users: { email: string; fullName: string; role: string; phone?: string; password: string }[]
 ) {
+    await requireActor(["admin"]);
     const adminSupabase = createAdminClient();
     const validRoles = ["admin", "teacher", "student", "parent"];
 

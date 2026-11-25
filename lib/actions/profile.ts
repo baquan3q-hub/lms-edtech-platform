@@ -1,5 +1,6 @@
 "use server";
 
+import { requireManagedUser, requireSelfOrRoles } from "@/lib/auth/authorize";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
@@ -126,6 +127,7 @@ export async function updateMyProfile(
 // =====================================================================
 export async function fetchUserProfile(userId: string) {
     try {
+        await requireSelfOrRoles(userId, ["admin"]);
         const adminSupabase = createAdminClient();
 
         // Lấy thông tin user
@@ -166,7 +168,12 @@ export async function updateUserProfile(
     profileData: ProfileData
 ) {
     try {
+        await requireManagedUser(userId);
         const adminSupabase = createAdminClient();
+        // Chỉ nhận các trường được phép: client có thể gửi thêm `role`, `email`...
+        userData = Object.fromEntries(
+            Object.entries({ full_name: userData?.full_name, phone: userData?.phone }).filter(([, v]) => v !== undefined)
+        );
 
         // 1. Cập nhật bảng users
         if (Object.keys(userData).length > 0) {

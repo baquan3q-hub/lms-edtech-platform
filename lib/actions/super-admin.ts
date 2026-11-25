@@ -3,7 +3,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSuperAdmin } from "@/lib/auth/super-admin";
 import { getCircuitState } from "@/lib/ai/quota-manager";
-import crypto from "crypto";
+import { getSchoolApiKeyInfo, type SchoolApiKeyInfo } from "@/lib/modules/school-api-keys/service";
 
 export interface PlatformOverviewStats {
     totalSchools: number;
@@ -43,15 +43,6 @@ export interface PlatformOverviewStats {
         circuitState: "CLOSED" | "OPEN" | "HALF_OPEN";
         createdAt: string;
     }>;
-}
-
-function deriveSchoolApiKey(schoolId: string, code: string): string {
-    const hash = crypto
-        .createHash("sha256")
-        .update(`eduschool_salt_2026_${schoolId}_${code}`)
-        .digest("hex")
-        .slice(0, 24);
-    return `sch_live_${hash}`;
 }
 
 /**
@@ -177,7 +168,7 @@ export interface SchoolDeepDiveData {
         email: string | null;
         status: string;
         ai_enabled: boolean;
-        apiKey: string;
+        apiKey: SchoolApiKeyInfo | null;
         created_at: string;
         updated_at: string;
     };
@@ -324,7 +315,7 @@ export async function getSchoolDeepDiveData(schoolId: string): Promise<SchoolDee
     return {
         school: {
             ...school,
-            apiKey: deriveSchoolApiKey(school.id, school.code),
+            apiKey: (await getSchoolApiKeyInfo(db, [school.id])).get(school.id) ?? null,
         },
         quota: {
             token_quota: tokenQuota,
