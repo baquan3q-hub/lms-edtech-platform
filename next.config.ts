@@ -3,6 +3,9 @@ import withPWA from "next-pwa";
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  experimental: {
+    agentUpgrade: "security",
+  },
   typescript: {
     tsconfigPath: process.env.NODE_ENV === "production" ? "tsconfig.build.json" : "tsconfig.json",
   },
