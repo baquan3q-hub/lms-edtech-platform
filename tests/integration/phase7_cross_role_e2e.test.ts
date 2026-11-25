@@ -22,11 +22,12 @@ const mockDb = {
 };
 
 vi.mock("@/lib/auth/authorize", () => ({
+    AccessError: class AccessError extends Error {},
     requireActor: async (roles?: string[]) => {
         if (roles?.includes("teacher")) {
-            return { id: "teacher-001", role: "teacher" };
+            return { id: "teacher-001", role: "teacher", roles: ["teacher"], schoolId: "00000000-0000-0000-0001-000000000000" };
         }
-        return { id: "student-001", role: "student" };
+        return { id: "student-001", role: "student", roles: ["student"], schoolId: "00000000-0000-0000-0001-000000000000" };
     },
     requireResourceAccess: async () => ({ resource: { id: "exam-math-final-01" } }),
     requireRecordAccess: async () => true,
@@ -184,7 +185,8 @@ vi.mock("@/lib/supabase/admin", () => {
                 if (table === "intervention_cases") {
                     return {
                         select: () => ({
-                            eq: () => ({
+                            eq: (_field: string, value: string) => ({
+                                maybeSingle: async () => ({ data: mockDb.cases.get(value) || null, error: null }),
                                 eq: () => ({
                                     in: () => ({
                                         maybeSingle: async () => ({ data: null, error: null }),

@@ -1,5 +1,7 @@
 # Đặc tả thực thi theo phase cho LMS K12
 
+> Cập nhật 04/11/2026: tài liệu này giữ đặc tả nghiệp vụ/gate của tháng 9; phạm vi THCS, lịch 22–26 tuần và danh mục migration “dự kiến” cần đối chiếu source hiện tại. Phạm vi mới theo [trạng thái tái thiết](REBUILD_K12_IMPLEMENTATION.md); thứ tự tối ưu và bằng chứng DB mới ở [rà soát 04/11](RA_SOAT_KIEN_TRUC_VA_HIEU_NANG_2026-11-04.md). Không chạy các ví dụ SQL này như một bộ nâng cấp production.
+
 **Ngày lập:** 26/09/2026
 **Nguồn quyết định:** [roadmap tổng thể](KE_HOACH_KIEM_TRA_VA_NANG_CAP_LMS_K12.md), [định hướng sản phẩm](XAC_NHAN_THAY_DOI_DINH_HUONG_SAN_PHAM_LMS_K12.docx), [schema snapshot](DB_SCHEMA_SNAPSHOT_2026-09-24.md).
 **Phạm vi:** một trường THCS thí điểm, khối 6–9; thiết kế dữ liệu hỗ trợ khối 1–12 và chuẩn bị cách ly nhiều trường. LMS phục vụ học sau giờ lên lớp, giao/nộp bài, kiểm tra, phản hồi và phối hợp gia đình. Điểm là đánh giá nội bộ, không phải học bạ chính thức.

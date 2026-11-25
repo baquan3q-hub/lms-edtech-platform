@@ -1,102 +1,58 @@
 import { verifyVNPayReturn } from '@/lib/vnpay'
 import { createAdminClient } from '@/lib/supabase/admin'
-import { NextRequest } from 'next/server'
+import { confirmProviderPayment, type ProviderPaymentOutcome } from '@/lib/modules/payments/service'
+import { NextRequest, NextResponse } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
+/** Mã phản hồi IPN theo tài liệu VNPay. */
+function reply(RspCode: string, Message: string) {
+  return NextResponse.json({ RspCode, Message }, { status: 200, headers: { 'Cache-Control': 'no-store' } })
+}
+
+const CODE_BY_OUTCOME: Record<ProviderPaymentOutcome, [string, string]> = {
+  confirmed: ['00', 'Confirm Success'],
+  failed: ['00', 'Confirm Success'],
+  not_found: ['01', 'Order not found'],
+  already_processed: ['02', 'Order already confirmed'],
+  duplicate: ['02', 'Order already confirmed'],
+  amount_mismatch: ['04', 'Invalid amount'],
+}
+
 /**
  * GET /api/payment/vnpay/ipn
- * VNPay gọi IPN (Instant Payment Notification) để xác nhận thanh toán
- * Trả về mã code cho VNPay: '00' = OK, '97' = Invalid Signature, '01' = Not Found
+ * VNPay gọi server-to-server để báo kết quả. Chữ ký sai → 97; số tiền lệch → 04;
+ * đơn đã xử lý → 02; lỗi hệ thống → 99 (VNPay sẽ gọi lại).
  */
 export async function GET(req: NextRequest) {
-  const url = new URL(req.url)
-  const query = Object.fromEntries(url.searchParams)
-
-  // Dùng admin client vì IPN không có auth context (VNPay gọi server-to-server)
-  const supabase = createAdminClient()
+  const query = Object.fromEntries(new URL(req.url).searchParams)
   const { isValid, isSuccess } = verifyVNPayReturn(query)
-
-  if (!isValid) {
-    return new Response('97', { status: 200 }) // Sai chữ ký
-  }
+  if (!isValid) return reply('97', 'Invalid signature')
 
   const txnRef = query.vnp_TxnRef
-  const txnId = query.vnp_TransactionNo
+  const rawAmount = query.vnp_Amount
+  if (!txnRef || !/^\d+$/.test(rawAmount ?? '') || Number(rawAmount) % 100 !== 0) {
+    return reply('04', 'Invalid amount')
+  }
 
-  // Tìm payment record theo provider_order_id (bắt đầu bằng txnRef)
-  const { data: payments } = await supabase
-    .from('payments')
-    .select('*')
-    .like('provider_order_id', `${txnRef}%`)
-    .eq('status', 'pending')
-    .limit(1)
-
-  const payment = payments?.[0]
-  if (!payment) return new Response('01', { status: 200 }) // Không tìm thấy đơn hàng
-
-  if (isSuccess) {
-    // Cập nhật payment thành công
-    await supabase.from('payments').update({
-      status: 'succeeded',
-      provider_txn_id: txnId,
-      raw_response: query,
-      updated_at: new Date().toISOString(),
-    }).eq('id', payment.id)
-
-    // Cập nhật invoice = paid
-    await supabase.from('invoices').update({
-      status: 'paid',
-      paid_at: new Date().toISOString(),
-    }).eq('id', payment.invoice_id)
-
-    // TODO: Gọi Edge Function tạo PDF hóa đơn khi đã deploy
-    // await supabase.functions.invoke('generate-invoice-pdf', {
-    //   body: { invoiceId: payment.invoice_id }
-    // })
-
-    // Tạo notification cho phụ huynh
-    const { data: invoice } = await supabase
-      .from('invoices')
-      .select('student_id, invoice_number, amount')
-      .eq('id', payment.invoice_id)
-      .single()
-
-    if (invoice) {
-      const { data: parents } = await supabase
-        .from('parent_students')
-        .select('parent_id')
-        .eq('student_id', invoice.student_id)
-
-      const formattedAmount = new Intl.NumberFormat('vi-VN', {
-        style: 'currency', currency: 'VND'
-      }).format(invoice.amount)
-
-      for (const parent of parents ?? []) {
-        await supabase.from('notifications').insert({
-          user_id: parent.parent_id,
-          title: '✅ Thanh toán học phí thành công',
-          message: `Hóa đơn ${invoice.invoice_number} - ${formattedAmount} đã được xác nhận.`,
-          type: 'payment',
-          read: false,
-        })
-      }
-    }
-
-    return new Response('00', { status: 200 }) // Thành công
-  } else {
-    // Thanh toán thất bại
-    await supabase.from('payments').update({
-      status: 'failed',
-      raw_response: query,
-      updated_at: new Date().toISOString(),
-    }).eq('id', payment.id)
-
-    // Đặt lại invoice = unpaid
-    await supabase.from('invoices').update({
-      status: 'unpaid'
-    }).eq('id', payment.invoice_id)
-
-    return new Response('00', { status: 200 })
+  try {
+    const result = await confirmProviderPayment(createAdminClient(), {
+      provider: 'vnpay',
+      orderId: txnRef,
+      // VNPay không có event id; mỗi kết quả của một TxnRef chỉ xử lý một lần.
+      eventId: `${txnRef}:${query.vnp_TransactionNo ?? ''}:${query.vnp_ResponseCode ?? ''}`,
+      succeeded: isSuccess,
+      amount: Number(rawAmount) / 100,
+      currency: 'VND',
+      txnId: query.vnp_TransactionNo ?? null,
+      raw: query,
+    })
+    const outcome = result.status === 'duplicate' && result.previous_outcome === 'amount_mismatch' ? 'amount_mismatch' : result.status
+    if (outcome === 'amount_mismatch') console.error(JSON.stringify({ event: 'payment.amount_mismatch', provider: 'vnpay', paymentId: result.payment_id }))
+    const [code, message] = CODE_BY_OUTCOME[outcome]
+    return reply(code, message)
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'payment.ipn_failed', provider: 'vnpay', message: error instanceof Error ? error.message : 'unknown' }))
+    return reply('99', 'Unknown error')
   }
 }

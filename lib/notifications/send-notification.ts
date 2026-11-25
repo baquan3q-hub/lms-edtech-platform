@@ -1,5 +1,6 @@
 "use server";
 
+import { requireActor, requireClassAccess, requireStudentAccess } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // ============================================================
@@ -23,6 +24,7 @@ export async function sendNotificationToClass({
     metadata?: Record<string, unknown>;
     targetRoles?: ("student" | "parent" | "teacher" | "admin")[];
 }) {
+    await requireClassAccess(classId, "teach");
     const adminSupabase = createAdminClient();
     const notifications: any[] = [];
 
@@ -134,6 +136,7 @@ export async function sendNotificationToUser({
     link?: string;
     metadata?: Record<string, unknown>;
 }) {
+    await requireActor(["admin", "teacher"]);
     const adminSupabase = createAdminClient();
 
     const { error } = await adminSupabase
@@ -174,6 +177,7 @@ export async function sendNotificationToStudentAndParents({
     link?: string;
     metadata?: Record<string, unknown>;
 }) {
+    await requireStudentAccess(studentId, true);
     const adminSupabase = createAdminClient();
     const notifications: any[] = [];
 

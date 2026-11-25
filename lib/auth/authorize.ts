@@ -62,6 +62,28 @@ export async function requireStudentAccess(studentId: string, teachOnly = false)
   throw new AccessError(403);
 }
 
+/** Caller is `userId` itself, or holds one of `roles` and `userId` belongs to the caller's school. */
+export async function requireSelfOrRoles(userId: string, roles: Role[] = ["admin"]) {
+  const actor = await requireActor();
+  if (actor.id === userId || actor.role === "super_admin") return actor;
+  if (!roles.some(role => actor.roles.includes(role))) throw new AccessError(403);
+  const { data, error } = await actor.db.from("school_memberships").select("id")
+    .eq("school_id", actor.schoolId).eq("user_id", userId).limit(1);
+  if (error || !data?.length) throw new AccessError(403);
+  return actor;
+}
+
+type ClassOwnedTable = "attendance_sessions" | "class_schedules" | "class_sessions" | "announcements" | "teacher_leave_requests";
+
+/** Look up the class that owns a row, then apply the class access rule to it. */
+export async function requireRowClassAccess(table: ClassOwnedTable, id: string, mode: "read" | "teach" | "learn" = "teach") {
+  const actor = await requireActor();
+  const { data, error } = await actor.db.from(table).select("class_id").eq("id", id).maybeSingle();
+  if (error || !data?.class_id) throw new AccessError(404, "Không tìm thấy dữ liệu.");
+  await requireClassScope(actor.context, data.class_id, mode);
+  return { ...actor, classId: data.class_id as string };
+}
+
 export async function requireHomeroomAccess(homeroomId: string) {
   const actor = await requireActor();
   const { data: room, error } = await actor.db.from("homerooms").select("id, school_id").eq("id", homeroomId).single();

@@ -120,7 +120,7 @@ export default async function ApiGatewayPage() {
                                     </td>
                                     <td className="px-4 py-3 font-mono text-slate-700">
                                         <span className="px-2 py-0.5 rounded bg-slate-50 border border-slate-200 text-[11px]">
-                                            {school.apiKey}
+                                            {school.apiKey ? `${school.apiKey.prefix}…` : "Chưa tạo"}
                                         </span>
                                     </td>
                                     <td className="px-4 py-3 font-mono text-slate-700">

@@ -1,5 +1,6 @@
 "use server";
 
+import { requireRecordAccess } from "@/lib/auth/authorize";
 import { getGeminiModel } from "@/lib/gemini";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
@@ -16,6 +17,7 @@ export async function generateStudentInsight(
     weaknesses: any[]
 ) {
     try {
+        await requireRecordAccess("exam_submissions", submissionId, "teach");
         const model = getGeminiModel("gemini-2.5-flash");
 
         const prompt = `

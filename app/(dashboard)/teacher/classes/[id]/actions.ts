@@ -1,11 +1,13 @@
 "use server";
 
+import { requireClassAccess } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
 export async function fetchClassDetails(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
         const supabase = createAdminClient();
 
         const { data, error } = await supabase
@@ -27,6 +29,7 @@ export async function fetchClassDetails(classId: string) {
 
 export async function fetchClassStudents(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
         const supabase = createAdminClient();
 
         const { data, error } = await supabase
@@ -133,6 +136,7 @@ export async function submitAttendance(classId: string, attendanceRecords: any[]
 
 export async function getTodayAttendance(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
         const supabase = createAdminClient();
         const date = new Date().toISOString().split('T')[0];
 
@@ -153,6 +157,7 @@ export async function getTodayAttendance(classId: string) {
 // Lấy tiến độ học tập của tất cả học sinh trong một lớp
 export async function fetchStudentProgressForClass(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
         const supabase = createAdminClient();
 
         // 1. Lấy danh sách học sinh

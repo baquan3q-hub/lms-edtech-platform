@@ -1,5 +1,6 @@
 "use server";
 
+import { requireClassAccess } from "@/lib/auth/authorize";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
@@ -9,6 +10,7 @@ import { revalidatePath } from "next/cache";
 // =========================================================
 export async function getClassAttendancePoints(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
         const adminSupabase = createAdminClient();
 
         // Lấy tất cả điểm trong lớp từ student_points (teacher-managed)
@@ -152,6 +154,7 @@ export async function deleteAttendancePoint(pointId: string, classId: string) {
 // =========================================================
 export async function getClassAttendanceSessions(classId: string, month: number, year: number, cycle: "month" | "year" | "since_start" = "month") {
     try {
+        await requireClassAccess(classId, "teach");
         const adminSupabase = createAdminClient();
 
         let startDate = `${year}-${String(month).padStart(2, "0")}-01`;

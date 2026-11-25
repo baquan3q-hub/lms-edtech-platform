@@ -1,5 +1,6 @@
 "use server";
 
+import { requireActor } from "@/lib/auth/authorize";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
@@ -111,6 +112,7 @@ export async function getTeacherLeaveRequests(filters?: {
     year?: number;
 }) {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
         let query = adminSupabase
             .from("teacher_leave_requests")
@@ -397,6 +399,7 @@ export async function getAvailableTeachersForSubstitute(
     excludeTeacherId: string
 ) {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
 
         // Lấy tất cả GV

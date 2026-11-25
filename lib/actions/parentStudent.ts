@@ -1,5 +1,6 @@
 "use server";
 
+import { requireActor, requireSelfOrRoles } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
@@ -20,6 +21,7 @@ function generateCode(): string {
 // GUARD: Kiểm tra phụ huynh có quyền xem học sinh không
 // ============================================================
 export async function canParentViewStudent(parentId: string, studentId: string): Promise<boolean> {
+    await requireSelfOrRoles(parentId, ["admin"]);
     const supabase = createAdminClient();
     const { data } = await supabase
         .from("parent_students")
@@ -35,6 +37,7 @@ export async function canParentViewStudent(parentId: string, studentId: string):
 // ============================================================
 export async function fetchStudentsForLinking() {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         // Lấy tất cả students
@@ -88,6 +91,7 @@ export async function fetchStudentsForLinking() {
 // ============================================================
 export async function fetchLinkedParents(studentId: string) {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         const { data: links, error } = await supabase
@@ -125,6 +129,7 @@ export async function fetchLinkedParents(studentId: string) {
 // ============================================================
 export async function searchParents(query: string) {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         const { data, error } = await supabase
@@ -151,6 +156,7 @@ export async function linkParentToStudent(
     isPrimary: boolean = true
 ) {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         const { error } = await supabase
@@ -183,6 +189,7 @@ export async function linkParentToStudent(
 // ============================================================
 export async function unlinkParent(linkId: string) {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         const { error } = await supabase
@@ -206,6 +213,7 @@ export async function unlinkParent(linkId: string) {
 // ============================================================
 export async function generateInviteCode(studentId: string) {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
         const code = generateCode();
         const expiresAt = new Date();
@@ -290,6 +298,7 @@ export async function fetchMyLinkedStudents() {
 // ============================================================
 export async function lookupInviteCode(code: string) {
     try {
+        await requireActor(["parent"]);
         const supabase = createAdminClient();
 
         const { data: student, error } = await supabase
@@ -1056,6 +1065,7 @@ export async function bulkLinkParentStudents(
     rows: { parentEmail: string; studentEmail: string; relationship: string }[]
 ) {
     try {
+        await requireActor(["admin"]);
         const supabase = createAdminClient();
 
         // Lấy tất cả emails unique

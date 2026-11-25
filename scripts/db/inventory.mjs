@@ -1,9 +1,9 @@
 /** Read-only metadata inventory. Never fetch rows, execute RPCs or apply SQL. */
-import { loadEnvConfig } from "@next/env";
+import nextEnv from "@next/env";
 import { mkdirSync,writeFileSync } from "node:fs";
 import path from "node:path";
 import { root } from "./bootstrap.mjs";
-loadEnvConfig(root,false);
+nextEnv.loadEnvConfig(root,false);
 const url=process.env.NEXT_PUBLIC_SUPABASE_URL;
 const key=process.env.SUPABASE_SERVICE_ROLE_KEY;
 if(!url||!key)throw new Error("Supabase server configuration is required");

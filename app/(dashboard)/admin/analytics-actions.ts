@@ -1,5 +1,6 @@
 "use server";
 
+import { requireActor } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 function getStartDateForRange(range: string): string | null {
@@ -32,6 +33,7 @@ function getStartDateForRange(range: string): string | null {
 }
 
 export async function fetchDailyAttendanceData(range: string = 'all') {
+    await requireActor(["admin"]);
     const supabase = createAdminClient();
     const startDate = getStartDateForRange(range);
 
@@ -87,6 +89,7 @@ export async function fetchDailyAttendanceData(range: string = 'all') {
 }
 
 export async function fetchGradesDistribution(range: string = 'all') {
+    await requireActor(["admin"]);
     const supabase = createAdminClient();
     const startDate = getStartDateForRange(range);
     
@@ -146,6 +149,7 @@ function strContainsFloat(num: number) {
 }
 
 export async function fetchSubmissionStatus(range: string = 'all') {
+    await requireActor(["admin"]);
     const supabase = createAdminClient();
     const startDate = getStartDateForRange(range);
     
@@ -244,6 +248,7 @@ export async function fetchSubmissionStatus(range: string = 'all') {
 }
 
 export async function fetchDailyActiveUsers() {
+    await requireActor(["admin"]);
     const supabase = createAdminClient();
     
     const today = new Date();
@@ -305,6 +310,7 @@ export async function fetchDailyActiveUsers() {
 }
 
 export async function fetchMonthlyRevenueData() {
+    await requireActor(["admin"]);
     const supabase = createAdminClient();
     
     // Lấy invoices với status 'paid' trong 12 tháng gần nhất
@@ -375,6 +381,7 @@ export async function fetchMonthlyRevenueData() {
 }
 
 export async function fetchAdminAttendanceSessionsToday(todayDateStr: string) {
+    await requireActor(["admin"]);
     const supabase = createAdminClient();
     
     const { data: sessions } = await supabase
@@ -481,6 +488,7 @@ export interface DailyPresenceSummary {
 }
 
 export async function fetchDailyStudentPresenceAndAttendance(dateStr?: string): Promise<DailyPresenceSummary> {
+    await requireActor(["admin"]);
     const supabase = createAdminClient();
     const today = dateStr || new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(new Date());
 
@@ -656,6 +664,7 @@ export interface GradeHomeworkSummary {
 }
 
 export async function fetchHomeworkCompletionByGradeAndClass(): Promise<GradeHomeworkSummary[]> {
+    await requireActor(["admin"]);
     const supabase = createAdminClient();
 
     const [classesRes, enrollsRes, homeworkRes, subsRes] = await Promise.all([
@@ -754,6 +763,7 @@ export interface GradeOverviewGroup {
 }
 
 export async function fetchGradeOverviewByGradeAndClass(): Promise<GradeOverviewGroup[]> {
+    await requireActor(["admin"]);
     const supabase = createAdminClient();
 
     const [classesRes, examSubsRes, hwSubsRes] = await Promise.all([
@@ -870,6 +880,7 @@ export interface SmartBehaviorBriefing {
 }
 
 export async function fetchSmartActionableBehaviorBriefing(): Promise<SmartBehaviorBriefing> {
+    await requireActor(["admin"]);
     const supabase = createAdminClient();
 
     const [attendanceRes, homeworkSubsRes, classesRes] = await Promise.all([

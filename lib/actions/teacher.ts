@@ -1,5 +1,6 @@
 "use server";
 
+import { requireClassAccess } from "@/lib/auth/authorize";
 import { createClient } from "@/lib/supabase/server";
 import { getCurrentUser } from "@/lib/supabase/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -60,6 +61,7 @@ export async function fetchClassLessons(classId: string) {
 // ==========================================
 export async function fetchClassSections(classId: string) {
     try {
+        await requireClassAccess(classId, "read");
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("class_sections")

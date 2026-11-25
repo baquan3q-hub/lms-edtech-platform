@@ -13,6 +13,11 @@
     "test:db": "vitest run tests/integration/learning_foundation.test.ts",
     "test:worker": "uv run --directory workers/analytics python -m unittest -v",
     "db:prepare": "node scripts/db/bootstrap.mjs",
+    "db:inventory": "node scripts/db/inventory.mjs",
+    "db:performance": "node scripts/db/performance-audit.mjs",
+    "db:schema:candidate": "node scripts/db/build-schema-candidate.mjs",
+    "db:clean:prepare": "node scripts/db/build-clean-reset.mjs",
+    "db:pilot:prepare": "node scripts/db/provision-pilot.mjs",
     "test:e2e": "playwright test"
   },
   "dependencies": {

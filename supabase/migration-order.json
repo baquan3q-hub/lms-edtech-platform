@@ -17,5 +17,8 @@
   "202611030001_learning_foundation.sql",
   "202611030002_submission_writes.sql",
   "202611030003_access_policies.sql",
-  "202611030004_learning_read_models.sql"
+  "202611030004_learning_read_models.sql",
+  "202611040001_clean_install_access.sql",
+  "202611250001_school_api_keys.sql",
+  "202611250002_payment_confirmation.sql"
 ]

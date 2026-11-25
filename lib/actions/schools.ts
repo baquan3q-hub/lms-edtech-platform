@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { requireSuperAdmin } from "@/lib/auth/super-admin";
 import { checkSchoolAiAccess, getCircuitState } from "@/lib/ai/quota-manager";
-import crypto from "crypto";
+import { getSchoolApiKeyInfo, revokeSchoolApiKey, rotateSchoolApiKey, type SchoolApiKeyInfo } from "@/lib/modules/school-api-keys/service";
 
 export interface SchoolWithQuota {
     id: string;
@@ -15,7 +15,8 @@ export interface SchoolWithQuota {
     email: string | null;
     status: "active" | "inactive" | "archived";
     ai_enabled: boolean;
-    apiKey: string;
+    /** Metadata của key đang hiệu lực; key gốc chỉ trả về một lần lúc tạo. */
+    apiKey: SchoolApiKeyInfo | null;
     createdAt: string;
     quota?: {
         id: string;
@@ -29,18 +30,6 @@ export interface SchoolWithQuota {
     classCount: number;
     memberCount: number;
     circuitState: "CLOSED" | "OPEN" | "HALF_OPEN";
-}
-
-/**
- * Tạo API key cố định hoặc mã hóa dựa theo School ID
- */
-function deriveSchoolApiKey(schoolId: string, code: string): string {
-    const hash = crypto
-        .createHash("sha256")
-        .update(`eduschool_salt_2026_${schoolId}_${code}`)
-        .digest("hex")
-        .slice(0, 24);
-    return `sch_live_${hash}`;
 }
 
 /**
@@ -64,6 +53,8 @@ export async function getSchoolsWithApiQuotas(): Promise<SchoolWithQuota[]> {
     }
 
     if (!schools || schools.length === 0) return [];
+
+    const apiKeys = await getSchoolApiKeyInfo(db, schools.map((s) => s.id));
 
     // 2. Lấy quota tháng hiện tại
     const { data: quotas } = await db
@@ -114,7 +105,7 @@ export async function getSchoolsWithApiQuotas(): Promise<SchoolWithQuota[]> {
             email: s.email,
             status: s.status,
             ai_enabled: s.ai_enabled ?? true,
-            apiKey: deriveSchoolApiKey(s.id, s.code),
+            apiKey: apiKeys.get(s.id) ?? null,
             createdAt: s.created_at,
             quota: {
                 id: q?.id || "",
@@ -232,6 +223,38 @@ export async function updateSchoolAction(
 
     revalidatePath("/admin/schools");
     return { success: true };
+}
+
+/**
+ * Tạo API key mới cho trường (thu hồi key cũ). Key gốc chỉ trả về đúng lần này.
+ */
+export async function rotateSchoolApiKeyAction(schoolId: string): Promise<{ success: boolean; key?: string; info?: SchoolApiKeyInfo; error?: string }> {
+    try {
+        const { key, info } = await rotateSchoolApiKey(schoolId);
+        revalidatePath("/admin/schools");
+        revalidatePath("/super-admin/api-gateway");
+        revalidatePath(`/super-admin/schools/${schoolId}`);
+        return { success: true, key, info };
+    } catch (error: any) {
+        console.error("Lỗi tạo API key trường:", error?.code || error?.name);
+        return { success: false, error: error?.name === "AccessError" ? error.message : "Không tạo được API key mới." };
+    }
+}
+
+/**
+ * Thu hồi API key đang dùng của trường.
+ */
+export async function revokeSchoolApiKeyAction(schoolId: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        await revokeSchoolApiKey(schoolId);
+        revalidatePath("/admin/schools");
+        revalidatePath("/super-admin/api-gateway");
+        revalidatePath(`/super-admin/schools/${schoolId}`);
+        return { success: true };
+    } catch (error: any) {
+        console.error("Lỗi thu hồi API key trường:", error?.code || error?.name);
+        return { success: false, error: error?.name === "AccessError" ? error.message : "Không thu hồi được API key." };
+    }
 }
 
 /**

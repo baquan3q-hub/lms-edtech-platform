@@ -121,13 +121,14 @@ export default function ParentPaymentsPage() {
           provider: selectedProvider,
         }),
       })
-      const data = await res.json()
+      const body = await res.json()
 
-      if (!res.ok) {
-        alert(data.error || 'Có lỗi xảy ra')
+      if (!res.ok || !body.ok) {
+        alert(body.error?.message || 'Có lỗi xảy ra')
         return
       }
 
+      const data = body.data
       if (data.provider === 'vnpay' && data.payUrl) {
         window.location.href = data.payUrl
       } else if (data.provider === 'stripe' && data.clientSecret) {
@@ -151,10 +152,10 @@ export default function ParentPaymentsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ invoiceId: invoice.id }),
       })
-      const data = await res.json()
+      const body = await res.json()
 
-      if (!res.ok) {
-        alert(data.error || 'Có lỗi xảy ra')
+      if (!res.ok || !body.ok) {
+        alert(body.error?.message || 'Có lỗi xảy ra')
         return
       }
 

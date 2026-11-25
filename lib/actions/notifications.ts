@@ -1,5 +1,6 @@
 "use server";
 
+import { requireActor } from "@/lib/auth/authorize";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
@@ -76,6 +77,7 @@ export async function markAllNotificationsAsRead() {
  * Create a system notification (Admin only server action)
  */
 export async function createSystemNotification(userId: string, title: string, message: string, type: string, link?: string) {
+    await requireActor(["admin", "teacher"]);
     const adminSupabase = createAdminClient();
     const { error } = await adminSupabase
         .from("notifications")

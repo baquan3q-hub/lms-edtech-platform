@@ -1,5 +1,6 @@
 "use server";
 
+import { AccessError, requireActor, requireClassAccess, requireRowClassAccess, requireStudentAccess } from "@/lib/auth/authorize";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
@@ -377,6 +378,7 @@ export async function saveAttendanceRecords(
 /** Lấy records của 1 session */
 export async function getAttendanceRecords(sessionId: string) {
     try {
+        await requireRowClassAccess("attendance_sessions", sessionId, "teach");
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("attendance_records")
@@ -397,6 +399,7 @@ export async function getAttendanceRecords(sessionId: string) {
 /** Lấy lịch sử điểm danh của 1 lớp trong 1 tháng */
 export async function getAttendanceHistory(classId: string, month: number, year: number) {
     try {
+        await requireClassAccess(classId, "teach");
         const adminSupabase = createAdminClient();
 
         // Tính ngày đầu và cuối tháng
@@ -440,6 +443,7 @@ export async function getAttendanceHistory(classId: string, month: number, year:
 /** Lấy lịch sử điểm danh của 1 học sinh */
 export async function getStudentAttendanceHistory(studentId: string, month: number, year: number) {
     try {
+        await requireStudentAccess(studentId);
         const adminSupabase = createAdminClient();
 
         const startDate = `${year}-${String(month).padStart(2, "0")}-01`;
@@ -539,6 +543,17 @@ export async function getAbsenceRequests(filters?: {
     student_id?: string;
 }) {
     try {
+        // Admin xem toàn trường; GV chỉ xem lớp mình dạy; PH chỉ xem đơn của chính mình.
+        const actor = await requireActor(["admin", "teacher", "parent"]);
+        if (!actor.roles.includes("admin")) {
+            if (actor.roles.includes("teacher") && filters?.class_id) {
+                await requireClassAccess(filters.class_id, "teach");
+            } else if (actor.roles.includes("parent")) {
+                filters = { ...filters, parent_id: actor.id };
+            } else {
+                throw new AccessError(403, "Giáo viên cần chọn lớp để xem đơn xin nghỉ.");
+            }
+        }
         const adminSupabase = createAdminClient();
         let query = adminSupabase
             .from("absence_requests")
@@ -648,6 +663,7 @@ export async function reviewAbsenceRequest(
 /** Kiểm tra đơn xin nghỉ đã duyệt cho ngày cụ thể */
 export async function getApprovedAbsencesForDate(classId: string, date: string) {
     try {
+        await requireClassAccess(classId, "teach");
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("absence_requests")
@@ -674,6 +690,7 @@ export async function getApprovedAbsencesForDate(classId: string, date: string) 
 /** Thống kê tổng quan điểm danh cho Admin */
 export async function getAttendanceOverview(month: number, year: number, classId?: string, cycle: "month" | "year" | "since_start" = "month") {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
 
         let startDate = `${year}-${String(month).padStart(2, "0")}-01`;
@@ -872,6 +889,7 @@ export async function getParentChildren() {
 /** Lấy danh sách lớp mà học sinh đang tham gia */
 export async function getStudentClasses(studentId: string) {
     try {
+        await requireStudentAccess(studentId);
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("enrollments")
@@ -987,6 +1005,7 @@ export async function getAttendanceTrendData(
     currentYear?: number
 ) {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
 
         let startStr: string;
@@ -1123,6 +1142,7 @@ export async function getAttendanceTrendData(
 /** Lấy danh sách tất cả lớp (cho filter dropdown của Admin) */
 export async function getAllClassesForAdmin() {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("classes")
@@ -1144,6 +1164,7 @@ export async function getAllClassesForAdmin() {
 /** Thống kê điểm danh theo từng giáo viên */
 export async function getTeacherAttendanceStats(month: number, year: number, cycle: "month" | "year" | "since_start" = "month") {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
 
         let startDate = `${year}-${String(month).padStart(2, "0")}-01`;
@@ -1342,6 +1363,7 @@ export async function getTeacherAttendanceStats(month: number, year: number, cyc
 /** Thống kê điểm danh xuyên lớp cho từng học sinh */
 export async function getStudentCrossClassAttendance(month: number, year: number, cycle: "month" | "year" | "since_start" = "month") {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
 
         let startDate = `${year}-${String(month).padStart(2, "0")}-01`;
@@ -1566,6 +1588,7 @@ export async function sendAttendanceReportToParent(data: {
 /** Lấy tổng quan điểm danh theo 1 ngày cụ thể */
 export async function getDailyAttendanceOverview(date: string) {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
 
         // 1. Xác định ngày trong tuần (0 = CN, 1 = T2, ..., 6 = T7)

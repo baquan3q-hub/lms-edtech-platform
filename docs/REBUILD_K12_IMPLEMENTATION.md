@@ -1,5 +1,7 @@
 # Tái thiết K12 — trạng thái triển khai ngày 03/11/2026
 
+> Cập nhật 04/11: theo yêu cầu mới, database LMS đã được xóa dữ liệu cũ và dựng lại tại cùng project, với một trường mẫu 200 học sinh/15 giáo viên/1 quản trị. Xem [kết quả và bước khôi phục Vercel](DUNG_LAI_DATABASE_MOT_TRUONG_2026-11-04.md). Các ghi nhận “chưa áp dụng migration thật” bên dưới chỉ mô tả phiên ngày 03/11.
+
 Tài liệu này thay thế các kết luận “đã hoàn thành pilot” trong báo cáo phase cũ khi đánh giá lần tái thiết hiện tại. Đích sản phẩm: LMS nhà trường K12; pilot THPT 100–300 học sinh, ưu tiên lớp 12 và Toán–Văn–Anh; web trước, app sau; một người phát triển có AI hỗ trợ.
 
 ## Những phần đã triển khai trong mã nguồn

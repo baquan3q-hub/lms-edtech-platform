@@ -1,11 +1,13 @@
 "use server";
 
+import { requireActor, requireClassAccess, requireRowClassAccess, requireSelfOrRoles } from "@/lib/auth/authorize";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { revalidatePath } from "next/cache";
 
 export async function getRooms() {
     try {
+        await requireActor(["admin", "teacher"]);
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("rooms")
@@ -22,6 +24,7 @@ export async function getRooms() {
 
 export async function getAvailableRooms(dayOfWeek: number, startTime: string, endTime: string, currentScheduleId?: string) {
     try {
+        await requireActor(["admin", "teacher"]);
         const adminSupabase = createAdminClient();
 
         // 1. Get all rooms
@@ -62,6 +65,7 @@ export async function getAvailableRooms(dayOfWeek: number, startTime: string, en
 
 export async function getClassSchedules(classId: string) {
     try {
+        await requireClassAccess(classId, "read");
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("class_schedules")
@@ -93,6 +97,8 @@ export async function upsertClassSchedule(scheduleData: {
     end_date?: string;
 }) {
     try {
+        await requireClassAccess(scheduleData.class_id, "teach");
+        await (scheduleData.id ? requireRowClassAccess("class_schedules", scheduleData.id, "teach") : null);
         const adminSupabase = createAdminClient();
 
         // Double check availability to prevent concurrency issues
@@ -170,12 +176,15 @@ export async function upsertClassSchedule(scheduleData: {
 
 export async function deleteClassSchedule(scheduleId: string, classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
+        await requireRowClassAccess("class_schedules", scheduleId, "teach");
         const adminSupabase = createAdminClient();
 
         const { error } = await adminSupabase
             .from("class_schedules")
             .delete()
-            .eq("id", scheduleId);
+            .eq("id", scheduleId)
+            .eq("class_id", classId);
 
         if (error) throw error;
 
@@ -232,6 +241,7 @@ export async function generateClassSessions(
     endDate: string
 ) {
     try {
+        await requireClassAccess(classId, "teach");
         const adminSupabase = createAdminClient();
 
         // 1. Lấy sessions đã tồn tại để tránh duplicate
@@ -302,6 +312,7 @@ export async function generateClassSessions(
  */
 export async function resetClassSessions(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
         const adminSupabase = createAdminClient();
 
         // 1. Lấy danh sách session_ids đã có attendance_records
@@ -382,6 +393,8 @@ export async function assignSubstituteTeacher(
     substituteTeacherId: string | null
 ) {
     try {
+        await requireActor(["admin"]);
+        await requireRowClassAccess("class_sessions", sessionId, "teach");
         const adminSupabase = createAdminClient();
         const { error } = await adminSupabase
             .from("class_sessions")
@@ -401,6 +414,7 @@ export async function assignSubstituteTeacher(
  */
 export async function getGeneratedSessions(classId: string) {
     try {
+        await requireClassAccess(classId, "read");
         const adminSupabase = createAdminClient();
         
         // First try with substitute join
@@ -443,6 +457,7 @@ export async function getGeneratedSessions(classId: string) {
 
 export async function createRoom(roomData: { name: string, capacity: number }) {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("rooms")
@@ -463,6 +478,7 @@ export async function createRoom(roomData: { name: string, capacity: number }) {
 
 export async function updateRoom(roomId: string, roomData: { name: string, capacity: number }) {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("rooms")
@@ -484,6 +500,7 @@ export async function updateRoom(roomId: string, roomData: { name: string, capac
 
 export async function deleteRoom(roomId: string) {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
         const { error } = await adminSupabase
             .from("rooms")
@@ -503,6 +520,7 @@ export async function deleteRoom(roomId: string) {
 
 export async function getRoomsWithSchedules() {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("rooms")
@@ -725,6 +743,7 @@ export async function updateSessionContent(
     }
 ) {
     try {
+        await requireRowClassAccess("class_sessions", sessionId, "teach");
         const adminSupabase = createAdminClient();
         const { data: updatedSession, error } = await adminSupabase
             .from("class_sessions")
@@ -753,6 +772,7 @@ export async function updateSessionContent(
  */
 export async function reindexClassSessions(classId: string) {
     try {
+        await requireClassAccess(classId, "teach");
         const adminSupabase = createAdminClient();
         const { data: allSessions } = await adminSupabase
             .from("class_sessions")
@@ -867,6 +887,7 @@ export async function syncTeacherSessions(_teacherId?: string) {
  */
 export async function fetchTeacherAllSessions(teacherId: string) {
     try {
+        await requireSelfOrRoles(teacherId, ["admin"]);
         const adminSupabase = createAdminClient();
 
         // 1. Lấy danh sách class_id mà GV này dạy

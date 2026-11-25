@@ -1,5 +1,6 @@
 "use server";
 
+import { requireStudentAccess } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
@@ -14,6 +15,7 @@ import { revalidatePath } from "next/cache";
  */
 export async function fetchStudentGoals(studentId: string) {
     try {
+        await requireStudentAccess(studentId);
         const supabase = createAdminClient();
 
         const { data, error } = await supabase
@@ -168,6 +170,7 @@ export async function deleteGoal(goalId: string) {
  */
 export async function fetchStudentHabits(studentId: string) {
     try {
+        await requireStudentAccess(studentId);
         const supabase = createAdminClient();
 
         const { data: habits, error } = await supabase

@@ -14,15 +14,14 @@ export async function createStripePaymentIntent(params: {
   amount: number       // Số tiền VNĐ
   currency: string     // 'vnd'
   invoiceId: string
-  studentName: string
   description: string
 }) {
   return stripe.paymentIntents.create({
     amount: Math.round(params.amount), // VNĐ không có phần thập phân
     currency: params.currency.toLowerCase(),
     metadata: {
+      // Không gửi tên học sinh sang Stripe (PII thừa).
       invoiceId: params.invoiceId,
-      studentName: params.studentName,
     },
     description: params.description,
     automatic_payment_methods: { enabled: true },

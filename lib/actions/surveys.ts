@@ -1,5 +1,6 @@
 "use server";
 
+import { requireActor, requireClassAccess } from "@/lib/auth/authorize";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -318,6 +319,7 @@ export async function fetchSurveys(filters?: { scope?: string; role?: string }) 
 // ============================================================
 export async function fetchSurveyDetail(surveyId: string) {
     try {
+        const actor = await requireActor();
         const adminSupabase = createAdminClient();
 
         const { data: survey, error: sErr } = await adminSupabase
@@ -332,6 +334,8 @@ export async function fetchSurveyDetail(surveyId: string) {
             .single();
 
         if (sErr) return { error: sErr.message };
+        // Khảo sát theo lớp chỉ người thuộc lớp đó (hoặc admin) được xem.
+        if (survey.class_id && !actor.roles.includes("admin")) await requireClassAccess(survey.class_id, "read");
 
         const { data: questions } = await adminSupabase
             .from("survey_questions")
@@ -396,6 +400,7 @@ export async function submitSurveyResponse(
 // ============================================================
 export async function fetchSurveyAnalytics(surveyId: string) {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
 
         // Lấy questions
@@ -506,6 +511,7 @@ export async function fetchSurveyAnalytics(surveyId: string) {
 // ============================================================
 export async function toggleSurveyActive(surveyId: string, isActive: boolean) {
     try {
+        await requireActor(["admin"]);
         const adminSupabase = createAdminClient();
         const { error } = await adminSupabase
             .from("surveys")

@@ -374,6 +374,7 @@ export async function generateParentAIInsight(
     }[]
 ) {
     try {
+        await requireActor(["parent", "admin"]);
         const model = getGeminiModel("gemini-2.5-flash");
 
         const criteriaSummary = competencyData.criteria.length > 0

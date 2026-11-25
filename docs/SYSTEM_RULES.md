@@ -2,7 +2,7 @@
 
 > **Mục đích**: Tổng hợp tất cả quy tắc kiến trúc, API, UI, cấu trúc thư mục và bảo mật mà AI hoặc developer phải tuân thủ khi code trên dự án này.
 >
-> **Last updated**: 2026-09-09
+> **Last updated**: 2026-11-04
 
 ---
 
@@ -12,9 +12,9 @@
 
 | # | Quy tắc | Giải thích |
 |---|---|---|
-| A1 | **Monorepo full-stack** | Toàn bộ frontend + backend nằm trong 1 repo Next.js App Router. Không có backend service riêng |
-| A2 | **Server Actions cho nghiệp vụ nội bộ** | Mọi CRUD database từ UI phải đi qua `lib/actions/*.ts`. Đây là nơi chứa business logic chính |
-| A3 | **API Routes cho tích hợp ngoài** | `app/api/*` **chỉ** dùng cho: AI Gemini, Payment webhooks/IPN, Activity tracking, Notifications |
+| A1 | **Monorepo full-stack** | Next.js App Router xử lý web/API; Python analytics worker là tiến trình riêng trong cùng repo |
+| A2 | **Service dùng chung** | Nghiệp vụ mới ở `lib/modules`; Server Actions và HTTP adapter gọi cùng service. `lib/actions` legacy được chuyển dần |
+| A3 | **API có phiên bản** | `/api/v1` phục vụ nghiệp vụ web/native có guard; API khác phục vụ các tích hợp, tracking, AI và webhook hiện có |
 | A4 | **Không thêm bảng mới nếu mở rộng bảng cũ được** | Tránh tạo bảng trùng ý nghĩa. Ưu tiên `ALTER TABLE ... ADD COLUMN` |
 | A5 | **Feature mới phải cập nhật docs** | Phải cập nhật đặc tả tính năng và ít nhất một tài liệu liên quan trong: `ARCHITECTURE.md`, `DB_SCHEMA.md`, `SECURITY_CHECKLIST.md`, `TEST_PLAN.md` |
 | A6 | **Mỗi thay đổi lớn gắn với actor + workflow + bảng dữ liệu** | Không code feature mơ hồ; phải rõ ai dùng, luồng nào, bảng nào |
@@ -59,7 +59,7 @@
 | # | Quy tắc | Chi tiết |
 |---|---|---|
 | B1 | **`proxy.ts` bỏ qua `/api`** | Tất cả API routes **PHẢI tự kiểm quyền** (session + role + ownership). Không được dựa vào proxy |
-| B2 | **Không tin `role` từ client payload** | Role phải đọc từ Supabase Auth session hoặc `user_metadata` server-side |
+| B2 | **Không tin `role` từ client payload/metadata** | Auth xác minh danh tính; quyền đọc từ membership/phân công trong DB theo trường và hiệu lực. `user_metadata` không cấp quyền dù đọc ở server |
 | B3 | **Mọi Server Action phải xác định user** | Gọi `createClient()` → `supabase.auth.getUser()` trước khi thực thi |
 | B4 | **Teacher chỉ thao tác lớp mình dạy** | Kiểm `teacher_id` hoặc substitute assignment |
 | B5 | **Parent chỉ xem student liên kết** | Kiểm `parent_students` relationship |

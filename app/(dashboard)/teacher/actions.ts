@@ -1,9 +1,11 @@
 "use server";
 
+import { requireSelfOrRoles } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function fetchTeacherClasses(teacherId: string) {
     try {
+        await requireSelfOrRoles(teacherId, ["admin"]);
         const supabase = createAdminClient();
 
         // Lấy thông tin lớp học, khóa học và lịch học chi tiết (bao gồm phòng học)
@@ -33,6 +35,7 @@ export async function fetchTeacherClasses(teacherId: string) {
 
 export async function fetchTeacherStats(teacherId: string) {
     try {
+        await requireSelfOrRoles(teacherId, ["admin"]);
         const supabase = createAdminClient();
 
         // 1. Số lớp đang dạy (active)
@@ -136,6 +139,7 @@ export async function fetchTeacherStats(teacherId: string) {
 
 export async function fetchTeacherNotifications(teacherId: string) {
     try {
+        await requireSelfOrRoles(teacherId, ["admin"]);
         const supabase = createAdminClient();
         const { data, error } = await supabase
             .from("notifications")
