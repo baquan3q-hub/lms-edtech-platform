@@ -1,17 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { TrendingUp, FileText, Loader2, Play, RotateCcw } from "lucide-react";
-
-type ChartDatum = Record<string, string | number | boolean | null | undefined>;
+import { TrendingUp, FileText, Loader2, RotateCcw } from "lucide-react";
+import { fetchAdminInsightInputs } from "./analytics-actions";
 
 interface AdminAiInsightsProps {
-    attendanceData: ChartDatum[];
-    gradesData: ChartDatum[];
-    submissionData: ChartDatum[];
+    /** Bộ lọc thời gian đang chọn (?range=); số liệu chỉ tải khi bấm nút. */
+    range: string;
 }
 
-export function AdminAiInsights({ attendanceData, gradesData, submissionData }: AdminAiInsightsProps) {
+export function AdminAiInsights({ range }: AdminAiInsightsProps) {
     const [insight, setInsight] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -22,6 +20,7 @@ export function AdminAiInsights({ attendanceData, gradesData, submissionData }: 
         setInsight(null);
 
         try {
+            const { attendanceData, gradesData, submissionData } = await fetchAdminInsightInputs(range);
             const response = await fetch("/api/ai/admin-insights", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },

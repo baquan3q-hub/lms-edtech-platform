@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useNotifications } from "@/hooks/useNotifications";
-import { createClient } from "@/lib/supabase/client";
+import { useState } from "react";
+import { useNotificationStore } from "@/stores/notificationStore";
 import { Bell, Check, Calendar, FileText, Info, BookOpen, BarChart3, ClipboardCheck, ChevronDown, ChevronUp, X } from "lucide-react";
 import {
     DropdownMenu,
@@ -49,32 +48,28 @@ function safeString(value: any): string {
     return String(value);
 }
 
+// Danh sách và realtime do useRealtimeSync (app/(dashboard)/layout.tsx) nạp sẵn vào store,
+// nên chuông không tự gọi auth.getUser(), không tải lại và không mở channel riêng.
 export default function NotificationBell() {
-    const [userId, setUserId] = useState<string | undefined>();
     const [expandedId, setExpandedId] = useState<string | null>(null);
-    const supabase = createClient();
     const router = useRouter();
-
-    useEffect(() => {
-        supabase.auth.getUser().then(({ data }) => setUserId(data.user?.id));
-    }, [supabase]);
-
-    const { notifications, unreadCount } = useNotifications(userId);
+    const notifications = useNotificationStore((s) => s.notifications);
+    const unreadCount = useNotificationStore((s) => s.unreadCount);
 
     const handleClick = async (n: any) => {
         // Đánh dấu đã đọc
         if (!n.is_read) {
-            await markNotificationAsRead(n.id);
+            const { error } = await markNotificationAsRead(n.id);
+            if (!error) useNotificationStore.getState().markAsRead(n.id);
         }
         // Toggle expand — hiện nội dung đầy đủ ngay trong dropdown
         setExpandedId(prev => prev === n.id ? null : n.id);
     };
 
     const handleReadAll = async () => {
-        await markAllNotificationsAsRead();
+        const { error } = await markAllNotificationsAsRead();
+        if (!error) useNotificationStore.getState().markAllAsRead();
     };
-
-    if (!userId) return null;
 
     return (
         <DropdownMenu>

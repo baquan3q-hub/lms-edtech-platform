@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
+import { traceFetchOption } from "./trace";
 
 // Admin client sử dụng SERVICE_ROLE_KEY
 // Dùng cho các thao tác admin: tạo user, bypass RLS
@@ -19,5 +20,6 @@ export function createAdminClient() {
             autoRefreshToken: false,
             persistSession: false,
         },
+        ...traceFetchOption(),
     });
 }

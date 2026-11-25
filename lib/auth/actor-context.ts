@@ -43,6 +43,31 @@ export interface ActionResult<T = unknown> {
 
 export const DEFAULT_PILOT_SCHOOL_ID = "00000000-0000-0000-0001-000000000000";
 
+type AdminDb = ReturnType<typeof createAdminClient>;
+
+/** Active teaching assignments across schools; the caller keeps the current school's rows. Null on failure. */
+async function loadTeacherScopeRows(db: AdminDb, teacherId: string) {
+  try {
+    const [hrRes, classRes] = await Promise.all([
+      db.from("homeroom_teacher_assignments").select("school_id, homeroom_id, status, start_date, end_date").eq("teacher_id", teacherId).eq("status", "active"),
+      db.from("class_teacher_assignments").select("school_id, status, valid_from, valid_to, class:classes!class_teacher_assignments_class_id_fkey(subject_id)").eq("teacher_id", teacherId).eq("status", "active"),
+    ]);
+    return { homerooms: hrRes.data ?? [], classes: classRes.data ?? [] };
+  } catch {
+    // Graceful fallback trong giai đoạn chuyển đổi
+    return null;
+  }
+}
+
+async function loadStudentHomeroomIds(db: AdminDb, studentId: string) {
+  try {
+    const { data } = await db.from("homeroom_enrollments").select("homeroom_id").eq("student_id", studentId).eq("status", "active");
+    return data ? data.map((e: { homeroom_id: string }) => e.homeroom_id) : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Lấy ActorContext của người dùng hiện tại từ session server-side
  * Dữ liệu vai trò lấy từ bảng users và school_memberships làm nguồn chuẩn (Ground Truth).
@@ -61,6 +86,14 @@ export const getActorContext = cache(async (targetSchoolId?: string): Promise<Ac
   }
 
   const db = createAdminClient();
+  const cookieStore = await cookies();
+  const preferredRole = ((authorization ? requestHeaders.get("x-lms-role") : null) || cookieStore.get("lms-role")?.value) as Role | undefined;
+
+  // The role chosen at login only decides which scope rows to start loading alongside the
+  // membership lookup, saving one round trip. It grants nothing: the role is still resolved
+  // from memberships below, and the rows are filtered by school before use.
+  const teacherScopePrefetch = preferredRole === "teacher" ? loadTeacherScopeRows(db, user.id) : null;
+  const studentScopePrefetch = preferredRole === "student" ? loadStudentHomeroomIds(db, user.id) : null;
 
   // 1 & 2. Lấy thông tin user và danh sách thành viên trường học song song
   const [userRes, membershipsRes, activationRes] = await Promise.all([
@@ -76,7 +109,6 @@ export const getActorContext = cache(async (targetSchoolId?: string): Promise<Ac
 
   if (activationRes.data?.[0] && activationRes.data[0].status !== "used") return null;
   const validMemberships = membershipsRes.data || [];
-  const cookieStore = await cookies();
   const selectedSchoolId = targetSchoolId || (authorization ? requestHeaders.get("x-school-id") : null) || cookieStore.get("lms-school-id")?.value;
   const primarySchoolId = selectedSchoolId || validMemberships[0]?.school_id || "";
   const schoolMemberships = validMemberships.filter(m => m.school_id === primarySchoolId);
@@ -91,41 +123,26 @@ export const getActorContext = cache(async (targetSchoolId?: string): Promise<Ac
     ? ["super_admin" as Role, "admin" as Role]
     : Array.from(new Set(schoolMemberships.map(m => m.role))) as Role[];
 
-  const preferredRole = ((authorization ? requestHeaders.get("x-lms-role") : null) || cookieStore.get("lms-role")?.value) as Role | undefined;
   const currentRole: Role = isSuper ? "super_admin" : (preferredRole && roles.includes(preferredRole) ? preferredRole : roles.includes(userData.role as Role) ? userData.role as Role : roles[0]);
 
   // 3. Lấy phạm vi lớp chủ nhiệm và môn học (Phase 2 Rosters)
   let homeroomScope: string[] = [];
   let subjectScope: string[] = [];
 
-  try {
-    if (currentRole === "teacher") {
-      const [hrRes, classRes] = await Promise.all([
-        db.from("homeroom_teacher_assignments").select("homeroom_id, status, start_date, end_date").eq("school_id", primarySchoolId).eq("teacher_id", user.id).eq("status", "active"),
-        db.from("class_teacher_assignments").select("status, valid_from, valid_to, class:classes!class_teacher_assignments_class_id_fkey(subject_id)").eq("school_id", primarySchoolId).eq("teacher_id", user.id).eq("status", "active")
-      ]);
-      if (hrRes.data) {
-        homeroomScope = hrRes.data.filter(a => isEffective(a)).map(a => a.homeroom_id);
-      }
-      if (classRes.data) {
-        subjectScope = Array.from(new Set(
-          classRes.data.filter(a => isEffective(a))
-            .map((ca: any) => ca.class?.subject_id)
-            .filter(Boolean)
-        ));
-      }
-    } else if (currentRole === "student") {
-      const { data: hrEnrolls } = await db
-        .from("homeroom_enrollments")
-        .select("homeroom_id")
-        .eq("student_id", user.id)
-        .eq("status", "active");
-      if (hrEnrolls) {
-        homeroomScope = hrEnrolls.map((e: { homeroom_id: string }) => e.homeroom_id);
-      }
+  if (currentRole === "teacher") {
+    const rows = await (teacherScopePrefetch ?? loadTeacherScopeRows(db, user.id));
+    if (rows) {
+      homeroomScope = rows.homerooms
+        .filter(a => a.school_id === primarySchoolId && isEffective(a))
+        .map(a => a.homeroom_id);
+      subjectScope = Array.from(new Set(
+        rows.classes.filter(a => a.school_id === primarySchoolId && isEffective(a))
+          .map((ca: any) => (Array.isArray(ca.class) ? ca.class[0] : ca.class)?.subject_id)
+          .filter(Boolean)
+      ));
     }
-  } catch {
-    // Graceful fallback trong giai đoạn chuyển đổi
+  } else if (currentRole === "student") {
+    homeroomScope = (await (studentScopePrefetch ?? loadStudentHomeroomIds(db, user.id))) ?? [];
   }
 
   return {
@@ -215,15 +232,9 @@ export async function requireClassScope(
   classId: string,
   mode: "read" | "teach" | "learn" = "read"
 ): Promise<boolean> {
-  const db = createAdminClient();
+  const cls = await loadClassRow(classId);
 
-  const { data: cls, error } = await db
-    .from("classes")
-    .select("id, school_id, teacher_id")
-    .eq("id", classId)
-    .single();
-
-  if (error || !cls) {
+  if (!cls) {
     throw new AccessError(404, "Không tìm thấy lớp học.", "NOT_FOUND");
   }
 
@@ -233,47 +244,75 @@ export async function requireClassScope(
   if (actor.currentRole === "super_admin" || (actor.roles.includes("admin") && mode !== "learn")) return true;
 
   if (actor.roles.includes("teacher") && mode !== "learn") {
-      const { data: assigned } = await db
-        .from("class_teacher_assignments")
-        .select("id, status, valid_from, valid_to")
-        .eq("class_id", classId)
-        .eq("teacher_id", actor.userId);
+      const assigned = await loadTeacherAssignments(classId, actor.userId);
       if (assigned?.some(a => isEffective(a))) return true;
       // Legacy owner is allowed only when no assignment has ever superseded it.
       if (assigned && assigned.length === 0 && cls.teacher_id === actor.userId) return true;
   }
 
   if (actor.roles.includes("student") && mode !== "teach") {
-    const { data } = await db
-      .from("enrollments")
-      .select("id")
-      .eq("class_id", classId)
-      .eq("student_id", actor.userId)
-      .eq("status", "active")
-      .limit(1);
-    if (data && data.length > 0) return true;
+    if (await hasActiveEnrollment(classId, actor.userId)) return true;
   }
 
   if (actor.roles.includes("parent") && mode === "read") {
-    const { data: children } = await db
-      .from("parent_students")
-      .select("student_id, verification_status, valid_from, valid_to")
-      .eq("school_id", actor.schoolId)
-      .eq("parent_id", actor.userId);
-
-    const childIds = (children || []).filter(c => isVerifiedGuardian(c)).map(c => c.student_id);
-    if (childIds.length > 0) {
-      const { data: enrolls } = await db
-        .from("enrollments")
-        .select("id")
-        .eq("class_id", classId)
-        .in("student_id", childIds)
-        .eq("status", "active")
-        .limit(1);
-      if (enrolls && enrolls.length > 0) return true;
-    }
+    if (await guardianHasChildInClass(classId, actor.schoolId, actor.userId)) return true;
   }
 
   throw new AccessError(403, "Bạn không có quyền truy cập vào lớp học này.", "CLASS_ACCESS_DENIED");
 }
+
+// Request-scoped lookups behind requireClassScope. A class page calls the check once per
+// widget; React cache (keyed on these primitive arguments) lets them share one query each
+// within a server render. Outside a render (route handlers, tests) they run every time.
+// Only rows are cached; the access decision above is still made on every call.
+const loadClassRow = cache(async (classId: string) => {
+  const { data, error } = await createAdminClient()
+    .from("classes")
+    .select("id, school_id, teacher_id")
+    .eq("id", classId)
+    .single();
+  return error || !data ? null : data as { id: string; school_id: string; teacher_id: string | null };
+});
+
+const loadTeacherAssignments = cache(async (classId: string, teacherId: string) => {
+  const { data } = await createAdminClient()
+    .from("class_teacher_assignments")
+    .select("id, status, valid_from, valid_to")
+    .eq("class_id", classId)
+    .eq("teacher_id", teacherId);
+  return data;
+});
+
+const hasActiveEnrollment = cache(async (classId: string, studentId: string) => {
+  const { data } = await createAdminClient()
+    .from("enrollments")
+    .select("id")
+    .eq("class_id", classId)
+    .eq("student_id", studentId)
+    .eq("status", "active")
+    .limit(1);
+  return !!data && data.length > 0;
+});
+
+const loadGuardianChildIds = cache(async (schoolId: string, parentId: string) => {
+  const { data: children } = await createAdminClient()
+    .from("parent_students")
+    .select("student_id, verification_status, valid_from, valid_to")
+    .eq("school_id", schoolId)
+    .eq("parent_id", parentId);
+  return (children || []).filter(c => isVerifiedGuardian(c)).map(c => c.student_id as string);
+});
+
+const guardianHasChildInClass = cache(async (classId: string, schoolId: string, parentId: string) => {
+  const childIds = await loadGuardianChildIds(schoolId, parentId);
+  if (childIds.length === 0) return false;
+  const { data: enrolls } = await createAdminClient()
+    .from("enrollments")
+    .select("id")
+    .eq("class_id", classId)
+    .in("student_id", childIds)
+    .eq("status", "active")
+    .limit(1);
+  return !!enrolls && enrolls.length > 0;
+});
 

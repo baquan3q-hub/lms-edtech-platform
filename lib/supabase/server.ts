@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { traceFetchOption } from "./trace";
 
 // Tạo Supabase client cho Server Components / Server Actions / Route Handlers
 export async function createClient() {
@@ -24,6 +25,7 @@ export async function createClient() {
                     }
                 },
             },
+            ...traceFetchOption(),
         }
     );
 }

@@ -69,3 +69,22 @@ Nếu cần đổi biến môi trường, redeploy để áp dụng theo [hướ
 SQL pilot lấy UUID tài khoản từ Auth qua email, tạo một trường/lớp/môn/ghi danh theo quan hệ thực và chạy trong transaction. Test sử dụng cùng generator. Các seed/backfill THCS lịch sử không được chạy khi dựng rỗng mới.
 
 Khi thay project thật sau này: dựng DB mới → tạo lại tài khoản/cấu hình Auth → kiểm tra → đổi ba biến Supabase ở local/Vercel → redeploy → xác nhận đăng nhập và dữ liệu → mới xóa project cũ nếu có yêu cầu. [Tài liệu Supabase về kết nối PostgreSQL](https://supabase.com/docs/guides/database/connecting-to-postgres).
+
+## Bổ sung 25/11/2026: nhập lại trường THCS Nguyễn Du (Pilot)
+
+Project live hiện có hai trường: LMS-THPT và THCS-NDU. Trường THCS-NDU được nhập lại vì đây là bộ tài khoản dùng để tự kiểm thử.
+
+Lệnh: `node scripts/db/import-nguyendu-pilot.mjs <project-ref>`. Mặc định lệnh chỉ đọc và báo xung đột. Thêm `--apply` thì lệnh mới ghi.
+
+- **Nguồn dữ liệu:** `supabase/seed_30_students_pilot.sql` (5 GV, 30 HS, 30 PH, mã HS101–HS130, liên kết phụ huynh, lớp 9A1 với 30 HS, một buổi điểm danh). Admin là thầy Long `thaylongcngd@gmail.com`, lấy từ `docs/backup/live_snapshot_2026-09-26.json`.
+- **Bổ sung cho schema mới:** năm học 2026–2027, HK1/HK2, khối 9, môn Tiếng Anh, lớp chủ nhiệm 9A1 và phân công thầy Lê Hoàng Nam (dạy và chủ nhiệm). Không tạo `account_activations`. Projection học tập do worker tính từ outbox.
+- **An toàn:**
+  - Tài khoản Auth được tạo với đúng UUID trong seed.
+  - Mọi bản ghi có id cố định và được upsert, nên chạy lại không tạo trùng.
+  - Trước khi ghi, script dừng nếu email, id, mã trường hoặc bản ghi đã thuộc trường khác.
+  - Trường LMS-THPT không bị đụng tới.
+- **Mật khẩu:** một mật khẩu ngẫu nhiên chung cho cả trường, lưu ở `.local/TAI_KHOAN_NGUYEN_DU.md` (đã gitignore). Không dùng lại mật khẩu demo công khai trong file seed.
+- **Kiểm chứng:**
+  - `tests/integration/nguyendu_import.test.ts`: import hai lần trên schema fresh install, có kiểm RLS theo vai trò.
+  - Trên live, đăng nhập thật được bằng admin, GV, HS và PH.
+  - Mỗi vai trò chỉ đọc được dữ liệu của trường mình.

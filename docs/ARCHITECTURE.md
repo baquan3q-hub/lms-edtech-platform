@@ -1,8 +1,8 @@
 # Architecture - LMS EdTech Platform
 
-Last reviewed: 2026-11-04
+Last reviewed: 2026-11-25
 
-Kiến trúc hiện hành và kế hoạch chuyển tiếp: [rà soát toàn bộ LMS 04/11](RA_SOAT_KIEN_TRUC_VA_HIEU_NANG_2026-11-04.md), [trạng thái tái thiết K12](REBUILD_K12_IMPLEMENTATION.md). Nghiệp vụ mới đặt trong `lib/modules`; Server Actions và `/api/v1` là adapter. Python worker xử lý projection qua outbox; Supabase giữ dữ liệu gốc. `getActorContext` dùng helper Auth được React cache trong render cùng layout/profile/page; bearer token có lookup riêng. Không cache actor/phiên dùng chung giữa các request. Các sơ đồ và bảng legacy bên dưới mô tả code cũ, chưa phải toàn bộ kiến trúc đích.
+Kiến trúc hiện hành và kế hoạch chuyển tiếp: [rà soát toàn bộ LMS 04/11](RA_SOAT_KIEN_TRUC_VA_HIEU_NANG_2026-11-04.md), [rà soát hiệu năng tải dữ liệu 25/11](RA_SOAT_HIEU_NANG_2026-11-25.md), [trạng thái tái thiết K12](REBUILD_K12_IMPLEMENTATION.md). Nghiệp vụ mới đặt trong `lib/modules`; Server Actions và `/api/v1` là adapter. Python worker xử lý projection qua outbox; Supabase giữ dữ liệu gốc. `getActorContext` dùng helper Auth được React cache trong render cùng layout/profile/page; bearer token có lookup riêng. Không cache actor/phiên dùng chung giữa các request. Các sơ đồ và bảng legacy bên dưới mô tả code cũ, chưa phải toàn bộ kiến trúc đích.
 
 ## 1. Tổng quan
 
@@ -51,14 +51,31 @@ flowchart LR
 
 ## 3. Auth và RBAC
 
-`proxy.ts` refresh session bằng `updateSession()` trong `lib/supabase/middleware.ts`, đọc role từ bảng `users` bằng admin client, rồi redirect theo role:
+`proxy.ts` refresh session bằng `updateSession()` trong `lib/supabase/middleware.ts`. Từ 25/11/2026 hàm này gọi `supabase.auth.getClaims()` thay cho `getUser()`: cookie vẫn được làm mới qua `getSession()`, còn chữ ký JWT được xác thực tại chỗ bằng JWKS nếu project dùng khoá ký bất đối xứng (với HS256 auth-js tự quay về `getUser()`, nên chậm như cũ). Proxy không đọc bảng `users`. Khi người đã đăng nhập mở `/login`, proxy chỉ dùng `user_metadata.role` làm **gợi ý điều hướng** để chuyển tới:
 
 - `admin` -> `/admin`
 - `teacher` -> `/teacher`
 - `student` -> `/student`
 - `parent` -> `/parent`
 
+Vai trò thật được chốt ở layout của từng khu vực và trong server action bằng `getActorContext()`/`lib/auth/authorize.ts`. Hai chỗ này dùng `getUser()` và đọc membership trong DB. Proxy không chặn hay điều hướng chéo giữa các dashboard.
+
 Route `/api`, `/_next`, static files và manifest được bỏ qua ở proxy. Điều này tốt cho performance, nhưng nghĩa là API routes phải tự kiểm quyền nếu endpoint ghi hoặc đọc dữ liệu nhạy cảm.
+
+### Cache kiểm quyền trong một request (25/11/2026)
+
+- **Kiểm quyền lớp:** `requireClassScope` (`lib/auth/actor-context.ts`) đọc DB qua các loader bọc React `cache()`: `loadClassRow`, `loadTeacherAssignments`, `hasActiveEnrollment`, `loadGuardianChildIds` và `guardianHasChildInClass`.
+  - Khi nhiều widget trên một trang cùng gọi `requireClassAccess(classId)`, mỗi query chỉ chạy một lần cho mỗi bộ tham số.
+  - Cache chỉ sống trong một lần render server, không dùng chung giữa các request hay người dùng.
+  - Logic quyết định cho phép hay từ chối giữ nguyên.
+- **Phạm vi giáo viên và học sinh:** `getActorContext` chạy query phạm vi (phân công chủ nhiệm/bộ môn của giáo viên, lớp chủ nhiệm học sinh đang học) song song với batch đầu.
+  - Bản chạy sớm này chỉ dựa vào cookie `lms-role` hoặc header `x-lms-role`. Cookie/header đó chỉ quyết định có chạy sớm hay không, **không cấp quyền**.
+  - Các dòng tải về được lọc lại theo `school_id` của membership đã chọn và theo ngày hiệu lực.
+  - Nếu gợi ý sai hoặc không có, phạm vi được tải sau khi đã biết vai trò thật, như trước đây.
+
+### Đếm query khi chẩn đoán chậm
+
+`lib/supabase/trace.ts` thêm `global.fetch` có đo thời gian vào ba client server (`admin.ts`, `server.ts`, `middleware.ts`), nhưng chỉ khi đặt `LMS_TRACE_DB=1`. Mỗi lượt gọi in một dòng `[db] METHOD /path status Nms`, không in query string vì có thể chứa id/email. Khi không bật biến này, client giữ nguyên như cũ.
 
 ## 4. Data access pattern
 
@@ -99,7 +116,16 @@ Hệ thống ngoài gọi `GET /api/schools/[schoolId]` bằng API key của tr�
 
 ## 6. Realtime và cache
 
-Các hook `useRealtime.ts`, `useRealtimeSync.ts`, `useNotifications.ts` và providers trong `lib/providers/` cho thấy hệ thống đang dựa vào Supabase Realtime kết hợp TanStack Query. Khi thêm tính năng realtime:
+Các hook `useRealtime.ts`, `useRealtimeSync.ts` và providers trong `lib/providers/` cho thấy hệ thống đang dựa vào Supabase Realtime kết hợp TanStack Query.
+
+**Thông báo** (từ 25/11/2026):
+- `useRealtimeSync`, được gọi một lần trong `app/(dashboard)/layout.tsx`, là nơi duy nhất nạp danh sách vào `stores/notificationStore.ts` và nghe `INSERT`/`UPDATE` trên bảng `notifications`.
+- `NotificationBell` chỉ đọc store. Nó không gọi `auth.getUser()` phía client, không tự tải lại và không mở channel riêng.
+- Hook `useNotifications.ts` cũ đã bị xoá.
+
+**Theo dõi thời gian học:** `usePageTracker` giữ một interval 30 giây cho cả layout và đọc trang hiện tại qua ref. Vì vậy đổi trang không còn bắn heartbeat ngay hay đặt lại bộ đếm.
+
+Khi thêm tính năng realtime:
 
 - Đặt query key ổn định theo entity (`classId`, `studentId`, `examId`).
 - Invalidate đúng scope, tránh refetch toàn dashboard.

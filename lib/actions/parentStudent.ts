@@ -2,6 +2,7 @@
 
 import { requireActor, requireSelfOrRoles } from "@/lib/auth/authorize";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getCurrentUser } from "@/lib/supabase/auth";
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
@@ -424,10 +425,15 @@ export async function unlinkMyStudent(linkId: string) {
 // ============================================================
 // PARENT DASHBOARD: Lấy dữ liệu dashboard cho 1 học sinh
 // ============================================================
+// Truy vấn chạy theo đợt (Promise.all) xếp theo phụ thuộc, thay vì ~19 await nối tiếp:
+//   Xác thực: user → canParentViewStudent (giữ nguyên, phải xong trước khi đọc bằng admin client)
+//   Đợt 1: dữ liệu chỉ cần studentId/user.id
+//   Đợt 2: dữ liệu cần classIds hoặc kết quả đợt 1
+//   Đợt 3: announcement_reads (nối ngay sau truy vấn announcements, chạy song song phần còn lại của đợt 2)
+// Shape trả về giữ nguyên như bản cũ.
 export async function fetchParentDashboardData(studentId: string) {
     try {
-        const supabaseClient = await createClient();
-        const { data: { user } } = await supabaseClient.auth.getUser();
+        const user = await getCurrentUser();
         if (!user) return { data: null, error: "Chưa đăng nhập." };
 
         // Kiểm tra quyền
@@ -435,78 +441,12 @@ export async function fetchParentDashboardData(studentId: string) {
         if (!hasAccess) return { data: null, error: "Bạn không có quyền xem thông tin học sinh này." };
 
         const supabase = createAdminClient();
+        const empty = Promise.resolve({ data: null as any });
 
-        // 1. Thông tin học sinh
-        const { data: student } = await supabase
-            .from("users")
-            .select("id, full_name, email, avatar_url")
-            .eq("id", studentId)
-            .single();
-
-        // 2. Lớp học enrolled (kèm tên Course, tên GV)
-        const { data: enrollments } = await supabase
-            .from("enrollments")
-            .select("class_id, class:classes(id, name, course:courses(name), teacher:users!classes_teacher_id_fkey(full_name))")
-            .eq("student_id", studentId)
-            .eq("status", "active");
-
-        const classIds = (enrollments || []).map((e: any) => e.class_id);
-
-        // 3. Điểm danh tháng hiện tại
+        // Mốc thời gian (tính trước để các truy vấn đợt 2 dùng được)
         const now = new Date();
         const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
         const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
-
-        let attendance: any[] = [];
-        if (classIds.length > 0) {
-            const { data } = await supabase
-                .from("attendance_records")
-                .select(`
-                    id, 
-                    status, 
-                    note, 
-                    session:attendance_sessions!inner(session_date, class_id)
-                `)
-                .eq("student_id", studentId)
-                .in("session.class_id", classIds)
-                .gte("session.session_date", firstDay)
-                .lte("session.session_date", lastDay)
-                .order("session(session_date)", { ascending: true });
-
-            // Flatten the nested structure to match previous expected format for frontend
-            attendance = (data || []).map((r: any) => ({
-                date: r.session?.session_date,
-                status: r.status,
-                notes: r.note,
-                class_id: r.session?.class_id
-            }));
-        }
-
-        // 3a. All-time attendance stats
-        let allTimeAttendance: any[] = [];
-        if (classIds.length > 0) {
-            const { data: allTimeData } = await supabase
-                .from("attendance_records")
-                .select(`
-                    status, 
-                    session:attendance_sessions!inner(class_id)
-                `)
-                .eq("student_id", studentId)
-                .in("session.class_id", classIds);
-            allTimeAttendance = allTimeData || [];
-        }
-
-        // 3b. Lịch cố định hàng tuần (class_schedules)
-        let upcomingSchedules: any[] = [];
-        if (classIds.length > 0) {
-            const { data: schedules } = await supabase
-                .from("class_schedules")
-                .select("*, room:rooms(name), class:classes(name, course:courses(name), teacher:users!classes_teacher_id_fkey(full_name))")
-                .in("class_id", classIds)
-                .order("day_of_week", { ascending: true })
-                .order("start_time", { ascending: true });
-            upcomingSchedules = schedules || [];
-        }
 
         // Hàm helper tránh lỗi lệch múi giờ khi dùng toISOString() lúc 00:00
         const formatLocalDate = (d: Date) => {
@@ -515,32 +455,205 @@ export async function fetchParentDashboardData(studentId: string) {
             const dd = String(d.getDate()).padStart(2, '0');
             return `${yyyy}-${mm}-${dd}`;
         };
-
-        // 3c. Lịch học thực tế và dự phóng (class_sessions + virtual)
-        let upcomingSessions: any[] = [];
         const todayStr = formatLocalDate(now);
-
         // Cần xem lùi lại 1 tuần để lấy các bài "Đã học" gần nhất
         const lastWeek = new Date(now);
         lastWeek.setDate(now.getDate() - 7);
         const lastWeekStr = formatLocalDate(lastWeek);
 
-        // Tạo bản đồ room_name từ schedules theo class_id
-        const classRoomMap: Record<string, string> = {};
-        for (const sch of upcomingSchedules) {
-            if (sch.room?.name) {
-                classRoomMap[`${sch.class_id}-${sch.day_of_week}`] = sch.room.name;
-            }
+        // ---------- Đợt 1: chỉ phụ thuộc studentId / user.id ----------
+        const [
+            { data: student },
+            { data: enrollments },
+            { data: examSubs },
+            { data: notifs },
+            { data: quizAttempts },
+            { data: examSubmissions },
+            { data: homeworkSubmissions },
+        ] = await Promise.all([
+            // 1. Thông tin học sinh
+            supabase
+                .from("users")
+                .select("id, full_name, email, avatar_url")
+                .eq("id", studentId)
+                .single(),
+            // 2. Lớp học enrolled (kèm tên Course, tên GV)
+            supabase
+                .from("enrollments")
+                .select("class_id, class:classes(id, name, course:courses(name), teacher:users!classes_teacher_id_fkey(full_name))")
+                .eq("student_id", studentId)
+                .eq("status", "active"),
+            // 4. Bài kiểm tra gần đây
+            supabase
+                .from("exam_submissions")
+                .select("id, exam_id, score, total_points, submitted_at, time_taken_seconds")
+                .eq("student_id", studentId)
+                .order("submitted_at", { ascending: false })
+                .limit(10),
+            // 5.1 Thông báo hệ thống/khảo sát cho parent
+            supabase
+                .from("notifications")
+                .select("*")
+                .eq("user_id", user.id)
+                .order("created_at", { ascending: false })
+                .limit(5),
+            // 6. Điểm để tính trung bình
+            supabase
+                .from("quiz_attempts")
+                .select('item_id, score')
+                .eq("student_id", studentId)
+                .not('score', 'is', null),
+            supabase
+                .from("exam_submissions")
+                .select('exam_id, score, total_points')
+                .eq("student_id", studentId)
+                .not('score', 'is', null),
+            supabase
+                .from("homework_submissions")
+                .select('homework_id, score')
+                .eq("student_id", studentId)
+                .not('score', 'is', null),
+        ]);
+
+        const classIds = (enrollments || []).map((e: any) => e.class_id);
+        const hasClasses = classIds.length > 0;
+        const examIds = (examSubs || []).map((s: any) => s.exam_id);
+        const notificationAnnIds: string[] = (notifs || [])
+            .filter((n: any) => n.metadata?.announcementId)
+            .map((n: any) => n.metadata.announcementId);
+
+        let queryStr = "scope.eq.system";
+        if (hasClasses) {
+            queryStr = `class_id.in.(${classIds.join(',')}),scope.eq.system`;
         }
 
-        if (classIds.length > 0) {
-            // 1. Lấy các sessions đã được Admin tạo thực tế (kèm room info)
-            const { data: realSessions } = await supabase
+        // Đợt 3 nối thẳng sau announcements: id cần kiểm đã đọc là tập cha của id cuối cùng
+        // (announcement, notification, announcementId trong metadata); lọc chính xác ở dưới.
+        const announcementsPromise = Promise.resolve(
+            supabase
+                .from("announcements")
+                .select("id, title, content, created_at, class_id, file_url, video_url, link_url, quiz_data, quiz_id, attachments")
+                .or(queryStr)
+                .order("created_at", { ascending: false })
+                .limit(5)
+        );
+        const readsPromise = announcementsPromise.then(({ data: anns }) => {
+            const candidateIds = [...new Set([
+                ...(anns || []).map((a: any) => a.id),
+                ...(notifs || []).map((n: any) => n.id),
+                ...notificationAnnIds,
+            ].filter(Boolean))];
+            if (candidateIds.length === 0) return { data: null as any };
+            return supabase
+                .from("announcement_reads")
+                .select("announcement_id")
+                .eq("user_id", user.id)
+                .in("announcement_id", candidateIds)
+                .not("confirmed_at", "is", null);
+        });
+
+        // ---------- Đợt 2: cần classIds hoặc kết quả đợt 1 ----------
+        const [
+            { data: monthAttendance },
+            { data: allTimeData },
+            { data: schedules },
+            { data: realSessions },
+            { data: windowAttendance },
+            { data: windowAbsenceRequests },
+            { data: exams },
+            { data: annDetails },
+            { data: announcementRows },
+            { data: reads },
+        ] = await Promise.all([
+            // 3. Điểm danh tháng hiện tại
+            hasClasses ? supabase
+                .from("attendance_records")
+                .select(`
+                    id,
+                    status,
+                    note,
+                    session:attendance_sessions!inner(session_date, class_id)
+                `)
+                .eq("student_id", studentId)
+                .in("session.class_id", classIds)
+                .gte("session.session_date", firstDay)
+                .lte("session.session_date", lastDay)
+                .order("session(session_date)", { ascending: true }) : empty,
+            // 3a. Điểm danh toàn thời gian. KHÔNG giới hạn theo ngày: thẻ "Tổng buổi đã học"
+            // là số toàn thời gian, giới hạn sẽ đổi nghĩa số liệu. Chỉ lấy 2 cột cần đếm.
+            hasClasses ? supabase
+                .from("attendance_records")
+                .select(`
+                    status,
+                    session:attendance_sessions!inner(class_id)
+                `)
+                .eq("student_id", studentId)
+                .in("session.class_id", classIds) : empty,
+            // 3b. Lịch cố định hàng tuần (class_schedules)
+            hasClasses ? supabase
+                .from("class_schedules")
+                .select("*, room:rooms(name), class:classes(name, course:courses(name), teacher:users!classes_teacher_id_fkey(full_name))")
+                .in("class_id", classIds)
+                .order("day_of_week", { ascending: true })
+                .order("start_time", { ascending: true }) : empty,
+            // 3c. Các buổi Admin đã tạo thực tế (kèm room info)
+            hasClasses ? supabase
                 .from("class_sessions")
                 .select("id, class_id, session_number, session_date, start_time, end_time, topic, homework, lesson_title, lesson_content, attachments, status, room_id, class:classes!class_id(name, course:courses(name), teacher:users!classes_teacher_id_fkey(full_name))")
                 .in("class_id", classIds)
                 .gte("session_date", lastWeekStr)
-                .order("session_date", { ascending: true });
+                .order("session_date", { ascending: true }) : empty,
+            // 3d. Điểm danh từ tuần trước trở đi. Mọi buổi hiển thị đều có ngày >= lastWeekStr,
+            // nên đây là tập cha của truy vấn cũ (lọc theo đúng danh sách ngày); ghép theo (ngày, lớp).
+            hasClasses ? supabase
+                .from("attendance_records")
+                .select("status, session:attendance_sessions!inner(session_date, class_id)")
+                .eq("student_id", studentId)
+                .in("session.class_id", classIds)
+                .gte("session.session_date", lastWeekStr) : empty,
+            // 3e. Đơn xin nghỉ từ tuần trước trở đi (cùng lý do như 3d)
+            hasClasses ? supabase
+                .from("absence_requests")
+                .select("absence_date, class_id, status")
+                .eq("student_id", studentId)
+                .in("class_id", classIds)
+                .gte("absence_date", lastWeekStr) : empty,
+            // 4a. Tên bài kiểm tra cho các bài nộp gần đây
+            examIds.length > 0 ? supabase
+                .from("exams")
+                .select("id, title, class_id")
+                .in("id", examIds) : empty,
+            // 5.2 Chi tiết announcement gắn với notification
+            notificationAnnIds.length > 0 ? supabase
+                .from("announcements")
+                .select("id, attachments, file_url, video_url, link_url, content")
+                .in("id", notificationAnnIds) : empty,
+            // 5. Thông báo lớp/hệ thống
+            announcementsPromise,
+            // Đợt 3
+            readsPromise,
+        ]);
+
+        // ---------- Xử lý trong bộ nhớ ----------
+        // Flatten the nested structure to match previous expected format for frontend
+        const attendance: any[] = (monthAttendance || []).map((r: any) => ({
+            date: r.session?.session_date,
+            status: r.status,
+            notes: r.note,
+            class_id: r.session?.class_id
+        }));
+        const allTimeAttendance: any[] = allTimeData || [];
+        const upcomingSchedules: any[] = schedules || [];
+
+        let upcomingSessions: any[] = [];
+        if (hasClasses) {
+            // Tạo bản đồ room_name từ schedules theo class_id
+            const classRoomMap: Record<string, string> = {};
+            for (const sch of upcomingSchedules) {
+                if (sch.room?.name) {
+                    classRoomMap[`${sch.class_id}-${sch.day_of_week}`] = sch.room.name;
+                }
+            }
 
             const mergedSessions: any[] = (realSessions || []).map((s: any) => {
                 // Lấy room_name từ schedule map nếu session không có room riêng
@@ -553,10 +666,8 @@ export async function fetchParentDashboardData(studentId: string) {
             });
             const realSessionKeys = new Set(mergedSessions.map(s => `${s.class_id}-${s.session_date}`));
 
-            // 2. Dự phóng lịch từ class_schedules (cho 4 tuần tới)
-            // Sử dụng ngày hôm nay làm mốc, lùi lại đủ để lấy buổi gần nhất đã qua
+            // Dự phóng lịch từ class_schedules (1 tuần trước + 4 tuần tới)
             for (const schedule of upcomingSchedules) {
-                // Bắt đầu từ 1 tuần trước hôm nay
                 const d = new Date(lastWeek);
                 d.setHours(0, 0, 0, 0);
 
@@ -565,10 +676,8 @@ export async function fetchParentDashboardData(studentId: string) {
                     d.setDate(d.getDate() + 1);
                 }
 
-                // Room name từ schedule
                 const roomName = schedule.room?.name || null;
 
-                // Dự phóng cho 5 tuần (1 tuần trước + 4 tuần sau)
                 for (let w = 0; w < 5; w++) {
                     const sessionDate = new Date(d);
                     sessionDate.setDate(d.getDate() + w * 7);
@@ -597,7 +706,7 @@ export async function fetchParentDashboardData(studentId: string) {
                 }
             }
 
-            // 3. Sắp xếp lại danh sách trộn theo ngày và giờ
+            // Sắp xếp lại danh sách trộn theo ngày và giờ
             mergedSessions.sort((a, b) => {
                 if (a.session_date !== b.session_date) {
                     return a.session_date.localeCompare(b.session_date);
@@ -605,137 +714,59 @@ export async function fetchParentDashboardData(studentId: string) {
                 return a.start_time.localeCompare(b.start_time);
             });
 
-            // 4. Lấy tối đa 15 buổi sắp tới/gần nhất để khỏi dài quá
+            // Lấy tối đa 15 buổi sắp tới/gần nhất
             const recentAndUpcoming = mergedSessions.filter(s => s.session_date >= lastWeekStr).slice(0, 15);
 
-            // 5. Fetch attendance records cho mốc thời gian này
-            if (recentAndUpcoming.length > 0) {
-                const sessionDates = [...new Set(recentAndUpcoming.map(s => s.session_date))];
-                const { data: sessionAttendance } = await supabase
-                    .from("attendance_records")
-                    .select("status, session:attendance_sessions!inner(session_date, class_id)")
-                    .eq("student_id", studentId)
-                    .in("session.class_id", classIds)
-                    .in("session.session_date", sessionDates);
+            // Map (lớp|ngày) → trạng thái điểm danh; giữ bản ghi đầu tiên như .find cũ
+            const attendanceByKey = new Map<string, string>();
+            for (const a of windowAttendance || []) {
+                const sessionData = Array.isArray(a.session) ? a.session[0] : a.session;
+                const key = `${sessionData?.class_id}|${sessionData?.session_date}`;
+                if (!attendanceByKey.has(key)) attendanceByKey.set(key, a.status);
+            }
+            const absenceByKey = new Map<string, any>();
+            for (const r of windowAbsenceRequests || []) {
+                const key = `${r.class_id}|${r.absence_date}`;
+                if (!absenceByKey.has(key)) absenceByKey.set(key, r);
+            }
 
-                // Map trạng thái điểm danh
-                upcomingSessions = recentAndUpcoming.map((s: any) => {
-                    const attRecord = sessionAttendance?.find(
-                        (a: any) => {
-                            const sessionData = Array.isArray(a.session) ? a.session[0] : a.session;
-                            return sessionData?.session_date === s.session_date && sessionData?.class_id === s.class_id;
-                        }
-                    );
-
-                    // Nếu ngày đã qua mà không có điểm danh => "unrecorded"
-                    const isPast = s.session_date < todayStr;
-
-                    return {
-                        ...s,
-                        class_name: s.class?.name,
-                        course_name: s.class?.course?.name,
-                        attendance_status: attRecord ? attRecord.status : (isPast ? "unrecorded" : null)
-                    };
-                });
-            } else {
-                upcomingSessions = recentAndUpcoming.map((s: any) => ({
+            upcomingSessions = recentAndUpcoming.map((s: any) => {
+                const key = `${s.class_id}|${s.session_date}`;
+                // Nếu ngày đã qua mà không có điểm danh => "unrecorded"
+                const isPast = s.session_date < todayStr;
+                const session = {
                     ...s,
                     class_name: s.class?.name,
-                    course_name: s.class?.course?.name
-                }));
-            }
-
-            // Fetch absence requests to mark "Xin nghỉ" status properly
-            if (upcomingSessions.length > 0) {
-                const sessionDatesRange = upcomingSessions.map(s => s.session_date);
-                const { data: absenceRequests } = await supabase
-                    .from("absence_requests")
-                    .select("absence_date, class_id, status")
-                    .eq("student_id", studentId)
-                    .in("class_id", classIds)
-                    .in("absence_date", sessionDatesRange);
-
-                // Override attendance_status with absence request status
-                upcomingSessions = upcomingSessions.map((s: any) => {
-                    const req = (absenceRequests || []).find(
-                        (r: any) => r.absence_date === s.session_date && r.class_id === s.class_id
-                    );
-                    if (req) {
-                        return {
-                            ...s,
-                            attendance_status: req.status === "approved" ? "excused" : "absence_requested",
-                            absence_request_status: req.status
-                        };
-                    }
-                    return s;
-                });
-            }
+                    course_name: s.class?.course?.name,
+                    attendance_status: attendanceByKey.has(key) ? attendanceByKey.get(key) : (isPast ? "unrecorded" : null)
+                };
+                // Đơn xin nghỉ ghi đè trạng thái điểm danh
+                const req = absenceByKey.get(key);
+                if (req) {
+                    return {
+                        ...session,
+                        attendance_status: req.status === "approved" ? "excused" : "absence_requested",
+                        absence_request_status: req.status
+                    };
+                }
+                return session;
+            });
         }
 
-        // 4. Bài kiểm tra gần đây (exam_submissions)
+        // Bài kiểm tra gần đây
         let recentExams: any[] = [];
-        const { data: examSubs } = await supabase
-            .from("exam_submissions")
-            .select("id, exam_id, score, total_points, submitted_at, time_taken_seconds")
-            .eq("student_id", studentId)
-            .order("submitted_at", { ascending: false })
-            .limit(10);
-
         if (examSubs && examSubs.length > 0) {
-            const examIds = examSubs.map(s => s.exam_id);
-            const { data: exams } = await supabase
-                .from("exams")
-                .select("id, title, class_id")
-                .in("id", examIds);
-
-            recentExams = examSubs.map(sub => ({
+            const examMap = new Map((exams || []).map((e: any) => [e.id, e]));
+            recentExams = examSubs.map((sub: any) => ({
                 ...sub,
-                exam: (exams || []).find(e => e.id === sub.exam_id),
+                exam: examMap.get(sub.exam_id),
             }));
         }
 
-        let announcements: any[] = [];
-        let queryStr = "scope.eq.system";
-        if (classIds.length > 0) {
-            queryStr = `class_id.in.(${classIds.join(',')}),scope.eq.system`;
-        }
-        
-        const { data } = await supabase
-            .from("announcements")
-            .select("id, title, content, created_at, class_id, file_url, video_url, link_url, quiz_data, quiz_id, attachments")
-            .or(queryStr)
-            .order("created_at", { ascending: false })
-            .limit(5);
-        announcements = data || [];
-
-        // 5.1 Thông báo hệ thống/khảo sát cho parent
-        let recentNotifications: any[] = [];
-        const { data: notifs } = await supabase
-            .from("notifications")
-            .select("*")
-            .eq("user_id", user.id)
-            .order("created_at", { ascending: false })
-            .limit(5);
-        recentNotifications = notifs || [];
-        // 5.2 Enrich system notifications that have metadata.announcementId
-        const announcementIds = recentNotifications
-            .filter((n: any) => n.metadata?.announcementId)
-            .map((n: any) => n.metadata.announcementId);
-
-        const announcementMap = new Map<string, any>();
-        if (announcementIds.length > 0) {
-            const { data: annDetails } = await supabase
-                .from("announcements")
-                .select("id, attachments, file_url, video_url, link_url, content")
-                .in("id", announcementIds);
-
-            if (annDetails) {
-                annDetails.forEach((a: any) => announcementMap.set(a.id, a));
-            }
-        }
-
         // Gắn dữ liệu announcement vào notification
-        recentNotifications = recentNotifications.map((n: any) => {
+        const announcementMap = new Map<string, any>();
+        (annDetails || []).forEach((a: any) => announcementMap.set(a.id, a));
+        const recentNotifications: any[] = (notifs || []).map((n: any) => {
             if (n.metadata?.announcementId && announcementMap.has(n.metadata.announcementId)) {
                 const ann = announcementMap.get(n.metadata.announcementId);
                 return {
@@ -755,88 +786,44 @@ export async function fetchParentDashboardData(studentId: string) {
         const enrichedAnnIds = new Set(
             recentNotifications.filter((n: any) => n._announcementId).map((n: any) => n._announcementId)
         );
-        announcements = announcements.filter(
+        const announcements: any[] = (announcementRows || []).filter(
             (a: any) => !enrichedAnnIds.has(a.id)
         );
 
-        // 6. Tính điểm trung bình và thống kê bài tập
-        const { data: quizAttempts } = await supabase
-            .from("quiz_attempts")
-            .select('item_id, score')
-            .eq("student_id", studentId)
-            .not('score', 'is', null);
-
-        const { data: examSubmissions } = await supabase
-            .from("exam_submissions")
-            .select('exam_id, score, total_points')
-            .eq("student_id", studentId)
-            .not('score', 'is', null);
-
-        const { data: homeworkSubmissions } = await supabase
-            .from("homework_submissions")
-            .select('homework_id, score')
-            .eq("student_id", studentId)
-            .not('score', 'is', null);
-
+        // Điểm trung bình: quiz lấy điểm cao nhất theo item_id, exam và homework cộng thẳng
         let totalScores = 0;
         let assignmentCount = 0;
-
-        // Xử lý Quizzes: Group by item_id, lấy max
         const quizScores = new Map<string, number>();
-        if (quizAttempts) {
-            for (const attempt of quizAttempts) {
-                const current = quizScores.get(attempt.item_id) || 0;
-                const score = Number(attempt.score) || 0;
-                if (score > current) {
-                    quizScores.set(attempt.item_id, score);
-                }
+        for (const attempt of quizAttempts || []) {
+            const current = quizScores.get(attempt.item_id) || 0;
+            const score = Number(attempt.score) || 0;
+            if (score > current) {
+                quizScores.set(attempt.item_id, score);
             }
         }
         for (const score of quizScores.values()) {
             totalScores += score;
             assignmentCount++;
         }
-
-        // Xử lý Exams
-        if (examSubmissions) {
-            for (const sub of examSubmissions) {
-                totalScores += Number(sub.score) || 0;
-                assignmentCount++;
-            }
+        for (const sub of examSubmissions || []) {
+            totalScores += Number(sub.score) || 0;
+            assignmentCount++;
         }
-
-        // Xử lý Homeworks
-        if (homeworkSubmissions) {
-            for (const sub of homeworkSubmissions) {
-                totalScores += Number(sub.score) || 0;
-                assignmentCount++;
-            }
+        for (const sub of homeworkSubmissions || []) {
+            totalScores += Number(sub.score) || 0;
+            assignmentCount++;
         }
+        const averageScore = assignmentCount > 0 ? totalScores / assignmentCount : 0;
 
-        let averageScore = 0;
-        if (assignmentCount > 0) {
-            averageScore = totalScores / assignmentCount;
-        }
-
-        // Tính toán tổng quan
-        const totalAttendance = attendance.length;
-        const presentDays = attendance.filter(a => a.status === 'present').length;
-
-        const allAnnIds = [...announcements, ...recentNotifications]
+        // Đã xác nhận đọc: chỉ giữ id thuộc danh sách hiển thị (giống bộ lọc .in() cũ)
+        const allAnnIds = new Set([...announcements, ...recentNotifications]
             .filter((m: any) => m._announcementId || m.source === 'announcement' || m.id)
-            .map((m: any) => m._announcementId || m.id);
+            .map((m: any) => m._announcementId || m.id));
+        const confirmedAnnouncementIds: string[] = (reads || [])
+            .map((r: any) => r.announcement_id)
+            .filter((id: string) => allAnnIds.has(id));
 
-        let confirmedAnnouncementIds: string[] = [];
-        if (allAnnIds.length > 0) {
-            const { data: reads } = await supabase
-                .from("announcement_reads")
-                .select("announcement_id")
-                .eq("user_id", user.id)
-                .in("announcement_id", allAnnIds)
-                .not("confirmed_at", "is", null);
-
-            confirmedAnnouncementIds = (reads || []).map((r: any) => r.announcement_id);
-        }
+        const countStatus = (rows: any[], status: string) => rows.filter((a: any) => a.status === status).length;
 
         return {
             data: {
@@ -844,17 +831,17 @@ export async function fetchParentDashboardData(studentId: string) {
                 classes: (enrollments || []).map((e: any) => e.class),
                 attendance,
                 attendanceSummary: {
-                    total: totalAttendance,
-                    present: presentDays,
-                    absent: attendance.filter(a => a.status === 'absent').length,
-                    late: attendance.filter(a => a.status === 'late').length,
-                    excused: attendance.filter(a => a.status === 'excused').length,
+                    total: attendance.length,
+                    present: countStatus(attendance, 'present'),
+                    absent: countStatus(attendance, 'absent'),
+                    late: countStatus(attendance, 'late'),
+                    excused: countStatus(attendance, 'excused'),
                     allTime: {
                         total: allTimeAttendance.length,
-                        present: allTimeAttendance.filter((a: any) => a.status === 'present').length,
-                        absent: allTimeAttendance.filter((a: any) => a.status === 'absent').length,
-                        late: allTimeAttendance.filter((a: any) => a.status === 'late').length,
-                        excused: allTimeAttendance.filter((a: any) => a.status === 'excused').length,
+                        present: countStatus(allTimeAttendance, 'present'),
+                        absent: countStatus(allTimeAttendance, 'absent'),
+                        late: countStatus(allTimeAttendance, 'late'),
+                        excused: countStatus(allTimeAttendance, 'excused'),
                     }
                 },
                 recentExams,

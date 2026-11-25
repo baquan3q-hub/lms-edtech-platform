@@ -134,15 +134,21 @@ export async function fetchClassExams(classId: string) {
     try {
         await requireClassAccess(classId, "teach");
 
+        // Chỉ lấy cột danh sách đề trong trang chi tiết lớp dùng (bỏ questions_snapshot, description...).
+        // Bảng chưa có cột đếm câu hỏi nên vẫn đọc `questions` để đếm, nhưng chỉ trả về question_count.
         const adminSupabase = createAdminClient();
         const { data, error } = await adminSupabase
             .from("exams")
-            .select("*")
+            .select("id, title, is_published, duration_minutes, total_points, questions")
             .eq("class_id", classId)
             .order("created_at", { ascending: false });
 
         if (error) throw error;
-        return { data: data || [], error: null };
+        const exams = (data || []).map(({ questions, ...exam }) => ({
+            ...exam,
+            question_count: Array.isArray(questions) ? questions.length : 0,
+        }));
+        return { data: exams, error: null };
     } catch (error: any) {
         console.error("Error fetching exams:", error);
         return { data: [], error: error.message };

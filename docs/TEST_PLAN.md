@@ -1,6 +1,33 @@
 # Test Plan - LMS EdTech Platform
 
-Last reviewed: 2026-11-04
+Last reviewed: 2026-11-25
+
+## Cập nhật hiệu năng 25/11/2026
+
+Đợt 1 nhằm giảm số lượt gọi Supabase nối tiếp trên đường tải chính. Đợt này chỉ sửa code: không có migration, không nới quyền, không đổi dữ liệu trả về. Nguyên nhân và kế hoạch Đợt 2 nằm trong [rà soát hiệu năng 25/11](RA_SOAT_HIEU_NANG_2026-11-25.md).
+
+Test unit mới:
+- `tests/unit/actor_scope_prefetch.test.ts` (4 test):
+  - Phạm vi giáo viên chỉ giữ dòng thuộc trường đã chọn và còn hiệu lực; bỏ phân công đã hết hạn.
+  - Không có gợi ý vai trò thì phạm vi vẫn được tải sau.
+  - Gợi ý `teacher` gửi kèm request của học sinh không cấp vai trò giáo viên.
+  - Khi có gợi ý, query phạm vi được gửi trước batch đầu.
+- `tests/unit/class_scope.test.ts` (5 test):
+  - Lớp không tồn tại trả 404; lớp của trường khác trả 403.
+  - Admin được vào, trừ chế độ `learn`.
+  - Giáo viên được phân công và chủ lớp cũ (khi lớp chưa có phân công) được vào. Chủ lớp cũ đã bị phân công khác thay thế thì bị chặn.
+  - Học sinh có ghi danh được `learn` nhưng không được `teach`.
+  - Phụ huynh đã xác minh chỉ được `read`; liên kết đang chờ duyệt bị chặn.
+
+Đếm query thủ công (chưa có số đo trước/sau trên Supabase thật):
+
+```bash
+LMS_TRACE_DB=1 npm run dev
+# Mở lần lượt /parent, /teacher, /teacher/classes/<id>, /admin, /student
+# Đếm các dòng "[db]" và cộng thời gian của mỗi lần tải trang
+```
+
+Ghi số lượt gọi và tổng thời gian vào bản rà soát 25/11 trước khi làm Đợt 2. Mục tiêu tham chiếu vẫn là p95 dashboard ≤ 3 s, như kế hoạch 04/11.
 
 ## Cập nhật hiệu năng và Auth 04/11/2026
 

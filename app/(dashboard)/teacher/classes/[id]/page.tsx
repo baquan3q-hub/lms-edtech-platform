@@ -1,6 +1,6 @@
-import { ArrowLeft, BookOpen, Calendar, Users, MapPin, Bell, FileText, MessageSquare, Video, PlusCircle, Clock, ChevronDown, Monitor, Building2, Folder, CheckSquare, Music, ClipboardList, VideoIcon, Eye, EyeOff, ExternalLink, BarChart3, CheckCircle2, Circle, Trophy, Activity, Pencil, Trash2, Home, ShieldAlert, AlertCircle, Zap, ChevronRight, History } from "lucide-react";
+import { ArrowLeft, BookOpen, Calendar, Users, MapPin, Bell, FileText, MessageSquare, Video, PlusCircle, Clock, ChevronDown, Monitor, Building2, Folder, CheckSquare, Music, ClipboardList, VideoIcon, Eye, EyeOff, ExternalLink, BarChart3, CheckCircle2, Circle, Trophy, Activity, Pencil, Trash2, Home, ShieldAlert, AlertCircle, Zap, ChevronRight, History, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { fetchClassDetails, fetchClassStudents, fetchStudentProgressForClass } from "./actions";
+import { fetchClassDetails, fetchClassStudentCount, fetchClassStudents, fetchStudentProgressForClass } from "./actions";
 import { fetchClassBehaviorScores } from "@/lib/actions/behavior-analysis";
 import { fetchCourseItems } from "@/lib/actions/courseBuilder";
 import { fetchClassExams, fetchPendingExamGradingStats } from "@/lib/actions/exam";
@@ -14,6 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import AttendanceClient from "./AttendanceClient";
 import ScheduleManagerClient from "./ScheduleManagerClient";
 import TeacherLeaveClient from "./TeacherLeaveClient";
+import TabPendingHint from "./TabPendingHint";
 import { getRooms, getClassSchedules, getGeneratedSessions } from "@/lib/actions/schedule";
 import DeleteExamButton from "@/components/teacher/DeleteExamButton";
 import DeleteHomeworkButton from "@/components/teacher/DeleteHomeworkButton";
@@ -23,32 +24,68 @@ import StudentBehaviorPanel from "@/components/teacher/StudentBehaviorPanel";
 import { fetchClassScoreReport } from "@/lib/actions/class-students";
 import ClassOverviewAnalyticsClient from "@/components/teacher/ClassOverviewAnalyticsClient";
 
-export default async function ClassDetailPage({ 
+const CLASS_TABS = [
+    "overview",
+    "students",
+    "attendance",
+    "schedule",
+    "lessons",
+    "exams_homework",
+    "announcements_feedback",
+    "progress",
+    "behavior",
+] as const;
+type ClassTab = (typeof CLASS_TABS)[number];
+
+// Tab hiện trên thanh tab. "progress" và "behavior" mở bằng nút ở header.
+const TAB_TRIGGERS: { value: ClassTab; label: string; icon: LucideIcon }[] = [
+    { value: "overview", label: "Tổng quan", icon: BookOpen },
+    { value: "students", label: "Quản lý danh sách học sinh", icon: Users },
+    { value: "attendance", label: "Điểm danh", icon: Calendar },
+    { value: "schedule", label: "Lịch dạy", icon: Calendar },
+    { value: "lessons", label: "Quản lý bài học", icon: FileText },
+    { value: "exams_homework", label: "Kiểm tra & Bài tập", icon: ClipboardList },
+    { value: "announcements_feedback", label: "TB & Feedback", icon: MessageSquare },
+];
+
+function resolveClassTab(raw: string | string[] | undefined): ClassTab {
+    const value = Array.isArray(raw) ? raw[0] : raw;
+    return CLASS_TABS.find((tab) => tab === value) ?? "overview";
+}
+
+export default async function ClassDetailPage({
     params,
-    searchParams 
-}: { 
+    searchParams
+}: {
     params: Promise<{ id: string }>,
     searchParams?: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
     const resolvedParams = await params;
     const id = resolvedParams.id;
-    
+
     // Resolve search params
     const resolvedSearchParams = searchParams ? await searchParams : {};
-    const defaultTab = (resolvedSearchParams.tab as string) || "overview";
+    const activeTab = resolveClassTab(resolvedSearchParams.tab);
 
-    // Giữ lại các data bắt buộc cho Header và Overview
+    // Chỉ render và tải dữ liệu của tab đang mở (?tab=). Header chỉ cần sĩ số,
+    // nên tab không dùng danh sách học sinh thì chỉ đếm.
+    const needsStudentList = activeTab === "students" || activeTab === "attendance";
     const [
         { data: classInfo, error: classError },
-        { data: students },
-        { data: courseItems }
+        studentsResult,
+        studentCountResult,
+        courseItemsResult,
     ] = await Promise.all([
         fetchClassDetails(id),
-        fetchClassStudents(id),
-        fetchCourseItems(id)
+        needsStudentList ? fetchClassStudents(id) : null,
+        needsStudentList ? null : fetchClassStudentCount(id),
+        activeTab === "lessons" ? fetchCourseItems(id) : null,
     ]);
 
-    const items = courseItems || [];
+    const students = studentsResult?.data || [];
+    const studentCount = needsStudentList ? students.length : (studentCountResult?.data || 0);
+
+    const items = courseItemsResult?.data || [];
     const lessonCount = items.filter((i: any) => i.type !== 'folder').length;
     const publishedCount = items.filter((i: any) => i.type !== 'folder' && i.is_published).length;
 
@@ -181,7 +218,7 @@ export default async function ClassDetailPage({
                             <Users className="w-4 h-4 text-slate-400" />
                             <div className="flex flex-col">
                                 <span className="text-[9px] font-bold text-slate-400 leading-none uppercase mb-1">Sĩ số</span>
-                                <span className="text-sm font-bold text-slate-700">{students?.length || 0}/{classInfo.max_students}</span>
+                                <span className="text-sm font-bold text-slate-700">{studentCount}/{classInfo.max_students}</span>
                             </div>
                         </div>
 
@@ -222,42 +259,31 @@ export default async function ClassDetailPage({
             </div>
 
             {/* TABS SECTION */}
-            <Tabs key={defaultTab} defaultValue={defaultTab} className="w-full">
+            {/* Tab điều khiển bằng URL: Radix TabsContent chỉ ẩn tab ở client, nên chỉ
+                tab đang mở được render (và tải dữ liệu) trên server. */}
+            <Tabs value={activeTab} className="w-full">
                 <TabsList className="w-full justify-start bg-white border border-slate-200 rounded-xl p-1 h-auto flex-wrap gap-1">
-                    <TabsTrigger value="overview" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
-                        <BookOpen className="w-4 h-4 mr-2" /> Tổng quan
-                    </TabsTrigger>
-
-                    <TabsTrigger value="students" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
-                        <Users className="w-4 h-4 mr-2" /> Quản lý danh sách học sinh
-                    </TabsTrigger>
-                    <TabsTrigger value="attendance" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
-                        <Calendar className="w-4 h-4 mr-2" /> Điểm danh
-                    </TabsTrigger>
-                    <TabsTrigger value="schedule" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
-                        <Calendar className="w-4 h-4 mr-2" /> Lịch dạy
-                    </TabsTrigger>
-                    <TabsTrigger value="lessons" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
-                        <FileText className="w-4 h-4 mr-2" /> Quản lý bài học
-                    </TabsTrigger>
-                    <TabsTrigger value="exams_homework" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
-                        <ClipboardList className="w-4 h-4 mr-2" /> Kiểm tra & Bài tập
-                    </TabsTrigger>
-                    <TabsTrigger value="announcements_feedback" className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
-                        <MessageSquare className="w-4 h-4 mr-2" /> TB & Feedback
-                    </TabsTrigger>
+                    {TAB_TRIGGERS.map(({ value, label, icon: Icon }) => (
+                        <TabsTrigger key={value} value={value} asChild className="rounded-lg data-[state=active]:bg-slate-900 data-[state=active]:text-white font-semibold px-4 py-2 text-sm">
+                            <Link href={`/teacher/classes/${id}?tab=${value}`} scroll={false} prefetch={false}>
+                                <Icon className="w-4 h-4 mr-2" /> {label}
+                                <TabPendingHint />
+                            </Link>
+                        </TabsTrigger>
+                    ))}
                 </TabsList>
 
                 {/* ===== TAB: TỔNG QUAN ===== */}
+                {activeTab === "overview" && (
                 <TabsContent value="overview" className="mt-6">
                     <Suspense fallback={<div className="p-12 text-center text-slate-500 text-sm mt-6"><div className="w-6 h-6 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>Đang tải phân tích lớp học...</div>}>
                         <OverviewAnalyticsTabData classId={id} className={classInfo.name} />
                     </Suspense>
                 </TabsContent>
-
-
+                )}
 
                 {/* ===== TAB: HỌC SINH ===== */}
+                {activeTab === "students" && (
                 <TabsContent value="students" className="mt-6">
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                         <div className="p-6 border-b border-slate-100 flex items-center justify-between gap-4">
@@ -329,8 +355,10 @@ export default async function ClassDetailPage({
                         )}
                     </div>
                 </TabsContent>
+                )}
 
                 {/* ===== TAB: ĐIỂM DANH ===== */}
+                {activeTab === "attendance" && (
                 <TabsContent value="attendance" className="mt-6">
                     <div className="mb-4">
                         <h3 className="text-xl font-bold text-slate-900 border-l-4 border-emerald-500 pl-3">
@@ -343,18 +371,23 @@ export default async function ClassDetailPage({
                     <AttendanceClient
                         classId={id}
                         className={classInfo?.name || "Lớp học"}
-                        students={students || []}
+                        // Chỉ gửi xuống client các trường AttendanceClient dùng (không kèm liên hệ phụ huynh).
+                        students={students.map(({ student_id, name, email, enrollment_id }) => ({ student_id, name, email, enrollment_id }))}
                     />
                 </TabsContent>
+                )}
 
                 {/* ===== TAB: XẾP LỊCH & PHÒNG ===== */}
+                {activeTab === "schedule" && (
                 <TabsContent value="schedule" className="mt-6 space-y-6">
                     <Suspense fallback={<div className="p-12 text-center text-slate-500">Đang tải lịch dạy...</div>}>
                         <ScheduleTabData classId={id} classInfo={classInfo} />
                     </Suspense>
                 </TabsContent>
+                )}
 
                 {/* ===== TAB: BÀI HỌC (E-Learning Curriculum) ===== */}
+                {activeTab === "lessons" && (
                 <TabsContent value="lessons" className="mt-6">
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -384,15 +417,19 @@ export default async function ClassDetailPage({
                         )}
                     </div>
                 </TabsContent>
+                )}
 
                 {/* ===== TAB: THÔNG BÁO & FEEDBACK ===== */}
+                {activeTab === "announcements_feedback" && (
                 <TabsContent value="announcements_feedback" className="mt-6 space-y-6">
                     <Suspense fallback={<div className="p-12 text-center text-slate-500">Đang tải thông báo...</div>}>
                         <AnnouncementsTabData classId={id} classInfo={classInfo} />
                     </Suspense>
                 </TabsContent>
+                )}
 
                 {/* ===== TAB: TIẾN ĐỘ HỌC SINH ===== */}
+                {activeTab === "progress" && (
                 <TabsContent value="progress" className="mt-6">
                     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                         <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
@@ -410,15 +447,19 @@ export default async function ClassDetailPage({
                         </Suspense>
                     </div>
                 </TabsContent>
+                )}
 
                 {/* ===== TAB: KIỂM TRA & BÀI TẬP ===== */}
+                {activeTab === "exams_homework" && (
                 <TabsContent value="exams_homework" className="mt-6 space-y-6">
                     <Suspense fallback={<div className="p-12 text-center text-slate-500">Đang tải bài tập và kiểm tra...</div>}>
                         <ExamsHomeworkTabData classId={id} />
                     </Suspense>
                 </TabsContent>
+                )}
 
                 {/* ===== TAB: HÀNH VI HỌC SINH ===== */}
+                {activeTab === "behavior" && (
                 <TabsContent value="behavior" className="mt-6">
                     <div className="mb-4">
                         <h3 className="text-xl font-bold text-slate-900 border-l-4 border-red-500 pl-3">
@@ -432,6 +473,7 @@ export default async function ClassDetailPage({
                         <BehaviorTabData classId={id} />
                     </Suspense>
                 </TabsContent>
+                )}
             </Tabs>
         </div>
     );
@@ -602,9 +644,9 @@ async function ExamsHomeworkTabData({ classId }: { classId: string }) {
                         )}
                     </div>
                     <div className="flex gap-4 mt-2 text-xs font-medium text-slate-500">
-                        <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Dài: {exam.duration_minutes || exam.duration}p</span>
+                        <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" /> Dài: {exam.duration_minutes}p</span>
                         <span>Tổng: {exam.total_points} điểm</span>
-                        <span>{((exam.questions as any[]) || []).length} câu hỏi</span>
+                        <span>{exam.question_count} câu hỏi</span>
                     </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
