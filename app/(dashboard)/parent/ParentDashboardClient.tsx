@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -30,55 +30,64 @@ type StudentInfo = {
     relationship: string;
 };
 
-export default function ParentDashboardClient({ students }: { students: StudentInfo[] }) {
+type InitialDashboard = { studentId: string; data: any } | null;
+
+async function loadFeedbackFor(studentId: string) {
+    const supabase = createClient();
+    const { data } = await supabase
+        .from("quiz_individual_analysis")
+        .select("*, improvement_progress(*), exam:exams!exam_id(id, title, class_id), supplementary_quizzes(id, title, status, score, total_questions)")
+        .eq("student_id", studentId)
+        .eq("status", "sent")
+        .order("sent_at", { ascending: false })
+        .limit(5);
+    return data || [];
+}
+
+export default function ParentDashboardClient({ students, initialData = null }: { students: StudentInfo[]; initialData?: InitialDashboard }) {
     const [selectedStudentId, setSelectedStudentId] = useState<string | null>(students[0]?.id || null);
-    const [dashboardData, setDashboardData] = useState<any>(null);
-    const [loading, setLoading] = useState(false);
-    const [feedbackData, setFeedbackData] = useState<any[]>([]);
-    const [feedbackLoading, setFeedbackLoading] = useState(false);
-    const [confirmedIds, setConfirmedIds] = useState<Set<string>>(new Set());
+    // Dữ liệu luôn gắn với studentId đã tải; "đang tải" = dữ liệu chưa khớp con đang chọn.
+    const [dashboard, setDashboard] = useState<{ studentId: string; data: any } | null>(initialData);
+    const [feedback, setFeedback] = useState<{ studentId: string; items: any[] } | null>(null);
+    const [confirmedIds, setConfirmedIds] = useState<Set<string>>(
+        () => new Set(initialData?.data?.confirmedAnnouncementIds || [])
+    );
     const [confirmingId, setConfirmingId] = useState<string | null>(null);
+    const dashboardStudentRef = useRef<string | null>(initialData?.studentId ?? null);
 
-
+    const dashboardData = dashboard?.data ?? null;
+    const loading = !!selectedStudentId && dashboard?.studentId !== selectedStudentId;
+    const feedbackLoading = !!selectedStudentId && feedback?.studentId !== selectedStudentId;
+    const feedbackData = feedback?.studentId === selectedStudentId ? feedback.items : [];
 
     useEffect(() => {
-        if (selectedStudentId) loadDashboard(selectedStudentId);
+        if (!selectedStudentId) return;
+        const studentId = selectedStudentId;
+        // Chỉ nhận phản hồi của lần chọn con mới nhất: cleanup đánh dấu request cũ là hết hạn.
+        let active = true;
+
+        // Dashboard và feedback tải song song. Bỏ qua dashboard nếu server đã render sẵn cho con này.
+        if (dashboardStudentRef.current !== studentId) {
+            fetchParentDashboardData(studentId)
+                .then(res => res.data, err => { console.error(err); return null; })
+                .then(data => {
+                    if (!active) return;
+                    dashboardStudentRef.current = studentId;
+                    setDashboard({ studentId, data });
+                    if (data?.confirmedAnnouncementIds) {
+                        setConfirmedIds(new Set(data.confirmedAnnouncementIds));
+                    }
+                });
+        }
+
+        loadFeedbackFor(studentId)
+            .catch(err => { console.error("Error loading feedback:", err); return []; })
+            .then(items => {
+                if (active) setFeedback({ studentId, items });
+            });
+
+        return () => { active = false; };
     }, [selectedStudentId]);
-
-    const loadDashboard = async (studentId: string) => {
-        setLoading(true);
-        try {
-            const dashRes = await fetchParentDashboardData(studentId);
-            setDashboardData(dashRes.data);
-            if (dashRes.data?.confirmedAnnouncementIds) {
-                setConfirmedIds(new Set(dashRes.data.confirmedAnnouncementIds));
-            }
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-        loadFeedback(studentId);
-    };
-
-    const loadFeedback = async (studentId: string) => {
-        setFeedbackLoading(true);
-        try {
-            const supabase = createClient();
-            const { data } = await supabase
-                .from("quiz_individual_analysis")
-                .select("*, improvement_progress(*), exam:exams!exam_id(id, title, class_id), supplementary_quizzes(id, title, status, score, total_questions)")
-                .eq("student_id", studentId)
-                .eq("status", "sent")
-                .order("sent_at", { ascending: false })
-                .limit(5);
-            setFeedbackData(data || []);
-        } catch (err) {
-            console.error("Error loading feedback:", err);
-        } finally {
-            setFeedbackLoading(false);
-        }
-    };
 
     const handleConfirmRead = async (announcementId: string) => {
         if (!announcementId) return;

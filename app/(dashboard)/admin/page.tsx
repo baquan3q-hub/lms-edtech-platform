@@ -1,28 +1,19 @@
-import {
-    Users,
-    BookOpen,
-    School,
-    LayoutDashboard,
-    MousePointer2,
-} from "lucide-react";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { 
-    fetchDailyActiveUsers,
-    fetchDailyStudentPresenceAndAttendance,
-    fetchHomeworkCompletionByGradeAndClass,
-    fetchGradeOverviewByGradeAndClass,
-    fetchDailyAttendanceData,
-    fetchGradesDistribution,
-    fetchSubmissionStatus
-} from "./analytics-actions";
+import { Suspense } from "react";
+import { LayoutDashboard } from "lucide-react";
 import { AdminTimeFilter } from "./AdminTimeFilter";
 import { AdminAiInsights } from "./AdminAiInsights";
-import DailyStudentPresenceWidget from "@/components/admin/DailyStudentPresenceWidget";
-import HomeworkCompletionByGradeWidget from "@/components/admin/HomeworkCompletionByGradeWidget";
-import GradeOverviewByGradeWidget from "@/components/admin/GradeOverviewByGradeWidget";
-import { Suspense } from "react";
+import {
+    SchoolStats,
+    SchoolStatCards,
+    ActiveUsersToday,
+    ActiveUsersCard,
+    PresenceSection,
+    HomeworkSection,
+    GradeOverviewSection,
+    SectionSkeleton,
+} from "./DashboardSections";
 
-export const revalidate = 0; // Đảm bảo luôn fetch data mới (Realtime)
+export const revalidate = 0; // Luôn lấy số liệu mới
 
 interface PageProps {
     searchParams: Promise<{
@@ -30,60 +21,11 @@ interface PageProps {
     }>;
 }
 
+// Header hiện ngay; mỗi khối số liệu tải độc lập trong Suspense riêng và chỉ đọc dữ liệu
+// của trường đang đăng nhập (xem analytics-actions.ts).
 export default async function AdminDashboardPage({ searchParams }: PageProps) {
-    const supabase = createAdminClient();
     const resolvedSearchParams = await searchParams;
-    const range = resolvedSearchParams?.range || 'all';
-
-    // Tải song song tất cả các dữ liệu cần thiết cho bảng điều khiển vận hành
-    const [
-        { count: totalUsers },
-        { count: totalCourses },
-        { count: activeClasses },
-        dailyPresenceData,
-        homeworkGradeData,
-        gradeOverviewData,
-        attendanceData,
-        gradesData,
-        submissionData,
-    ] = await Promise.all([
-        supabase.from("users").select("*", { count: 'exact', head: true }),
-        supabase.from("courses").select("*", { count: 'exact', head: true }),
-        supabase.from("classes").select("*", { count: 'exact', head: true }).eq('status', 'active'),
-        fetchDailyStudentPresenceAndAttendance(),
-        fetchHomeworkCompletionByGradeAndClass(),
-        fetchGradeOverviewByGradeAndClass(),
-        fetchDailyAttendanceData(range),
-        fetchGradesDistribution(range),
-        fetchSubmissionStatus(range),
-    ]);
-
-    const stats = [
-        {
-            title: "Tổng người dùng",
-            value: totalUsers || 0,
-            icon: Users,
-            color: "text-blue-600",
-            bg: "bg-blue-50",
-            border: "border-blue-100"
-        },
-        {
-            title: "Khối & Chương trình",
-            value: totalCourses || 0,
-            icon: BookOpen,
-            color: "text-emerald-600",
-            bg: "bg-emerald-50",
-            border: "border-emerald-100"
-        },
-        {
-            title: "Lớp học đang mở",
-            value: activeClasses || 0,
-            icon: School,
-            color: "text-amber-600",
-            bg: "bg-amber-50",
-            border: "border-amber-100"
-        },
-    ];
+    const range = typeof resolvedSearchParams?.range === "string" ? resolvedSearchParams.range : "all";
 
     return (
         <div className="space-y-8 pb-14 max-w-7xl mx-auto animate-in fade-in zoom-in-95 duration-500">
@@ -109,64 +51,31 @@ export default async function AdminDashboardPage({ searchParams }: PageProps) {
 
             {/* 2. Top Stats Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-                {stats.map((stat) => (
-                    <div
-                        key={stat.title}
-                        className={`bg-white rounded-3xl border ${stat.border} p-5 flex flex-col justify-between shadow-[0_4px_20px_rgb(0,0,0,0.03)] hover:-translate-y-1 transition-transform duration-300`}
-                    >
-                        <div className="flex items-center justify-between mb-3">
-                            <div className={`w-11 h-11 rounded-2xl ${stat.bg} flex items-center justify-center`}>
-                                <stat.icon className={`w-5 h-5 ${stat.color}`} strokeWidth={2} />
-                            </div>
-                        </div>
-                        
-                        <div>
-                            <p className="text-3xl font-black text-gray-900 tracking-tight">{stat.value}</p>
-                            <p className="text-gray-500 text-xs mt-1 font-semibold">{stat.title}</p>
-                        </div>
-                    </div>
-                ))}
+                <Suspense fallback={<SchoolStatCards />}>
+                    <SchoolStats />
+                </Suspense>
                 <Suspense fallback={<ActiveUsersCard value="…" />}>
                     <ActiveUsersToday />
                 </Suspense>
             </div>
 
-            {/* 3. Hoạt Động & Điểm Danh Học Sinh Kèm Mốc Giờ Ra/Vào LMS */}
-            <DailyStudentPresenceWidget initialData={dailyPresenceData} />
+            {/* 3. Hoạt Động & Điểm Danh Học Sinh Kèm Mốc Giờ Truy Cập LMS */}
+            <Suspense fallback={<SectionSkeleton height="h-96" />}>
+                <PresenceSection />
+            </Suspense>
 
-            {/* 4. Trực Quan Hóa Tiến Độ Bài Tập Theo Khối & Lớp (Dạng Biểu Đồ & Bảng) */}
-            <HomeworkCompletionByGradeWidget initialData={homeworkGradeData} />
+            {/* 4. Tiến Độ Bài Tập Theo Khối & Lớp */}
+            <Suspense fallback={<SectionSkeleton />}>
+                <HomeworkSection />
+            </Suspense>
 
-            {/* 5. Trực Quan Hóa Phổ Điểm Theo Khối & Lớp (Dạng Biểu Đồ & Bảng) */}
-            <GradeOverviewByGradeWidget initialData={gradeOverviewData} />
+            {/* 5. Phổ Điểm Theo Khối & Lớp */}
+            <Suspense fallback={<SectionSkeleton />}>
+                <GradeOverviewSection />
+            </Suspense>
 
-            {/* 6. Khuyến nghị Chiến lược AI Tổng thể */}
-            <AdminAiInsights 
-                attendanceData={attendanceData} 
-                gradesData={gradesData} 
-                submissionData={submissionData} 
-            />
-        </div>
-    );
-}
-
-async function ActiveUsersToday() {
-    const count = await fetchDailyActiveUsers();
-    return <ActiveUsersCard value={count} />;
-}
-
-function ActiveUsersCard({ value }: { value: number | string }) {
-    return (
-        <div className="bg-white rounded-3xl border border-sky-100 p-5 flex flex-col justify-between shadow-[0_4px_20px_rgb(0,0,0,0.03)] hover:-translate-y-1 transition-transform duration-300">
-            <div className="flex items-center justify-between mb-3">
-                <div className="w-11 h-11 rounded-2xl bg-sky-50 flex items-center justify-center">
-                    <MousePointer2 className="w-5 h-5 text-sky-600" strokeWidth={2} />
-                </div>
-            </div>
-            <div>
-                <p className="text-3xl font-black text-gray-900 tracking-tight">{value}</p>
-                <p className="text-gray-500 text-xs mt-1 font-semibold">Đăng nhập hôm nay</p>
-            </div>
+            {/* 6. Tổng hợp & đánh giá: số liệu chỉ tải khi bấm nút */}
+            <AdminAiInsights range={range} />
         </div>
     );
 }

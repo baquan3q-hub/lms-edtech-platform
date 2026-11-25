@@ -91,6 +91,26 @@ export async function fetchClassStudents(classId: string) {
     }
 }
 
+// Sĩ số cho header trang chi tiết lớp: cùng điều kiện với fetchClassStudents nhưng chỉ đếm.
+export async function fetchClassStudentCount(classId: string) {
+    try {
+        await requireClassAccess(classId, "teach");
+        const supabase = createAdminClient();
+
+        const { count, error } = await supabase
+            .from("enrollments")
+            .select("id", { count: "exact", head: true })
+            .eq("class_id", classId)
+            .eq("status", "active");
+
+        if (error) throw error;
+        return { data: count ?? 0, error: null };
+    } catch (error: any) {
+        console.error("Error counting class students:", error);
+        return { data: 0, error: error.message };
+    }
+}
+
 export async function submitAttendance(classId: string, attendanceRecords: any[]) {
     try {
         const supabase = await createClient();
@@ -160,54 +180,71 @@ export async function fetchStudentProgressForClass(classId: string) {
         await requireClassAccess(classId, "teach");
         const supabase = createAdminClient();
 
-        // 1. Lấy danh sách học sinh
-        const { data: enrollments } = await supabase
-            .from("enrollments")
-            .select("student_id, student:users!student_id(id, full_name, email)")
-            .eq("class_id", classId)
-            .eq("status", "active");
+        // Đợt 1: danh sách học sinh và course_items (published, không phải folder) không phụ thuộc nhau
+        const [{ data: enrollments }, { data: courseItems }] = await Promise.all([
+            supabase
+                .from("enrollments")
+                .select("student_id, student:users!student_id(id, full_name, email)")
+                .eq("class_id", classId)
+                .eq("status", "active"),
+            supabase
+                .from("course_items")
+                .select("id, title, type")
+                .eq("class_id", classId)
+                .eq("is_published", true)
+                .neq("type", "folder")
+                .order("order_index", { ascending: true }),
+        ]);
 
         if (!enrollments || enrollments.length === 0) return { data: [], error: null };
-
-        // 2. Lấy course_items (published, không phải folder)
-        const { data: courseItems } = await supabase
-            .from("course_items")
-            .select("id, title, type")
-            .eq("class_id", classId)
-            .eq("is_published", true)
-            .neq("type", "folder")
-            .order("order_index", { ascending: true });
 
         const items = courseItems || [];
         const totalItems = items.length;
         const itemIds = items.map(i => i.id);
-
-        // 3. Lấy tất cả student_progress cho class này
         const studentIds = enrollments.map(e => e.student_id);
-        const { data: allProgress } = await supabase
-            .from("student_progress")
-            .select("student_id, item_id, status, score, completed_at, last_accessed")
-            .in("student_id", studentIds)
-            .in("item_id", itemIds.length > 0 ? itemIds : ['__none__']);
 
-        // 4. Lấy quiz_attempts cho thống kê điểm
-        const { data: allAttempts } = await supabase
-            .from("quiz_attempts")
-            .select("student_id, item_id, score, passed, submitted_at")
-            .in("student_id", studentIds)
-            .in("item_id", itemIds.length > 0 ? itemIds : ['__none__']);
+        // Đợt 2: student_progress và quiz_attempts (cần studentIds, itemIds từ đợt 1).
+        // Lớp chưa có bài nào xuất bản thì không có tiến độ nào để lấy.
+        let allProgress: any[] = [];
+        let allAttempts: any[] = [];
+        if (itemIds.length > 0) {
+            const [progressResult, attemptsResult] = await Promise.all([
+                supabase
+                    .from("student_progress")
+                    .select("student_id, item_id, status, score, completed_at, last_accessed")
+                    .in("student_id", studentIds)
+                    .in("item_id", itemIds),
+                supabase
+                    .from("quiz_attempts")
+                    .select("student_id, item_id, score, passed, submitted_at")
+                    .in("student_id", studentIds)
+                    .in("item_id", itemIds),
+            ]);
+            allProgress = progressResult.data || [];
+            allAttempts = attemptsResult.data || [];
+        }
 
-        // 5. Tính toán tiến độ cho mỗi học sinh
+        const progressByStudent = groupBy(allProgress, p => p.student_id);
+        const attemptsByStudent = groupBy(allAttempts, a => a.student_id);
+
+        // Tính toán tiến độ cho mỗi học sinh
         const studentProgressList = enrollments.map((enrollment: any) => {
             const studentObj = Array.isArray(enrollment.student) ? enrollment.student[0] : enrollment.student;
             const sid = enrollment.student_id;
 
-            const myProgress = (allProgress || []).filter(p => p.student_id === sid);
+            const myProgress = progressByStudent.get(sid) || [];
             const completedItems = myProgress.filter(p => p.status === 'completed').length;
             const progressPercent = totalItems > 0 ? Math.round((completedItems / totalItems) * 100) : 0;
 
+            // Giữ bản ghi đầu tiên của mỗi item, giống find() trước đây
+            const progressByItem = new Map<string, any>();
+            for (const p of myProgress) {
+                if (!progressByItem.has(p.item_id)) progressByItem.set(p.item_id, p);
+            }
+
             // Quiz scores
-            const myAttempts = (allAttempts || []).filter(a => a.student_id === sid);
+            const myAttempts = attemptsByStudent.get(sid) || [];
+            const attemptsByItem = groupBy(myAttempts, a => a.item_id);
             const quizScores = myAttempts.map(a => Number(a.score) || 0);
             const avgQuizScore = quizScores.length > 0 ? (quizScores.reduce((a, b) => a + b, 0) / quizScores.length) : null;
 
@@ -219,8 +256,8 @@ export async function fetchStudentProgressForClass(classId: string) {
 
             // Per-item detail
             const itemDetails = items.map(item => {
-                const prog = myProgress.find(p => p.item_id === item.id);
-                const attempt = myAttempts.filter(a => a.item_id === item.id);
+                const prog = progressByItem.get(item.id);
+                const attempt = attemptsByItem.get(item.id) || [];
                 return {
                     itemId: item.id,
                     title: item.title,
@@ -255,4 +292,15 @@ export async function fetchStudentProgressForClass(classId: string) {
         console.error("Error fetching student progress:", error);
         return { data: [], error: error.message };
     }
+}
+
+function groupBy<T>(rows: T[], keyOf: (row: T) => string): Map<string, T[]> {
+    const groups = new Map<string, T[]>();
+    for (const row of rows) {
+        const key = keyOf(row);
+        const group = groups.get(key);
+        if (group) group.push(row);
+        else groups.set(key, [row]);
+    }
+    return groups;
 }

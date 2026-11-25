@@ -78,6 +78,19 @@ export function useRealtimeSync(userId: string, role: string, schoolId: string) 
                     useNotificationStore.getState().addNotification(payload.new as any);
                 }
             )
+            // Đã đọc ở tab/thiết bị khác → chuông cập nhật theo (NotificationBell đọc store này)
+            .on(
+                "postgres_changes",
+                {
+                    event: "UPDATE",
+                    schema: "public",
+                    table: "notifications",
+                    filter: `user_id=eq.${userId}`,
+                },
+                (payload) => {
+                    useNotificationStore.getState().updateNotification(payload.new as any);
+                }
+            )
 
             // ── 5. student_class_stats ────────────────────────────
             // Thống kê cập nhật → refresh bảng xếp hạng

@@ -71,61 +71,72 @@ export async function fetchClassScoreReport(classId: string) {
         await requireClassAccess(classId, "teach");
         const adminSupabase = createAdminClient();
 
-        // 1. Enrolled students
-        const { data: enrollments } = await adminSupabase
-            .from("enrollments")
-            .select("student_id, student:users!student_id(id, full_name, email)")
-            .eq("class_id", classId)
-            .eq("status", "active");
-
-        if (!enrollments || enrollments.length === 0) return { data: null, error: null };
-
-        const studentIds = enrollments.map(e => e.student_id);
-
-        // 2. Parallel: attendance stats, exams, homework, progress, points
-        const [statsRes, examsRes, examSubsRes, hwRes, hwSubsRes, progressRes, pointsRes, courseItemsRes] = await Promise.all([
-            adminSupabase.from("student_class_stats").select("*").in("student_id", studentIds).eq("class_id", classId),
+        // Một đợt song song. Mọi bảng bài nộp/tiến độ lọc theo lớp bằng inner join (embed rỗng
+        // `bảng!inner()` chỉ để lọc, không tải thêm cột) thay cho `student_id IN (...)` vốn kéo cả
+        // bài của lớp khác. Không cần chờ enrollments: dòng của HS không còn active bị bỏ khi ghép.
+        const [enrollRes, statsRes, examsRes, hwRes, courseItemsRes, examSubs, hwSubs, progress, points, quizAttempts] = await Promise.all([
+            adminSupabase.from("enrollments").select("student_id, student:users!student_id(full_name, email)").eq("class_id", classId).eq("status", "active"),
+            adminSupabase.from("student_class_stats").select("student_id, attendance_rate, present_count, absent_count, late_count, excused_count, total_sessions").eq("class_id", classId),
             adminSupabase.from("exams").select("id, title, total_points, duration_minutes").eq("class_id", classId).eq("is_published", true),
-            adminSupabase.from("exam_submissions").select("id, exam_id, student_id, score, total_points, submitted_at").in("student_id", studentIds),
             adminSupabase.from("homework").select("id, title, total_points, due_date").eq("class_id", classId).eq("is_published", true),
-            adminSupabase.from("homework_submissions").select("id, homework_id, student_id, score, status").in("student_id", studentIds),
-            adminSupabase.from("student_progress").select("student_id, item_id, status").in("student_id", studentIds),
-            adminSupabase.from("student_points").select("id, student_id, points, type, reason, created_at").eq("class_id", classId).in("student_id", studentIds).order("created_at", { ascending: false }),
-            adminSupabase.from("course_items").select("id, title, type").eq("class_id", classId).eq("is_published", true).neq("type", "folder"),
+            adminSupabase.from("course_items").select("id, title").eq("class_id", classId).eq("is_published", true).neq("type", "folder"),
+            selectAllRows((from, to) => adminSupabase.from("exam_submissions")
+                .select("exam_id, student_id, score, total_points, submitted_at, exams!inner()", { count: "exact" })
+                .eq("exams.class_id", classId).eq("exams.is_published", true)
+                .order("id").range(from, to)),
+            selectAllRows((from, to) => adminSupabase.from("homework_submissions")
+                .select("homework_id, student_id, score, homework!inner()", { count: "exact" })
+                .eq("homework.class_id", classId).eq("homework.is_published", true).eq("status", "graded")
+                .order("id").range(from, to)),
+            // Chỉ cần đếm bài đã hoàn thành thuộc các bài học (đã xuất bản, không phải thư mục) của lớp.
+            selectAllRows((from, to) => adminSupabase.from("student_progress")
+                .select("student_id, course_items!inner()", { count: "exact" })
+                .eq("course_items.class_id", classId).eq("course_items.is_published", true).neq("course_items.type", "folder")
+                .eq("status", "completed")
+                .order("id").range(from, to)),
+            selectAllRows((from, to) => adminSupabase.from("student_points")
+                .select("id, student_id, points, type, reason, created_at", { count: "exact" })
+                .eq("class_id", classId)
+                .order("created_at", { ascending: false }).order("id").range(from, to)),
+            // quiz_attempts có thể chưa tồn tại ở môi trường cũ: lỗi thì coi như rỗng (giữ hành vi cũ).
+            selectAllRows((from, to) => adminSupabase.from("quiz_attempts")
+                .select("id, student_id, item_id, score, passed, submitted_at, course_items!inner()", { count: "exact" })
+                .eq("course_items.class_id", classId).eq("course_items.is_published", true).neq("course_items.type", "folder")
+                .order("submitted_at", { ascending: false }).order("id").range(from, to)).catch(() => [] as any[]),
         ]);
 
-        // quiz_attempts — may not exist
-        let quizAttempts: any[] = [];
-        try {
-            const qaRes = await adminSupabase.from("quiz_attempts").select("id, student_id, item_id, score, passed, submitted_at").in("student_id", studentIds).order("submitted_at", { ascending: false });
-            quizAttempts = qaRes.data || [];
-        } catch { /* table may not exist */ }
+        const enrollments = enrollRes.data;
+        if (!enrollments || enrollments.length === 0) return { data: null, error: null };
 
-        const stats = statsRes.data || [];
         const exams = examsRes.data || [];
-        const examSubs: any[] = examSubsRes.data || [];
         const homeworks = hwRes.data || [];
-        const hwSubs: any[] = hwSubsRes.data || [];
-        const progress: any[] = progressRes.data || [];
-        const points: any[] = pointsRes.data || [];
         const courseItems: any[] = courseItemsRes.data || [];
-
-        const examIds = exams.map(e => e.id);
-        const hwIds = homeworks.map(h => h.id);
         const totalLessons = courseItems.length;
+
+        // Tra cứu bằng Map thay cho find/filter/includes lồng nhau (O(n·m) → O(n + m)).
+        const statsByStudent = new Map((statsRes.data || []).map((s: any) => [s.student_id, s]));
+        const examById = new Map(exams.map(e => [e.id, e]));
+        const hwById = new Map(homeworks.map(h => [h.id, h]));
+        const itemById = new Map(courseItems.map(ci => [ci.id, ci]));
+        const examSubsByStudent = groupByStudent(examSubs);
+        const hwSubsByStudent = groupByStudent(hwSubs);
+        const pointsByStudent = groupByStudent(points);
+        const quizByStudent = groupByStudent(quizAttempts);
+        const completedByStudent = new Map<string, number>();
+        for (const p of progress) completedByStudent.set(p.student_id, (completedByStudent.get(p.student_id) || 0) + 1);
 
         // 3. Calculate per-student report
         const studentReports = enrollments.map(en => {
-            const studentInfo = Array.isArray(en.student) ? en.student[0] : en.student;
+            const studentInfo: any = Array.isArray(en.student) ? en.student[0] : en.student;
             const sid = en.student_id;
 
             // Attendance
-            const st = stats.find(s => s.student_id === sid) || { attendance_rate: 0, avg_score: 0, present_count: 0, absent_count: 0, late_count: 0, excused_count: 0, total_sessions: 0 };
+            const st = statsByStudent.get(sid) || { attendance_rate: 0, present_count: 0, absent_count: 0, late_count: 0, excused_count: 0, total_sessions: 0 };
 
             // Exams — thang điểm 10
-            const myExamSubs = examSubs.filter(s => s.student_id === sid && examIds.includes(s.exam_id));
+            const myExamSubs = examSubsByStudent.get(sid) || [];
             const examScores = myExamSubs.map(s => {
-                const exam = exams.find(e => e.id === s.exam_id);
+                const exam = examById.get(s.exam_id);
                 const max = s.total_points || exam?.total_points || 10;
                 const score10 = max > 0 ? Math.round((s.score / max) * 10 * 10) / 10 : 0;
                 return { examId: s.exam_id, title: exam?.title || "", score: s.score, total: max, score10, percent: max > 0 ? Math.round((s.score / max) * 100) : 0, date: s.submitted_at };
@@ -134,9 +145,9 @@ export async function fetchClassScoreReport(classId: string) {
             const avgExam10 = examScores.length > 0 ? Math.round(examScores.reduce((s, e) => s + e.score10, 0) / examScores.length * 10) / 10 : 0;
 
             // Homework — thang điểm 10
-            const myHwSubs = hwSubs.filter(s => s.student_id === sid && hwIds.includes(s.homework_id) && s.status === "graded");
+            const myHwSubs = hwSubsByStudent.get(sid) || [];
             const hwScores = myHwSubs.map(s => {
-                const hw = homeworks.find(h => h.id === s.homework_id);
+                const hw = hwById.get(s.homework_id);
                 const max = hw?.total_points || 10;
                 const score10 = max > 0 ? Math.round((s.score / max) * 10 * 10) / 10 : 0;
                 return { hwId: s.homework_id, title: hw?.title || "", score: s.score, total: max, score10, percent: max > 0 ? Math.round((s.score / max) * 100) : 0 };
@@ -145,12 +156,11 @@ export async function fetchClassScoreReport(classId: string) {
             const avgHw10 = hwScores.length > 0 ? Math.round(hwScores.reduce((s, h) => s + h.score10, 0) / hwScores.length * 10) / 10 : 0;
 
             // Progress
-            const myProgress = progress.filter(p => p.student_id === sid);
-            const completedLessons = myProgress.filter(p => p.status === "completed").length;
+            const completedLessons = completedByStudent.get(sid) || 0;
             const progressPercent = totalLessons > 0 ? Math.round((completedLessons / totalLessons) * 100) : 0;
 
             // Points (from student_points — teacher-managed, same source as TeacherPointsTab)
-            const myPoints = points.filter(p => p.student_id === sid);
+            const myPoints = pointsByStudent.get(sid) || [];
             const totalPoints = myPoints.reduce((s: number, p: any) => s + (p.points || 0), 0);
             const pointsNorm = Math.min(100, Math.max(0, 50 + totalPoints * 2));
 
@@ -159,10 +169,9 @@ export async function fetchClassScoreReport(classId: string) {
             const avgScore10 = allScores10.length > 0 ? Math.round(allScores10.reduce((a: number, b: number) => a + b, 0) / allScores10.length * 10) / 10 : 0;
 
             // Quiz attempts (trắc nghiệm trong khóa học)
-            const courseItemIds = courseItems.map((ci: any) => ci.id);
-            const myQuizAttempts = quizAttempts.filter((q: any) => q.student_id === sid && courseItemIds.includes(q.item_id));
+            const myQuizAttempts = quizByStudent.get(sid) || [];
             const quizHistory = myQuizAttempts.map((q: any) => {
-                const item = courseItems.find((ci: any) => ci.id === q.item_id);
+                const item = itemById.get(q.item_id);
                 return { id: q.id, title: item?.title || "Trắc nghiệm", score: q.score, passed: q.passed, date: q.submitted_at };
             });
 
@@ -423,4 +432,40 @@ export async function sendReminderAction(studentId: string, classId: string, cla
         console.error("Error sendReminderAction:", error);
         return { success: false, error: error.message };
     }
+}
+
+// =====================================================
+// HELPER NỘI BỘ (không export: file "use server" chỉ được export async action)
+// =====================================================
+
+type PageResult<T> = { data: T[] | null; error: unknown; count?: number | null };
+
+// PostgREST cắt im lặng ở max-rows (mặc định 1.000 dòng). Trang đầu lấy kèm `count: "exact"`,
+// nếu còn thiếu thì tải các trang còn lại song song (tối đa thêm 1 lượt nối tiếp).
+// Query truyền vào phải có `.order(...)` ổn định và `{ count: "exact" }`.
+async function selectAllRows<T>(page: (from: number, to: number) => PromiseLike<PageResult<T>>): Promise<T[]> {
+    const first = await page(0, 999);
+    if (first.error) throw first.error;
+    const rows = [...(first.data ?? [])];
+    const step = rows.length; // = max-rows thực tế của server
+    const total = first.count ?? step;
+    if (step === 0 || total <= step) return rows;
+    const rest = await Promise.all(
+        Array.from({ length: Math.ceil((total - step) / step) }, (_, i) => page(step * (i + 1), step * (i + 2) - 1)),
+    );
+    for (const result of rest) {
+        if (result.error) throw result.error;
+        rows.push(...(result.data ?? []));
+    }
+    return rows;
+}
+
+function groupByStudent<T extends { student_id: string }>(rows: T[]): Map<string, T[]> {
+    const groups = new Map<string, T[]>();
+    for (const row of rows) {
+        const group = groups.get(row.student_id);
+        if (group) group.push(row);
+        else groups.set(row.student_id, [row]);
+    }
+    return groups;
 }

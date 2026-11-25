@@ -70,49 +70,44 @@ export async function fetchTeacherStats(teacherId: string) {
                 .in("class_id", classIds)
                 .eq("status", "active");
                 
-            // 3. Đếm số lượng bài chờ chấm & Tính điểm trung bình
-            // Phun ra các assignment và exam của GV
-            const [studentsResult, assignmentsResult, examsResult] = await Promise.all([
+            // 3. Bài chờ chấm (score IS NULL) đếm bằng count head:true; điểm TB chỉ tải cột score của
+            // bài đã có điểm. Bài nộp lọc theo lớp bằng inner join nên không cần chờ danh sách
+            // assignment/exam id (3 đợt → 2 đợt). Tải đủ (phân trang) để điểm TB không bị cắt ở 1.000 dòng.
+            // Đợt 2: thay phần tải điểm bằng RPC trả về sum/count để khỏi tải từng dòng.
+            const [studentsResult, pendingSubsResult, pendingExamSubsResult, gradedSubs, gradedExamSubs] = await Promise.all([
                 studentsQuery,
-                supabase.from("assignments").select("id").in("class_id", classIds),
-                supabase.from("exams").select("id").in("class_id", classIds),
+                supabase.from("submissions")
+                    .select("id, assignments!inner()", { count: "exact", head: true })
+                    .in("assignments.class_id", classIds)
+                    .is("score", null),
+                supabase.from("exam_submissions")
+                    .select("id, exams!inner()", { count: "exact", head: true })
+                    .in("exams.class_id", classIds)
+                    .is("score", null),
+                selectAllRows((from, to) => supabase.from("submissions")
+                    .select("score, assignments!inner()", { count: "exact" })
+                    .in("assignments.class_id", classIds)
+                    .not("score", "is", null)
+                    .order("id").range(from, to)),
+                selectAllRows((from, to) => supabase.from("exam_submissions")
+                    .select("score, exams!inner()", { count: "exact" })
+                    .in("exams.class_id", classIds)
+                    .not("score", "is", null)
+                    .order("id").range(from, to)),
             ]);
-            for (const result of [studentsResult, assignmentsResult, examsResult]) {
+            for (const result of [studentsResult, pendingSubsResult, pendingExamSubsResult]) {
                 if (result.error) throw result.error;
             }
             totalStudents = studentsResult.count || 0;
-            const assignments = assignmentsResult.data;
-            const exams = examsResult.data;
-            
-            const assignmentIds = assignments?.map((a: any) => a.id) || [];
-            const examIds = exams?.map((e: any) => e.id) || [];
-
-            let subQuery = supabase.from("submissions").select("score");
-            if (assignmentIds.length > 0) subQuery = subQuery.in("assignment_id", assignmentIds);
-            else subQuery = subQuery.limit(0);
-
-            let exSubQuery = supabase.from("exam_submissions").select("score");
-            if (examIds.length > 0) exSubQuery = exSubQuery.in("exam_id", examIds);
-            else exSubQuery = exSubQuery.limit(0);
-
-            const [subsResult, examSubsResult] = await Promise.all([subQuery, exSubQuery]);
-            if (subsResult.error) throw subsResult.error;
-            if (examSubsResult.error) throw examSubsResult.error;
-            const subsData = subsResult.data;
-            const examsData = examSubsResult.data;
-            const allSubmissions = [...(subsData || []), ...(examsData || [])];
+            pendingAssignments = (pendingSubsResult.count || 0) + (pendingExamSubsResult.count || 0);
 
             let scoreSum = 0;
             let gradedCount = 0;
 
-            allSubmissions.forEach((sub: any) => {
-                if (sub.score !== null && sub.score !== undefined) {
-                    gradedCount++;
-                    scoreSum += Number(sub.score);
-                } else {
-                    pendingAssignments++;
-                }
-            });
+            for (const sub of [...gradedSubs, ...gradedExamSubs] as { score: number | string }[]) {
+                gradedCount++;
+                scoreSum += Number(sub.score);
+            }
 
             if (gradedCount > 0) {
                 // Đổi về thang điểm trung bình 10
@@ -154,4 +149,27 @@ export async function fetchTeacherNotifications(teacherId: string) {
         console.error("Error fetching notifications:", error);
         return { data: [], error: error.message };
     }
+}
+
+// Helper nội bộ (không export: file "use server" chỉ export async action).
+type PageResult<T> = { data: T[] | null; error: unknown; count?: number | null };
+
+// PostgREST cắt im lặng ở max-rows (mặc định 1.000 dòng). Trang đầu lấy kèm `count: "exact"`,
+// nếu còn thiếu thì tải các trang còn lại song song (tối đa thêm 1 lượt nối tiếp).
+// Query truyền vào phải có `.order(...)` ổn định và `{ count: "exact" }`.
+async function selectAllRows<T>(page: (from: number, to: number) => PromiseLike<PageResult<T>>): Promise<T[]> {
+    const first = await page(0, 999);
+    if (first.error) throw first.error;
+    const rows = [...(first.data ?? [])];
+    const step = rows.length; // = max-rows thực tế của server
+    const total = first.count ?? step;
+    if (step === 0 || total <= step) return rows;
+    const rest = await Promise.all(
+        Array.from({ length: Math.ceil((total - step) / step) }, (_, i) => page(step * (i + 1), step * (i + 2) - 1)),
+    );
+    for (const result of rest) {
+        if (result.error) throw result.error;
+        rows.push(...(result.data ?? []));
+    }
+    return rows;
 }
